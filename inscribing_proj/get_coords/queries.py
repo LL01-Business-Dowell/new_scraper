@@ -1,3 +1,297 @@
+# import traceback
+# import json
+# import requests
+# from decouple import config
+# import time
+# import os
+
+# print("\n=== LOADING QUERIES.PY ===")
+
+# # ============================================================
+# # Load ENV VARIABLES
+# # ============================================================
+
+# try:
+#     DATABASE_ID = config("DATABASE_ID")
+#     DATABASE_NAME = config("DATABASE_NAME")
+#     INDEX_COLLECTION_NAME = config("INDEX_COLLECTION_NAME")
+
+#     API_KEY = config("API_KEY")
+#     BASE_DATACUBE_URL = config("BASE_DATACUBE_URL")
+
+#     CRUD_COORDS_PATH = config("CRUD_COORDS_PATH", default="/api/crud")
+#     CRUD_RESULTS_PATH = config("CRUD_RESULTS_PATH", default="/api/crud")
+
+#     CRUD_URL = f"{BASE_DATACUBE_URL.rstrip('/')}{CRUD_COORDS_PATH}"
+
+#     HEADERS = {
+#         "Authorization": f"Api-Key {API_KEY}",
+#         "Content-Type": "application/json"
+#     }
+
+#     print("Environment variables loaded:")
+#     print("DATABASE_ID:", DATABASE_ID)
+#     print("INDEX_COLLECTION_NAME:", INDEX_COLLECTION_NAME)
+#     print("API_KEY present:", bool(API_KEY))
+
+# except Exception as e:
+#     print("\n=== ERROR LOADING ENV VARIABLES ===")
+#     traceback.print_exc()
+#     print("===================================\n")
+#     raise
+
+
+# # ============================================================
+# # Utility: Normalize coordinates
+# # ============================================================
+
+# def _normalize_point(point):
+#     """
+#     Accept either:
+#     [lat, lon] → convert to {"latitude": lat, "longitude": lon}
+#     {"latitude": ..., "longitude": ...} → passthrough
+#     """
+#     if isinstance(point, (list, tuple)):
+#         if len(point) != 2:
+#             raise ValueError("Point list must be [latitude, longitude]")
+#         return {"latitude": point[0], "longitude": point[1]}
+
+#     if isinstance(point, dict):
+#         if "latitude" in point and "longitude" in point:
+#             return point
+
+#     raise ValueError("Invalid point format. Must be [lat, lon] or {latitude, longitude}")
+
+
+# # ============================================================
+# # Datacube Generic Query
+# # ============================================================
+
+# def get_data_datacube(collection_name=None, filters=None, page_size=200):
+#     """
+#     Call Datacube Fetch API.
+#     """
+#     if collection_name is None:
+#         collection_name = INDEX_COLLECTION_NAME
+
+#     if filters is None:
+#         filters = {}
+
+#     params = {
+#         "database_id": DATABASE_ID,
+#         "collection_name": collection_name,
+#         "filters": json.dumps(filters),
+#         "page": 1,
+#         "page_size": page_size,
+#     }
+
+#     try:
+#         response = requests.get(CRUD_URL, params=params, headers=HEADERS)
+#         response.raise_for_status()
+#         return response.json()
+#     except Exception as e:
+#         raise Exception(f"Datacube request failed: {e}")
+
+
+# # ============================================================
+# # Fetch list of latitude collections
+# # ============================================================
+
+# def get_latitude_collections():
+#     start = time.time()
+
+#     try:
+#         result = get_data_datacube(collection_name=INDEX_COLLECTION_NAME)
+#         duration = time.time() - start
+
+#         collections = result.get("result", {}).get("collections", [])
+
+#         print(f"\n=== Datacube index fetch time: {duration:.2f} seconds ===")
+#         print(f"Collections returned: {len(collections)}")
+
+#         collections.sort()
+#         return collections
+
+#     except Exception as e:
+#         duration = time.time() - start
+#         print(f"\n=== Datacube index fetch FAILED after {duration:.2f} seconds ===")
+
+#         raise Exception(f"Failed to fetch latitude index: {e}")
+
+
+# # ============================================================
+# # Binary Search Helper
+# # ============================================================
+
+# def binary_search(arr, value):
+#     low, high = 0, len(arr) - 1
+
+#     while low <= high:
+#         mid = (low + high) // 2
+#         mid_val = arr[mid]
+
+#         if mid_val == value:
+#             return mid
+#         elif mid_val < value:
+#             low = mid + 1
+#         else:
+#             high = mid - 1
+
+#     return high  # nearest lower index
+
+
+# # ============================================================
+# # Main: Datacube Bounding Box Query
+# # ============================================================
+
+# # def query_by_four_corners_datacube(top_left, top_right, bottom_left, bottom_right):
+# #     total_start = time.time()
+
+# #     # ---- Normalize inputs ----
+# #     top_left = _normalize_point(top_left)
+# #     top_right = _normalize_point(top_right)
+# #     bottom_left = _normalize_point(bottom_left)
+# #     bottom_right = _normalize_point(bottom_right)
+
+# #     print("\n=== Normalized Coordinates ===")
+# #     print("TL:", top_left)
+# #     print("TR:", top_right)
+# #     print("BL:", bottom_left)
+# #     print("BR:", bottom_right)
+
+# #     # ---- Build payload for inscriber ----
+# #     payload = {
+# #         "top_left": [top_left["latitude"], top_left["longitude"]],
+# #         "top_right": [top_right["latitude"], top_right["longitude"]],
+# #         "bottom_left": [bottom_left["latitude"], bottom_left["longitude"]],
+# #         "bottom_right": [bottom_right["latitude"], bottom_right["longitude"]],
+# #     }
+
+# #     INSCRIBER_URL = os.getenv("INSCRIBER_URL")
+
+# #     try:
+# #         print("\n=== Sending payload to inscriber ===")
+# #         print("URL:", INSCRIBER_URL)
+# #         print("Payload:", json.dumps(payload, indent=2))
+
+# #         data_start = time.time()
+# #         response = requests.post(INSCRIBER_URL, json=payload)
+# #         data_duration = time.time() - data_start
+
+# #         print(f"\n=== Time to fetch data from inscriber: {data_duration:.2f} seconds ===")
+
+# #         # ---- Print raw response ----
+# #         print("\n=== Raw Response ===")
+# #         print(response.status_code)
+# #         print(response.text)   # this will show the exact API return
+        
+# #         response.raise_for_status()
+# #         inscriber_result = response.json()
+
+# #         # ---- Wrap inscriber response to match original format ----
+# #         results = {
+# #             "count": len(inscriber_result.get("documents", inscriber_result)),  # fallback if key not present
+# #             "documents": inscriber_result.get("documents", inscriber_result),
+# #             "collections_scanned": ["inscriber_endpoint"]
+# #         }
+
+# #     except Exception as e:
+# #         data_duration = time.time() - data_start
+# #         print(f"\n=== ERROR fetching data from inscriber after {data_duration:.2f} seconds ===")
+# #         traceback.print_exc()
+# #         return {"error": str(e)}
+
+# #     # ---- Final total time ----
+# #     total_duration = time.time() - total_start
+# #     print(f"\n=== TOTAL Datacube query time: {total_duration:.2f} seconds ===")
+
+# #     return results
+
+# def query_by_four_corners_datacube(top_left, top_right, bottom_left, bottom_right):
+#     total_start = time.time()
+
+#     try:
+#         # ---- Normalize inputs ----
+#         top_left = _normalize_point(top_left)
+#         top_right = _normalize_point(top_right)
+#         bottom_left = _normalize_point(bottom_left)
+#         bottom_right = _normalize_point(bottom_right)
+
+#         print("\n=== Normalized Coordinates ===")
+#         print("TL:", top_left)
+#         print("TR:", top_right)
+#         print("BL:", bottom_left)
+#         print("BR:", bottom_right)
+
+#         # ---- Build bounding box filters ----
+#         min_lat = min(bottom_left["latitude"], bottom_right["latitude"])
+#         max_lat = max(top_left["latitude"], top_right["latitude"])
+#         min_lon = min(top_left["longitude"], bottom_left["longitude"])
+#         max_lon = max(top_right["longitude"], bottom_right["longitude"])
+
+#         filters = {
+#             "latitude": {
+#                 "$gte": min_lat,
+#                 "$lte": max_lat
+#             },
+#             "longitude": {
+#                 "$gte": min_lon,
+#                 "$lte": max_lon
+#             }
+#         }
+
+#         print("\n=== Querying Datacube ===")
+#         print("URL:", CRUD_URL)
+#         print("Filters:", json.dumps(filters, indent=2))
+
+#         data_start = time.time()
+
+#         response = requests.get(
+#             CRUD_URL,
+#             params={
+#                 "database_id": DATABASE_ID,
+#                 "collection_name": INDEX_COLLECTION_NAME,
+#                 "filters": json.dumps(filters),
+#                 "page": 1,
+#                 "page_size": 1000
+#             },
+#             headers=HEADERS,
+#             timeout=60
+#         )
+
+#         data_duration = time.time() - data_start
+
+#         print(f"\n=== Datacube response time: {data_duration:.2f} seconds ===")
+#         print("Status Code:", response.status_code)
+
+#         response.raise_for_status()
+
+#         result = response.json()
+
+#         documents = result.get("result", {}).get("documents", [])
+
+#         print(f"Tiles found: {len(documents)}")
+
+#         results = {
+#             "count": len(documents),
+#             "documents": documents,
+#             "collections_scanned": [INDEX_COLLECTION_NAME]
+#         }
+
+#         total_duration = time.time() - total_start
+#         print(f"\n=== TOTAL query time: {total_duration:.2f} seconds ===")
+
+#         return results
+
+#     except Exception as e:
+#         print("\n=== ERROR in Datacube query ===")
+#         traceback.print_exc()
+#         return {"error": str(e)}
+
+
+
+# queries.py
+
 import traceback
 import json
 import requests
@@ -19,8 +313,8 @@ try:
     API_KEY = config("API_KEY")
     BASE_DATACUBE_URL = config("BASE_DATACUBE_URL")
 
-    CRUD_COORDS_PATH = config("CRUD_COORDS_PATH", default="/api/crud")
-    CRUD_RESULTS_PATH = config("CRUD_RESULTS_PATH", default="/api/crud")
+    CRUD_COORDS_PATH = config("CRUD_COORDS_PATH", default="/crud")
+    CRUD_RESULTS_PATH = config("CRUD_RESULTS_PATH", default="/crud")
 
     CRUD_URL = f"{BASE_DATACUBE_URL.rstrip('/')}{CRUD_COORDS_PATH}"
 
@@ -69,7 +363,7 @@ def _normalize_point(point):
 
 def get_data_datacube(collection_name=None, filters=None, page_size=200):
     """
-    Call Datacube Fetch API.
+    Generic GET request to DataCube CRUD endpoint
     """
     if collection_name is None:
         collection_name = INDEX_COLLECTION_NAME
@@ -86,9 +380,12 @@ def get_data_datacube(collection_name=None, filters=None, page_size=200):
     }
 
     try:
-        response = requests.get(CRUD_URL, params=params, headers=HEADERS)
+        response = requests.get(CRUD_URL, params=params, headers=HEADERS, timeout=60)
+        if response.status_code == 404:
+            raise Exception(f"Datacube GET endpoint not found: {CRUD_URL}")
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        return data.get("data", data)  # fallback if no "data" key
     except Exception as e:
         raise Exception(f"Datacube request failed: {e}")
 
@@ -104,7 +401,7 @@ def get_latitude_collections():
         result = get_data_datacube(collection_name=INDEX_COLLECTION_NAME)
         duration = time.time() - start
 
-        collections = result.get("result", {}).get("collections", [])
+        collections = result if isinstance(result, list) else result.get("documents", [])
 
         print(f"\n=== Datacube index fetch time: {duration:.2f} seconds ===")
         print(f"Collections returned: {len(collections)}")
@@ -115,7 +412,6 @@ def get_latitude_collections():
     except Exception as e:
         duration = time.time() - start
         print(f"\n=== Datacube index fetch FAILED after {duration:.2f} seconds ===")
-
         raise Exception(f"Failed to fetch latitude index: {e}")
 
 
@@ -147,59 +443,67 @@ def binary_search(arr, value):
 def query_by_four_corners_datacube(top_left, top_right, bottom_left, bottom_right):
     total_start = time.time()
 
-    # ---- Normalize inputs ----
-    top_left = _normalize_point(top_left)
-    top_right = _normalize_point(top_right)
-    bottom_left = _normalize_point(bottom_left)
-    bottom_right = _normalize_point(bottom_right)
-
-    print("\n=== Normalized Coordinates ===")
-    print("TL:", top_left)
-    print("TR:", top_right)
-    print("BL:", bottom_left)
-    print("BR:", bottom_right)
-
-    # ---- Build payload for inscriber ----
-    payload = {
-        "top_left": [top_left["latitude"], top_left["longitude"]],
-        "top_right": [top_right["latitude"], top_right["longitude"]],
-        "bottom_left": [bottom_left["latitude"], bottom_left["longitude"]],
-        "bottom_right": [bottom_right["latitude"], bottom_right["longitude"]],
-    }
-
-    INSCRIBER_URL = os.getenv("INSCRIBER_URL")
-
     try:
-        print("\n=== Sending payload to inscriber ===")
-        print("URL:", INSCRIBER_URL)
-        print("Payload:", json.dumps(payload, indent=2))
+        # ---- Normalize inputs ----
+        top_left = _normalize_point(top_left)
+        top_right = _normalize_point(top_right)
+        bottom_left = _normalize_point(bottom_left)
+        bottom_right = _normalize_point(bottom_right)
 
-        data_start = time.time()
-        response = requests.post(INSCRIBER_URL, json=payload)
-        data_duration = time.time() - data_start
+        print("\n=== Normalized Coordinates ===")
+        print("TL:", top_left)
+        print("TR:", top_right)
+        print("BL:", bottom_left)
+        print("BR:", bottom_right)
 
-        print(f"\n=== Time to fetch data from inscriber: {data_duration:.2f} seconds ===")
+        # ---- Build bounding box filters ----
+        min_lat = min(bottom_left["latitude"], bottom_right["latitude"])
+        max_lat = max(top_left["latitude"], top_right["latitude"])
+        min_lon = min(top_left["longitude"], bottom_left["longitude"])
+        max_lon = max(top_right["longitude"], bottom_right["longitude"])
+
+        filters = {
+            "latitude": {"$gte": min_lat, "$lte": max_lat},
+            "longitude": {"$gte": min_lon, "$lte": max_lon}
+        }
+
+        print("\n=== Querying Datacube ===")
+        print("URL:", CRUD_URL)
+        print("Filters:", json.dumps(filters, indent=2))
+
+        params = {
+            "database_id": DATABASE_ID,
+            "collection_name": INDEX_COLLECTION_NAME,
+            "filters": json.dumps(filters),
+            "page": 1,
+            "page_size": 1000
+        }
+
+        response = requests.get(CRUD_URL, headers=HEADERS, params=params, timeout=60)
+
+        print(f"\n=== Datacube response time: {time.time() - total_start:.2f} seconds ===")
+        print("Status Code:", response.status_code)
+
+        if response.status_code == 404:
+            return {"error": f"Datacube GET endpoint not found: {CRUD_URL}"}
+
         response.raise_for_status()
-        inscriber_result = response.json()
+        data = response.json()
 
-        # ---- Wrap inscriber response to match original format ----
-        results = {
-            "count": len(inscriber_result.get("documents", inscriber_result)),  # fallback if key not present
-            "documents": inscriber_result.get("documents", inscriber_result),
-            "collections_scanned": ["inscriber_endpoint"]
+        documents = data.get("data", data.get("documents", []))
+
+        print(f"Tiles found: {len(documents)}")
+
+        total_duration = time.time() - total_start
+        print(f"\n=== TOTAL query time: {total_duration:.2f} seconds ===")
+
+        return {
+            "count": len(documents),
+            "documents": documents,
+            "collections_scanned": [INDEX_COLLECTION_NAME]
         }
 
     except Exception as e:
-        data_duration = time.time() - data_start
-        print(f"\n=== ERROR fetching data from inscriber after {data_duration:.2f} seconds ===")
+        print("\n=== ERROR in Datacube query ===")
         traceback.print_exc()
         return {"error": str(e)}
-
-    # ---- Final total time ----
-    total_duration = time.time() - total_start
-    print(f"\n=== TOTAL Datacube query time: {total_duration:.2f} seconds ===")
-
-    return results
-
-
-

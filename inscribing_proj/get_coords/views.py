@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import BoundingBoxSerializer
+from .queries import query_by_four_corners_datacube
 
 # Load Datacube query function
 try:
@@ -77,3 +78,35 @@ class GeoQueryViewDatacube(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+class InscriberView(APIView):
+    def post(self, request):
+
+        print("\n=== INSCRIBER ENDPOINT CALLED ===")
+
+        top_left = request.data.get("top_left")
+        top_right = request.data.get("top_right")
+        bottom_left = request.data.get("bottom_left")
+        bottom_right = request.data.get("bottom_right")
+
+        print("Received coordinates:")
+        print("TL:", top_left)
+        print("TR:", top_right)
+        print("BL:", bottom_left)
+        print("BR:", bottom_right)
+
+        result = query_by_four_corners_datacube(
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right
+        )
+
+        documents = result.get("documents", [])
+
+        print(f"Returning {len(documents)} tiles")
+
+        return Response({
+            "documents": documents,
+            "count": len(documents)
+        })

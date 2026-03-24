@@ -133,7 +133,8 @@ const App = () => {
 
       try {
         // API call for location-based search
-        const response = await axios.post("/search-by-location/", formData);
+        // const response = await axios.post("/search-by-location/", formData);
+        const response = await axios.post("/generate-prompts/", formData);
         setTaskId(response.data.task_id);
         setIsRunning(true);
         setSearchComplete(false);
@@ -228,7 +229,7 @@ const App = () => {
         // Select the appropriate endpoint based on searchType
         const endpoint = searchType === "file"
           ? `/download/${taskId}`
-          : `/download-search/${taskId}`;
+          : `/download-prompts/${taskId}`;
 
         const response = await axios.get(endpoint, {
           responseType: 'blob'

@@ -24,6 +24,13 @@ import random
 import requests
 from .utils import calculate_boundary_points
 
+import csv
+import uuid
+import logging
+from threading import Thread
+from fastapi import Form
+from fastapi.responses import FileResponse
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,11 +39,14 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://map.uxlivinglab.online",
-        "https://82.29.161.195"
-    ],
+    allow_origins=["*"],
+
+    # allow_origins=[
+    #     "http://localhost:5173",
+    #     "http://localhost"
+    #     "https://map.uxlivinglab.online",
+    #     "https://82.29.161.195"
+    # ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -94,6 +104,7 @@ def safe_find_elements(driver, by, value, timeout=10):
 def init_driver():
     """Initializes and returns a Selenium WebDriver instance with improved error handling."""
     options = Options()
+    options.binary_location = "/usr/bin/chromium"
     options.add_argument("--headless=new")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--no-sandbox")
@@ -135,14 +146,18 @@ def init_driver():
     options.add_argument("--max_old_space_size=8192")  # INCREASED memory
     options.add_argument("--aggressive-cache-discard")
 
-    log_message("🌐 Setting up Chrome driver...")
+    log_message("Setting up Chrome driver...")
 
     try:
-        from webdriver_manager.chrome import ChromeDriverManager
-        from selenium.webdriver.chrome.service import Service as ChromeService
+        # from webdriver_manager.chrome import ChromeDriverManager
+        # from selenium.webdriver.chrome.service import Service as ChromeService
 
-        log_message("🔄 Using WebDriver Manager to get compatible chromedriver...")
-        service = ChromeService(ChromeDriverManager().install())
+        # log_message("Using WebDriver Manager to get compatible chromedriver...")
+        # service = ChromeService(ChromeDriverManager().install())
+        # driver = webdriver.Chrome(service=service, options=options)
+
+        # service = Service("/usr/local/bin/chromedriver")
+        service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
 
         # Enhanced anti-detection
@@ -163,15 +178,15 @@ def init_driver():
                     renderer="Intel Iris OpenGL Engine",
                     fix_hairline=True,
                     )
-            log_message("✓ Stealth mode applied successfully")
+            log_message("Stealth mode applied successfully")
         except ImportError:
-            log_message("⚠️ selenium-stealth not installed, using basic anti-detection")
+            log_message("selenium-stealth not installed, using basic anti-detection")
         
         log_message("✓ Chrome driver created successfully with WebDriver Manager")
         return driver
     except Exception as e:
-        log_message(f"ℹ️ WebDriver Manager approach failed: {e}")
-        log_message("🔄 Trying direct ChromeDriver creation...")
+        log_message(f"WebDriver Manager approach failed: {e}")
+        log_message("Trying direct ChromeDriver creation...")
 
         try:
             driver = webdriver.Chrome(options=options)
@@ -192,14 +207,14 @@ def init_driver():
                         renderer="Intel Iris OpenGL Engine",
                         fix_hairline=True,
                         )
-                log_message("✓ Stealth mode applied successfully")
+                log_message("Stealth mode applied successfully")
             except ImportError:
-                log_message("⚠️ selenium-stealth not installed, using basic anti-detection")
+                log_message("selenium-stealth not installed, using basic anti-detection")
             
-            log_message("✓ Chrome driver created successfully")
+            log_message("Chrome driver created successfully")
             return driver
         except Exception as e:
-            log_message(f"❌ Direct ChromeDriver creation failed: {e}")
+            log_message(f"Direct ChromeDriver creation failed: {e}")
             return None
 
 def extract_restaurant_details(driver, url, task_id):
@@ -251,14 +266,14 @@ def extract_restaurant_details(driver, url, task_id):
                         len(name_text) > 2 and
                         not name_text.isdigit()):
                         details["Name"] = name_text
-                        log_message(f"✓ Found name: {details['Name']}")
+                        log_message(f"Found name: {details['Name']}")
                         break
             except:
                 continue
 
         # If no valid name found, this is likely not a business page
         if details["Name"] == "N/A":
-            log_message("❌ No valid business name found, skipping...")
+            log_message("No valid business name found, skipping...")
             return details
 
         # Extract address with better validation
@@ -277,7 +292,7 @@ def extract_restaurant_details(driver, url, task_id):
                     # Validate address format
                     if address_text and ',' in address_text and len(address_text) > 10:
                         details["Address"] = address_text
-                        log_message(f"✓ Found address: {details['Address']}")
+                        log_message(f"Found address: {details['Address']}")
                         break
             except:
                 continue
@@ -303,7 +318,7 @@ def extract_restaurant_details(driver, url, task_id):
                         not phone_text.lower().startswith('0  26k')):  # Filter out the problematic pattern
                         details["Phone"] = phone_text
                         details["Has_Contact_Info"] = True
-                        log_message(f"✓ Found phone: {details['Phone']}")
+                        log_message(f"Found phone: {details['Phone']}")
                         break
             except:
                 continue
@@ -386,7 +401,7 @@ def extract_restaurant_details(driver, url, task_id):
             pass
 
     except Exception as e:
-        log_message(f"❌ Error extracting details: {e}")
+        log_message(f"Error extracting details: {e}")
     
     return details
 
@@ -396,7 +411,7 @@ def scrape_Maps_location(task_id, keyword, country, city):
     try:
         driver = init_driver()
         if not driver:
-            log_message("❌ Failed to initialize driver")
+            log_message("Failed to initialize driver")
             tasks[task_id]["running"] = False
             tasks[task_id]["error"] = "Failed to initialize web driver"
             return
@@ -404,7 +419,7 @@ def scrape_Maps_location(task_id, keyword, country, city):
         search_query = f"{keyword} in {city}, {country}"
         maps_url = f"https://www.google.com/maps/search/{search_query.replace(' ', '+')}"
         
-        log_message(f"🔍 Searching for: {search_query}")
+        log_message(f"Searching for: {search_query}")
 
         # Load the search page
         driver.get(maps_url)
@@ -427,7 +442,7 @@ def scrape_Maps_location(task_id, keyword, country, city):
                             EC.presence_of_element_located((By.XPATH, selector))
                         )
                         results_loaded = True
-                        log_message(f"✓ Found results with selector: {selector}")
+                        log_message(f"Found results with selector: {selector}")
                         break
                     except:
                         continue
@@ -442,7 +457,7 @@ def scrape_Maps_location(task_id, keyword, country, city):
                 log_message(f"Attempt {attempt + 1} error: {e}")
 
         if not results_loaded:
-            log_message("❌ Could not find any results")
+            log_message("Could not find any results")
             tasks[task_id]["error"] = "No results found"
             tasks[task_id]["running"] = False
             return
@@ -530,14 +545,14 @@ def scrape_Maps_location(task_id, keyword, country, city):
                         tasks[task_id]["results"] = results
                         tasks[task_id]["progress"] = len(results)
                         
-                        log_message(f"✅ Processed: {details['Name']} (Total: {len(results)})")
+                        log_message(f"Processed: {details['Name']} (Total: {len(results)})")
                     
                     # Go back to results
                     driver.back()
                     smart_sleep(3, 5, "after going back")
                     
                 except Exception as e:
-                    log_message(f"❌ Error processing result: {e}")
+                    log_message(f"Error processing result: {e}")
                     continue
             
             # Enhanced scrolling strategy
@@ -568,11 +583,11 @@ def scrape_Maps_location(task_id, keyword, country, city):
                 log_message(f"Error during scrolling: {e}")
                 break
         
-        log_message(f"🎉 Scraping completed! Found {len(results)} businesses")
+        log_message(f"Scraping completed! Found {len(results)} businesses")
         
     except Exception as e:
-        log_message(f"❌ Critical error: {e}")
-        log_message(f"❌ Traceback: {traceback.format_exc()}")
+        log_message(f"Critical error: {e}")
+        log_message(f"Traceback: {traceback.format_exc()}")
         tasks[task_id]["error"] = str(e)
     finally:
         if driver:
@@ -589,7 +604,7 @@ def scrape_Maps(task_id, location_data, keyword):
     try:
         driver = init_driver()
         if not driver:
-            log_message("❌ Failed to initialize driver")
+            log_message("Failed to initialize driver")
             tasks[task_id]["running"] = False
             tasks[task_id]["error"] = "Failed to initialize web driver"
             return
@@ -606,7 +621,7 @@ def scrape_Maps(task_id, location_data, keyword):
             search_query = f"{keyword} in {postal_code}, {city}, {country}"
             maps_url = f"https://www.google.com/maps/search/{search_query.replace(' ', '+')}"
             
-            log_message(f"🔍 Processing location {idx + 1}/{len(location_data)}: {postal_code}, {city}, {country}")
+            log_message(f"Processing location {idx + 1}/{len(location_data)}: {postal_code}, {city}, {country}")
 
             try:
                 driver.get(maps_url)
@@ -627,7 +642,7 @@ def scrape_Maps(task_id, location_data, keyword):
                                 elements = driver.find_elements(By.XPATH, selector)
                                 if len(elements) > 0:
                                     results_loaded = True
-                                    log_message(f"✓ Found {len(elements)} results with selector: {selector}")
+                                    log_message(f"Found {len(elements)} results with selector: {selector}")
                                     break
                             except:
                                 continue
@@ -642,7 +657,7 @@ def scrape_Maps(task_id, location_data, keyword):
                         log_message(f"Attempt {attempt + 1} error: {e}")
 
                 if not results_loaded:
-                    log_message(f"❌ Could not find any results for {postal_code}")
+                    log_message(f"Could not find any results for {postal_code}")
                     continue
 
                 # Process results for this location
@@ -719,9 +734,9 @@ def scrape_Maps(task_id, location_data, keyword):
                                 tasks[task_id]["results"] = results
                                 tasks[task_id]["progress"] = total_processed
                                 
-                                log_message(f"✅ Processed: {details['Name']} from {postal_code} (Total: {total_processed})")
+                                log_message(f"Processed: {details['Name']} from {postal_code} (Total: {total_processed})")
                             else:
-                                log_message(f"❌ Invalid business data, skipping: {details['Name']}")
+                                log_message(f"Invalid business data, skipping: {details['Name']}")
                             
                             driver.back()
                             smart_sleep(2, 3, "after going back")
@@ -731,7 +746,7 @@ def scrape_Maps(task_id, location_data, keyword):
                             )
                             
                         except Exception as e:
-                            log_message(f"❌ Error processing result from {postal_code}: {e}")
+                            log_message(f"Error processing result from {postal_code}: {e}")
                             try:
                                 driver.back()
                                 time.sleep(2)
@@ -756,28 +771,28 @@ def scrape_Maps(task_id, location_data, keyword):
                     except:
                         break
                 
-                log_message(f"📍 Completed {postal_code}: Found {location_results} businesses")
+                log_message(f"Completed {postal_code}: Found {location_results} businesses")
 
             except Exception as e:
-                log_message(f"❌ Error processing location {postal_code}: {e}")
+                log_message(f"Error processing location {postal_code}: {e}")
                 continue
 
-        log_message(f"🎉 CSV Scraping completed! Total businesses found: {len(results)}")
+        log_message(f"CSV Scraping completed! Total businesses found: {len(results)}")
         
         tasks[task_id]["results"] = results
         tasks[task_id]["progress"] = len(results)
 
     except Exception as e:
-        log_message(f"❌ Critical error in scraping function: {e}")
-        log_message(f"❌ Traceback: {traceback.format_exc()}")
+        log_message(f"Critical error in scraping function: {e}")
+        log_message(f"Traceback: {traceback.format_exc()}")
         tasks[task_id]["error"] = str(e)
     finally:
         if driver:
             try:
                 driver.quit()
-                log_message("✓ Driver closed successfully")
+                log_message("Driver closed successfully")
             except Exception as e:
-                log_message(f"⚠️ Error closing driver: {e}")
+                log_message(f"Error closing driver: {e}")
         
         if task_id in tasks:
             tasks[task_id]["running"] = False
@@ -895,18 +910,18 @@ def get_city_coordinates(country: str, city: str):
             if entry.get("ASCII Name", "").lower() == city.lower():
                 try:
                     coords = float(entry.get("latitude")), float(entry.get("longitude"))
-                    log_message(f"📍 Found coordinates for {city}, {country}: {coords}")
+                    log_message(f" Found coordinates for {city}, {country}: {coords}")
                     return coords
                 except Exception:
                     return None
-        log_message(f"⚠️ City {city} not found in file {country_filename}")
+        log_message(f"City {city} not found in file {country_filename}")
         return None
     except Exception:
-        log_message(f"⚠️ Error reading city data for {country}: {traceback.format_exc()}")
+        log_message(f"Error reading city data for {country}: {traceback.format_exc()}")
         return None
 
 def fetch_inscriber_tiles(bounds):
-    log_message("🔄 Requesting tiles from inscriber")
+    log_message("Requesting tiles from inscriber")
     try:
         payload = {
             "top_left": list(bounds[0]),
@@ -914,12 +929,13 @@ def fetch_inscriber_tiles(bounds):
             "bottom_left": list(bounds[2]),
             "bottom_right": list(bounds[3])
         }
-        resp = requests.post(INSCRIBER_URL, json=payload, timeout=30)
+        resp = requests.post(INSCRIBER_URL, json=payload, timeout=300)
+        log_message(f"Inscriber response status: {resp.status_code}")
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list):
             tiles = [(float(p[0]), float(p[1])) for p in data]
-            log_message(f"🧩 Received {len(tiles)} tiles (list) from inscriber")
+            log_message(f"Received {len(tiles)} tiles (list) from inscriber")
             return tiles
         if isinstance(data, dict) and "raw_coordinates" in data:
             flat = []
@@ -930,15 +946,15 @@ def fetch_inscriber_tiles(bounds):
                         lon = item.get("longitude") if isinstance(item, dict) else (item[1] if isinstance(item, (list, tuple)) and len(item) >= 2 else None)
                         if lat is not None and lon is not None:
                             flat.append((float(lat), float(lon)))
-            log_message(f"🧩 Received {len(flat)} tiles (raw_coordinates) from inscriber")
+            log_message(f"Received {len(flat)} tiles (raw_coordinates) from inscriber")
             return flat
         return []
     except Exception as e:
-        log_message(f"⚠️ Inscriber fetch failed: {e}")
+        log_message(f"Inscriber fetch failed: {e}")
         return []
 
 def build_target_coordinates(centers, relative_tiles):
-    log_message(f"📐 Building target coordinates: centers={len(centers)}, tiles={len(relative_tiles)}")
+    log_message(f"Building target coordinates: centers={len(centers)}, tiles={len(relative_tiles)}")
     if not relative_tiles:
         return centers
     targets = []
@@ -952,7 +968,7 @@ def scrape_by_coordinates(task_id, keyword, target_coords):
     try:
         driver = init_driver()
         if not driver:
-            log_message("❌ Failed to initialize driver")
+            log_message("Failed to initialize driver")
             tasks[task_id]["running"] = False
             tasks[task_id]["error"] = "Failed to initialize web driver"
             return
@@ -965,7 +981,7 @@ def scrape_by_coordinates(task_id, keyword, target_coords):
                 break
             try:
                 maps_url = f"https://www.google.com/maps/search/{requests.utils.quote(keyword)}/@{lat},{lon},14z"
-                log_message(f"🔍 Searching around {lat:.6f},{lon:.6f} ({idx+1}/{len(target_coords)})")
+                log_message(f"Searching around {lat:.6f},{lon:.6f} ({idx+1}/{len(target_coords)})")
                 driver.get(maps_url)
                 smart_sleep(6, 10, "for results to load")
 
@@ -1040,24 +1056,121 @@ def scrape_by_coordinates(task_id, keyword, target_coords):
                             pass
                         continue
             except Exception as e:
-                log_message(f"❌ Error at coordinate {lat},{lon}: {e}")
+                log_message(f"Error at coordinate {lat},{lon}: {e}")
                 continue
 
-        log_message(f"🎉 Coordinate-based scraping completed! Total businesses found: {len(results)}")
+        log_message(f"Coordinate-based scraping completed! Total businesses found: {len(results)}")
 
     except Exception as e:
-        log_message(f"❌ Critical error in coordinate scraping: {e}")
+        log_message(f"Critical error in coordinate scraping: {e}")
         tasks[task_id]["error"] = str(e)
     finally:
         if driver:
             try:
                 driver.quit()
-                log_message("✓ Driver closed successfully")
+                log_message("Driver closed successfully")
             except Exception:
                 pass
         if task_id in tasks:
             tasks[task_id]["running"] = False
             log_message(f"Task {task_id} completed with {len(tasks[task_id].get('results', []))} results")
+
+def generate_prompts_task(task_id, keyword, city, country, radius_km):
+    try:
+        logger.info(f"[TASK {task_id}] Prompt generation started")
+
+        center = get_city_coordinates(country, city)
+
+        if not center:
+            logger.error(f"[TASK {task_id}] Could not find city coordinates")
+            tasks[task_id]["running"] = False
+            return
+
+        logger.info(f"[TASK {task_id}] Center found: {center}")
+
+        bounds = calculate_boundary_points(float(radius_km))
+        logger.info(f"[TASK {task_id}] Bounds calculated")
+
+        tiles = fetch_inscriber_tiles(bounds)
+        logger.info(f"[TASK {task_id}] Tiles received: {len(tiles)}")
+
+        coords_list = build_target_coordinates([center], tiles)
+        logger.info(f"[TASK {task_id}] Total coordinates: {len(coords_list)}")
+
+        if not coords_list:
+            logger.error(f"[TASK {task_id}] No coordinates found")
+            tasks[task_id]["running"] = False
+            return
+
+        prompts = []
+        total = len(coords_list)
+
+        for idx, (lat, lng) in enumerate(coords_list):
+
+            prompt = f"find name, email, phone number linkedin profile and hospital details of 100 {keyword} in {lat} {lng}, {city}, {country} in a radius of {radius_km} km"
+
+            prompts.append({"Prompt": prompt})
+
+            progress = ((idx + 1) / total) * 100
+            tasks[task_id]["progress"] = progress
+
+            logger.info(f"[TASK {task_id}] Prompt {idx+1}/{total} created")
+
+        # SAVE CSV (same pattern as your download-search)
+        file_path = f"prompts_{task_id}.csv"
+
+        with open(file_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["Prompt"])
+            writer.writeheader()
+            writer.writerows(prompts)
+
+        tasks[task_id]["file"] = file_path
+        tasks[task_id]["running"] = False
+        tasks[task_id]["progress"] = 100
+
+        logger.info(f"[TASK {task_id}] CSV saved: {file_path}")
+
+    except Exception as e:
+        logger.exception(f"[TASK {task_id}] ERROR: {str(e)}")
+        tasks[task_id]["running"] = False
+
+@app.post("/generate-prompts/")
+async def generate_prompts(
+    keyword: str = Form(...),
+    city: str = Form(...),
+    country: str = Form(...),
+    radius_km: int = Form(...)
+):
+    task_id = str(uuid.uuid4())
+
+    tasks[task_id] = {
+        "progress": 0,
+        "running": True,
+        "file": None
+    }
+
+    logger.info(f"[TASK {task_id}] Request received")
+
+    thread = Thread(
+        target=generate_prompts_task,
+        args=(task_id, keyword, city, country, radius_km)
+    )
+    thread.start()
+
+    return {"task_id": task_id}
+
+@app.get("/download-prompts/{task_id}")
+async def download_prompts(task_id: str):
+    task = tasks.get(task_id)
+
+    if not task or not task.get("file"):
+        return {"error": "File not ready"}
+
+    return FileResponse(
+        path=task["file"],
+        filename=f"prompts_{task_id}.csv",
+        media_type="text/csv"
+    )
 
 @app.get("/countries")
 def get_countries():
@@ -1141,9 +1254,27 @@ async def search_by_location(keyword: str = Form(...), country: str = Form(...),
         tasks[task_id]["running"] = False
         return JSONResponse(status_code=400, content={"error": tasks[task_id]["error"]})
 
+    # bounds = calculate_boundary_points(float(radius_km))
+    # tiles = fetch_inscriber_tiles(bounds)
+    # target_coords = build_target_coordinates([center], tiles)
+
+    log_message("Calculating search boundary")
     bounds = calculate_boundary_points(float(radius_km))
+
+    log_message("Fetching inscriber tiles...")
     tiles = fetch_inscriber_tiles(bounds)
+
+    log_message(f"Tiles received: {len(tiles)}")
+
+    log_message("Building target coordinates...")
     target_coords = build_target_coordinates([center], tiles)
+
+    log_message(f"Total target coordinates: {len(target_coords)}")
+
+    if not target_coords:
+        tasks[task_id]["error"] = "Inscriber returned no tiles"
+        tasks[task_id]["running"] = False
+        return JSONResponse(status_code=500, content={"error": "No coordinates generated"})
 
     tasks[task_id]["center"] = center
     tasks[task_id]["bounds"] = bounds
@@ -1154,7 +1285,7 @@ async def search_by_location(keyword: str = Form(...), country: str = Form(...),
 
     try:
         threading.Thread(target=scrape_by_coordinates, args=(task_id, keyword, target_coords)).start()
-        log_message(f"🚀 Started coordinate scraping task {task_id} for {keyword} around {center}")
+        log_message(f"Started coordinate scraping task {task_id} for {keyword} around {center}")
     except Exception as e:
         tasks[task_id]["error"] = f"Failed to start scraping thread: {str(e)}"
         tasks[task_id]["running"] = False
