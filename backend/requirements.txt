@@ -5,3 +5,7 @@ selenium-stealth
 pandas
 webdriver-manager
 python-multipart
+google-genai
+pypdf
+python-docx
+openpyxl

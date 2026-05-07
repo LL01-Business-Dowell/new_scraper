@@ -28,6 +28,7 @@
 }
 
 .dot-pattern {
+  height: 1000px;
   position: absolute;
   inset: 0;
   background-image: radial-gradient(rgba(255, 255, 255, 0.2) 1px, transparent 1px);
@@ -54,6 +55,7 @@
   display: flex;
   flex-direction: column;
   flex-grow: 1;
+  height: 1000px;
 }
 
 /* Header */
@@ -117,10 +119,10 @@
 
 /* Main Content */
 .main-content {
-  max-width: 1200px;
+  width: 1000px;
   margin: 0 auto;
   padding: 2.5rem 1.5rem;
-  display: grid;
+  /* display: flex; */
   grid-template-columns: 1fr;
   gap: 2.5rem;
 }

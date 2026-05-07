@@ -12,11 +12,15 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - INSCRIBER_URL=http://inscriber:8002/api/geo-query-cube/
-      - CRUD_BASE_URL=https://datacube.uxlivinglab.online/
-      - CRUD_COORDS_PATH=/api/crud
-      - CRUD_RESULTS_PATH=/api/crud
-      - CRUD_API_KEY=sk_test_lbV1EV3-mQJ5VKlDzJHHa0xywsdEZGhAFPk6EPwce8k
-      - DATABASE_ID=690346e64b13cf4d1be78d89
+      - CRUD_BASE_URL=https://datacube.uxlivinglab.online/api/v2
+      - CRUD_COORDS_PATH=/crud
+      - CRUD_RESULTS_PATH=/crud
+      - CRUD_API_KEY=${CRUD_API_KEY}
+      - DATABASE_ID=${DATABASE_ID}
+      - GEMINI_KEY_1=${GEMINI_KEY_1}
+      - GEMINI_KEY_2=${GEMINI_KEY_2}
+      - GEMINI_KEY_3=${GEMINI_KEY_3}
+      - SESSION_COLLECTION_NAME=csv_chat_sessions
     shm_size: 2gb
     networks:
       - queue-net
