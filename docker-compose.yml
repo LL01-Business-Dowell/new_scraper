@@ -1,6 +1,114 @@
-# version: '3.8'
+# # version: '3.8'
+
+# services:
+#   backend:
+#     build: ./backend
+#     container_name: backend_container
+#     ports:
+#       - "8000:8000"
+#     restart: always
+#     volumes:
+#       - ./backend:/usr/src/app
+#     environment:
+#       - PYTHONUNBUFFERED=1
+#       - INSCRIBER_URL=http://inscriber:8002/api/geo-query-cube/
+#       - CRUD_BASE_URL=https://datacube.uxlivinglab.online/api/v2
+#       - CRUD_COORDS_PATH=/crud
+#       - CRUD_RESULTS_PATH=/crud
+#       - CRUD_API_KEY=${CRUD_API_KEY}
+#       - DATABASE_ID=${DATABASE_ID}
+#       - GEMINI_KEY_1=${GEMINI_KEY_1}
+#       - GEMINI_KEY_2=${GEMINI_KEY_2}
+#       - GEMINI_KEY_3=${GEMINI_KEY_3}
+#       - SESSION_COLLECTION_NAME=csv_chat_sessions
+#     shm_size: 2gb
+#     networks:
+#       - queue-net
+
+#   inscriber:
+#     build: ./inscribing_proj
+#     container_name: inscriber_container
+#     ports:
+#       - "8002:8002"
+#     env_file:
+#       - ./inscribing_proj/dev.env
+#     restart: always
+#     volumes:
+#       - ./inscribing_proj:/usr/src/app
+#     environment:
+#       PYTHONUNBUFFERED: 1
+#       shm_size: 2gb
+#     networks:
+#       - queue-net
+
+
+#   frontend:
+#     build: ./frontend
+#     container_name: frontend_container
+#     # ports:
+#     #   - "5173:5173"
+#     volumes:
+#       - ./frontend:/usr/src/app
+#     depends_on:
+#       - backend
+#     environment:
+#       - VITE_API_URL=https://map.uxlivinglab.online/api
+#     restart: always
+#     networks:
+#       - queue-net
+
+#   nginx:
+#     build:
+#       context: ./nginx
+#       dockerfile: Dockerfile
+#     container_name: nginx_scraper
+#     ports:
+#       - "80:80"
+#       - "443:443"
+#     volumes:
+#       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+#       - /etc/letsencrypt/live/map.uxlivinglab.online/fullchain.pem:/etc/letsencrypt/live/map.uxlivinglab.online/fullchain.pem:ro
+#       - /etc/letsencrypt/live/map.uxlivinglab.online/privkey.pem:/etc/letsencrypt/live/map.uxlivinglab.online/privkey.pem:ro
+#       - ./frontend:/home/SamantaScraper/frontend:ro
+#     restart: always
+#     depends_on:
+#       - backend
+#       - frontend
+#     networks:
+#       - queue-net
+
+
+
+# networks:
+#   queue-net:
+#     driver: bridge
+
+# docker-compose.yml
+# -------------------
+# Production compose file for Samanta Scraper.
+#
+# Services:
+#   backend   — FastAPI (Gemini + search + CSV + sessions)
+#   inscriber — Django microservice (coordinate tile lookup)
+#   frontend  — React app built by Nginx (static files)
+#   nginx     — Reverse proxy + SSL termination
+#
+# Required .env file in project root:
+#   CRUD_API_KEY=...
+#   DATABASE_ID=...
+#   GEMINI_KEY_1=...
+#   GEMINI_KEY_2=...
+#   GEMINI_KEY_3=...
+#
+# Required in inscribing_proj/dev.env:
+#   BASE_DATACUBE_URL=https://datacube.uxlivinglab.online/api/v2/
+#   DATABASE_ID=...
+#   API_KEY=...
+#   INDEX_COLLECTION_NAME=latitude_index
 
 services:
+
+  # ── FastAPI backend ─────────────────────────────────────────────────────────
   backend:
     build: ./backend
     container_name: backend_container
@@ -21,10 +129,12 @@ services:
       - GEMINI_KEY_2=${GEMINI_KEY_2}
       - GEMINI_KEY_3=${GEMINI_KEY_3}
       - SESSION_COLLECTION_NAME=csv_chat_sessions
-    shm_size: 2gb
+    # shm_size kept for compatibility — safe to remove if memory is tight
+    shm_size: 512mb
     networks:
       - queue-net
 
+  # ── Django inscriber microservice ───────────────────────────────────────────
   inscriber:
     build: ./inscribing_proj
     container_name: inscriber_container
@@ -36,27 +146,29 @@ services:
     volumes:
       - ./inscribing_proj:/usr/src/app
     environment:
-      PYTHONUNBUFFERED: 1
-      shm_size: 2gb
+      - PYTHONUNBUFFERED=1
+      # Note: shm_size removed from environment — it is a compose-level key
+      # and has no effect when set as an env var
     networks:
       - queue-net
 
-
+  # ── React frontend (Nginx static file server) ───────────────────────────────
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # VITE_API_URL must be a build arg (not runtime env) because Vite
+        # bakes it into the JS bundle at build time, not at container startup
+        - VITE_API_URL=https://map.uxlivinglab.online/api
     container_name: frontend_container
-    # ports:
-    #   - "5173:5173"
-    volumes:
-      - ./frontend:/usr/src/app
+    restart: always
     depends_on:
       - backend
-    environment:
-      - VITE_API_URL=https://map.uxlivinglab.online/api
-    restart: always
     networks:
       - queue-net
 
+  # ── Nginx reverse proxy + SSL ───────────────────────────────────────────────
   nginx:
     build:
       context: ./nginx
@@ -69,7 +181,6 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/letsencrypt/live/map.uxlivinglab.online/fullchain.pem:/etc/letsencrypt/live/map.uxlivinglab.online/fullchain.pem:ro
       - /etc/letsencrypt/live/map.uxlivinglab.online/privkey.pem:/etc/letsencrypt/live/map.uxlivinglab.online/privkey.pem:ro
-      - ./frontend:/home/SamantaScraper/frontend:ro
     restart: always
     depends_on:
       - backend
@@ -77,8 +188,7 @@ services:
     networks:
       - queue-net
 
-
-
 networks:
   queue-net:
     driver: bridge
+
