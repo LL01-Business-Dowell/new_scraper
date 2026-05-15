@@ -58,13 +58,17 @@ def log_message(message: str) -> None:
     print(entry)
     logger.info(entry)
 
+
 # ─── App setup ───────────────────────────────────────────────────────────────
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://reviewanalysis.uxlivinglab.org",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -86,15 +90,15 @@ csv_tasks: dict[str, dict] = {}
 
 # ─── Configuration / external services ───────────────────────────────────────
 
-BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JSON_FOLDER = os.path.join(BASE_DIR, "data", "countries")
 
-INSCRIBER_URL      = os.getenv("INSCRIBER_URL",      "http://inscriber:8002/api/geo-query-cube/")
-CRUD_BASE_URL      = os.getenv("CRUD_BASE_URL",      "")
-CRUD_COORDS_PATH   = os.getenv("CRUD_COORDS_PATH",   "/crud")
-CRUD_RESULTS_PATH  = os.getenv("CRUD_RESULTS_PATH",  "/crud")
-CRUD_API_KEY       = os.getenv("CRUD_API_KEY",       "")
-DATABASE_ID        = os.getenv("DATABASE_ID",        "")
+INSCRIBER_URL = os.getenv("INSCRIBER_URL", "http://inscriber:8002/api/geo-query-cube/")
+CRUD_BASE_URL = os.getenv("CRUD_BASE_URL", "")
+CRUD_COORDS_PATH = os.getenv("CRUD_COORDS_PATH", "/crud")
+CRUD_RESULTS_PATH = os.getenv("CRUD_RESULTS_PATH", "/crud")
+CRUD_API_KEY = os.getenv("CRUD_API_KEY", "")
+DATABASE_ID = os.getenv("DATABASE_ID", "")
 CRUD_COLLECTION_NAME = os.getenv("CRUD_COLLECTION_NAME", "map_scraper_data")
 
 
@@ -140,9 +144,9 @@ def save_coordinates_to_crud(
             "radiusKm": radius_km,
             "centers": centers,
             "bounds": {
-                "top_left":     list(bounds[0]) if bounds else None,
-                "top_right":    list(bounds[1]) if bounds else None,
-                "bottom_left":  list(bounds[2]) if bounds else None,
+                "top_left": list(bounds[0]) if bounds else None,
+                "top_right": list(bounds[1]) if bounds else None,
+                "bottom_left": list(bounds[2]) if bounds else None,
                 "bottom_right": list(bounds[3]) if bounds else None,
             },
             "tiles": tiles,
@@ -161,18 +165,17 @@ def save_results_to_crud(task_id, keyword, results, task_snapshot):
         "keyword": keyword,
         "email": task_snapshot.get("email", ""),
         "radiusKm": task_snapshot.get("radius_km"),
-        "centers": task_snapshot.get("centers") or (
-            [list(task_snapshot.get("center"))]
-            if task_snapshot.get("center") else []
-        ),
+        "centers": task_snapshot.get("centers")
+        or ([list(task_snapshot.get("center"))] if task_snapshot.get("center") else []),
         "bounds": (
             {
-                "top_left":     list(task_snapshot["bounds"][0]),
-                "top_right":    list(task_snapshot["bounds"][1]),
-                "bottom_left":  list(task_snapshot["bounds"][2]),
+                "top_left": list(task_snapshot["bounds"][0]),
+                "top_right": list(task_snapshot["bounds"][1]),
+                "bottom_left": list(task_snapshot["bounds"][2]),
                 "bottom_right": list(task_snapshot["bounds"][3]),
             }
-            if task_snapshot.get("bounds") else None
+            if task_snapshot.get("bounds")
+            else None
         ),
         "tiles": task_snapshot.get("tiles"),
         "target_coords": task_snapshot.get("target_coords"),
@@ -195,9 +198,7 @@ def save_results_to_crud(task_id, keyword, results, task_snapshot):
 def get_city_coordinates(country: str, city: str):
     try:
         country_files = {
-            f.lower(): f
-            for f in os.listdir(JSON_FOLDER)
-            if f.endswith(".json")
+            f.lower(): f for f in os.listdir(JSON_FOLDER) if f.endswith(".json")
         }
         country_filename = country.lower() + ".json"
         if country_filename not in country_files:
@@ -212,18 +213,14 @@ def get_city_coordinates(country: str, city: str):
                         float(entry.get("latitude")),
                         float(entry.get("longitude")),
                     )
-                    log_message(
-                        f"Found coordinates for {city}, {country}: {coords}"
-                    )
+                    log_message(f"Found coordinates for {city}, {country}: {coords}")
                     return coords
                 except Exception:
                     return None
         log_message(f"City {city} not found in {country_filename}")
         return None
     except Exception:
-        log_message(
-            f"Error reading city data for {country}: {traceback.format_exc()}"
-        )
+        log_message(f"Error reading city data for {country}: {traceback.format_exc()}")
         return None
 
 
@@ -234,9 +231,9 @@ def fetch_inscriber_tiles(bounds: list) -> list:
     log_message("Requesting tiles from inscriber")
     try:
         payload = {
-            "top_left":     list(bounds[0]),
-            "top_right":    list(bounds[1]),
-            "bottom_left":  list(bounds[2]),
+            "top_left": list(bounds[0]),
+            "top_right": list(bounds[1]),
+            "bottom_left": list(bounds[2]),
             "bottom_right": list(bounds[3]),
         }
         log_message(f"Inscriber payload: {payload}")
@@ -273,14 +270,10 @@ def fetch_inscriber_tiles(bounds: list) -> list:
                     lon = block.get("longitude")
                     if lat is not None and lon is not None:
                         flat.append((float(lat), float(lon)))
-            log_message(
-                f"Received {len(flat)} tiles (raw_coordinates) from inscriber"
-            )
+            log_message(f"Received {len(flat)} tiles (raw_coordinates) from inscriber")
             return flat
 
-        log_message(
-            f"Unrecognised inscriber response shape: {str(data)[:200]}"
-        )
+        log_message(f"Unrecognised inscriber response shape: {str(data)[:200]}")
         return []
 
     except Exception as exc:
@@ -288,9 +281,7 @@ def fetch_inscriber_tiles(bounds: list) -> list:
         return []
 
 
-def build_target_coordinates(
-    centers: list, relative_tiles: list
-) -> list:
+def build_target_coordinates(centers: list, relative_tiles: list) -> list:
     log_message(
         f"Building target coordinates: centers={len(centers)}, "
         f"tiles={len(relative_tiles)}"
@@ -322,9 +313,7 @@ def get_countries():
 def get_cities(country: str):
     try:
         country_files = {
-            f.lower(): f
-            for f in os.listdir(JSON_FOLDER)
-            if f.endswith(".json")
+            f.lower(): f for f in os.listdir(JSON_FOLDER) if f.endswith(".json")
         }
         country_filename = country.lower() + ".json"
         if country_filename not in country_files:
@@ -376,12 +365,11 @@ def download_search_results(task_id: str):
     return StreamingResponse(
         iter_csv(),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": f"attachment; filename=results_{task_id}.csv"
-        },
+        headers={"Content-Disposition": f"attachment; filename=results_{task_id}.csv"},
     )
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
