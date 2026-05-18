@@ -84,7 +84,7 @@ const App = () => {
   const [searchType,       setSearchType]       = useState("location");
   // Keyword and report type are now dropdowns — not free-form inputs
   const [keyword,           setKeyword]           = useState("");
-  const [selectedReportType, setSelectedReportType] = useState(REPORT_TYPES[0].value);
+  const [selectedReportType, setSelectedReportType] = useState("");
   const [radiusKm,         setRadiusKm]          = useState(5);
   const [placeName,        setPlaceName]         = useState("");  // set by PlacePicker map component
   const [file,             setFile]              = useState(null);
