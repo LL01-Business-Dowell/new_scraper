@@ -9,97 +9,82 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      DEPLOY_HOST: 67.211.219.87
+      DEPLOY_USER: root
+      DEPLOY_PATH: /home/SamantaScraper
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH key
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 67.211.219.87 >> ~/.ssh/known_hosts
+          ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
 
-      - name: Pull code on server
-        env:
-          DEPLOY_HOST: 67.211.219.87
-          DEPLOY_USER: root
+      - name: Deploy application
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST "bash -s" << 'ENDSSH'
+
+            set -e
+
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+
             DEPLOY_PATH=/home/SamantaScraper
+
             echo "=== Starting deployment ==="
 
-            if [ ! -d "$DEPLOY_PATH" ]; then
-              mkdir -p "$DEPLOY_PATH"
-            fi
+            mkdir -p $DEPLOY_PATH
+            cd $DEPLOY_PATH
 
-            cd "$DEPLOY_PATH"
-
+            # First deploy
             if [ ! -d ".git" ]; then
-              echo "First deploy — cloning repo..."
-              git clone git@github.com:LL01-Business-Dowell/new_scraper.git . || { echo "Clone failed"; exit 1; }
+              echo "=== Cloning repository ==="
+              git clone git@github.com:LL01-Business-Dowell/new_scraper.git .
             fi
 
-            echo "Pulling latest code..."
+            echo "=== Pulling latest code ==="
             git fetch origin main
-            git reset --hard origin/main || { echo "Git reset failed"; exit 1; }
-            echo "Code updated."
-          ENDSSH
+            git reset --hard origin/main
 
-      - name: Write environment variables
-        env:
-          DEPLOY_HOST: 67.211.219.87
-          DEPLOY_USER: root
-        run: |
-          ssh $DEPLOY_USER@$DEPLOY_HOST "tee /home/SamantaScraper/.env > /dev/null" << EOF
-          CRUD_API_KEY=${{ secrets.CRUD_API_KEY }}
-          DATABASE_ID=${{ secrets.DATABASE_ID }}
-          GEMINI_KEY_1=${{ secrets.GEMINI_KEY_1 }}
-          GEMINI_KEY_2=${{ secrets.GEMINI_KEY_2 }}
-          GEMINI_KEY_3=${{ secrets.GEMINI_KEY_3 }}
-          EOF
+            echo "=== Writing environment variables ==="
+            cat > .env << EOF
+            CRUD_API_KEY=${{ secrets.CRUD_API_KEY }}
+            DATABASE_ID=${{ secrets.DATABASE_ID }}
+            GEMINI_KEY_1=${{ secrets.GEMINI_KEY_1 }}
+            GEMINI_KEY_2=${{ secrets.GEMINI_KEY_2 }}
+            GEMINI_KEY_3=${{ secrets.GEMINI_KEY_3 }}
+            EOF
 
-      - name: Docker Hub login on server
-        env:
-          DEPLOY_HOST: 67.211.219.87
-          DEPLOY_USER: root
-        run: |
-          ssh $DEPLOY_USER@$DEPLOY_HOST \
-            "echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin"
+            echo "=== Docker login ==="
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | \
+            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Docker Hub login on server
-        env:
-          DEPLOY_HOST: 67.211.219.87
-          DEPLOY_USER: root
-        run: |
-          ssh $DEPLOY_USER@$DEPLOY_HOST \
-            "echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin"
+            echo "=== Building updated services only ==="
+            docker compose build
 
-      - name: Build and start containers
-        env:
-          DEPLOY_HOST: 67.211.219.87
-          DEPLOY_USER: root
-        run: |
-          ssh $DEPLOY_USER@$DEPLOY_HOST "bash -s" << 'ENDSSH'
-            DEPLOY_PATH=/home/SamantaScraper
-            cd "$DEPLOY_PATH"
+            echo "=== Restarting containers ==="
+            docker compose up -d
 
-            echo "=== Building containers ==="
-            docker compose up -d --build || { echo "Docker Compose failed"; exit 1; }
-
-            echo "=== Pruning old images ==="
-            docker system prune -f
+            echo "=== Cleaning dangling images only ==="
+            docker image prune -f
 
             echo "=== Running containers ==="
             docker compose ps
 
             echo "=== Deployment complete ==="
+
           ENDSSH
 
       - name: Verify deployment
         run: |
-          echo "Waiting 40 seconds for containers to start..."
-          sleep 40
+          echo "Waiting 20 seconds for startup..."
+          sleep 20
+
           curl -f https://reviewanalysis.uxlivinglab.org/countries \
             && echo "SUCCESS — backend is responding" \
-            || echo "WARNING — health check failed, check server logs"
+            || (echo "FAILED — check logs" && exit 1)
