@@ -34,7 +34,7 @@ const PAGE_SIZE = 50;
 // ---------------------------------------------------------------------------
 function safeStr(val) {
   if (val === null || val === undefined) return "";
-  if (typeof val === "string")  return val;
+  if (typeof val === "string") return val;
   if (typeof val === "number" || typeof val === "boolean") return String(val);
   // Object or array — pretty-print as indented JSON
   try { return JSON.stringify(val, null, 2); }
@@ -46,47 +46,47 @@ function safeStr(val) {
 // ---------------------------------------------------------------------------
 const S = {
   page: {
-    fontFamily:  "'DM Sans', 'Segoe UI', sans-serif",
-    minHeight:   "100vh",
-    background:  "#020617",
-    color:       "#f1f5f9",
-    padding:     "32px 24px",
+    fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+    minHeight: "100vh",
+    background: "#020617",
+    color: "#f1f5f9",
+    padding: "32px 24px",
   },
   card: {
-    background:   "#0f172a",
-    border:       "1px solid #1e293b",
+    background: "#0f172a",
+    border: "1px solid #1e293b",
     borderRadius: 12,
-    padding:      "20px 24px",
+    padding: "20px 24px",
     marginBottom: 20,
   },
-  muted:   { color: "#475569", fontSize: "0.82rem" },
+  muted: { color: "#475569", fontSize: "0.82rem" },
   error: {
-    background:   "#ef444415",
-    border:       "1px solid #ef444440",
+    background: "#ef444415",
+    border: "1px solid #ef444440",
     borderRadius: 8,
-    padding:      "12px 16px",
-    color:        "#fca5a5",
-    fontSize:     "0.88rem",
+    padding: "12px 16px",
+    color: "#fca5a5",
+    fontSize: "0.88rem",
     marginBottom: 16,
   },
   btnSecondary: {
-    background:   "none",
-    border:       "1px solid #1e293b",
+    background: "none",
+    border: "1px solid #1e293b",
     borderRadius: 8,
-    color:        "#94a3b8",
-    padding:      "8px 18px",
-    fontWeight:   600,
-    fontSize:     "0.88rem",
-    cursor:       "pointer",
+    color: "#94a3b8",
+    padding: "8px 18px",
+    fontWeight: 600,
+    fontSize: "0.88rem",
+    cursor: "pointer",
   },
   btnCancel: {
-    background:   "none",
-    border:       "1px solid #450a0a",
+    background: "none",
+    border: "1px solid #450a0a",
     borderRadius: 6,
-    color:        "#f87171",
-    padding:      "5px 14px",
-    fontSize:     "0.8rem",
-    cursor:       "pointer",
+    color: "#f87171",
+    padding: "5px 14px",
+    fontSize: "0.8rem",
+    cursor: "pointer",
   },
 };
 
@@ -107,7 +107,7 @@ function deriveColumns(results) {
   ];
 
   const ordered = preferred.filter((k) => allKeys.has(k));
-  const rest    = [...allKeys].filter((k) => !ordered.includes(k)).sort();
+  const rest = [...allKeys].filter((k) => !ordered.includes(k)).sort();
   return [...ordered, ...rest];
 }
 
@@ -140,7 +140,7 @@ function DynamicTable({ results, columns, city }) {
   }
 
   const pageCount = Math.ceil(results.length / PAGE_SIZE);
-  const pageRows  = results.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const pageRows = results.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div>
@@ -178,7 +178,7 @@ function DynamicTable({ results, columns, city }) {
                       borderBottom: "1px solid #1e293b",
                       maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis",
                       // content/analysis columns wrap instead of truncating
-                      whiteSpace: ["content","analysis","summary","description"].includes(col) ? "normal" : "nowrap",
+                      whiteSpace: ["content", "analysis", "summary", "description"].includes(col) ? "normal" : "nowrap",
                     }}>
                       {isUrl ? (
                         <a href={str} target="_blank" rel="noopener noreferrer" style={{ color: "#0ea5e9" }}>
@@ -272,16 +272,16 @@ function ReportView({ results, columns, city }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {results.map((item, i) => {
         const rawHeader = safeStr(item[sectionKey]) || `Section ${i + 1}`;
-        const header    = simplifyHeader(rawHeader);
-        const body   = contentKey ? item[contentKey] : null;
+        const header = simplifyHeader(rawHeader);
+        const body = contentKey ? item[contentKey] : null;
         const isOpen = expanded[i] !== false;
 
         return (
           <div key={i} style={{
-            background:   "#0f172a",
-            border:       header.startsWith("Your Cafe") ? "1px solid #f59e0b44" : "1px solid #1e293b",
+            background: "#0f172a",
+            border: header.startsWith("Your Cafe") ? "1px solid #f59e0b44" : "1px solid #1e293b",
             borderRadius: 10,
-            overflow:     "hidden",
+            overflow: "hidden",
           }}>
             {/* Detect if this is the "Your Cafe" card for special styling */}
             {(() => {
@@ -293,7 +293,7 @@ function ReportView({ results, columns, city }) {
               style={{
                 padding: "14px 18px", display: "flex", alignItems: "center",
                 justifyContent: "space-between", cursor: "pointer",
-                background:   isOpen
+                background: isOpen
                   ? (header.startsWith("Your Cafe") ? "#1a1500" : "#0d1b2e")
                   : "transparent",
                 borderBottom: isOpen ? "1px solid #1e293b" : "none",
@@ -344,10 +344,10 @@ function ReportView({ results, columns, city }) {
                       // Detect SWOT category headers (all-caps lines like STRENGTHS)
                       const isHeader = /^(STRENGTHS|WEAKNESSES|OPPORTUNITIES|THREATS|YOUR CAFE:.*)$/.test(line.trim());
                       const headerColors = {
-                        STRENGTHS:     "#4ade80",
-                        WEAKNESSES:    "#f87171",
+                        STRENGTHS: "#4ade80",
+                        WEAKNESSES: "#f87171",
                         OPPORTUNITIES: "#60a5fa",
-                        THREATS:       "#fb923c",
+                        THREATS: "#fb923c",
                       };
                       // YOUR CAFE: line gets accent colour
                       const isCafeHeader = line.trim().startsWith("YOUR CAFE:");
@@ -355,11 +355,11 @@ function ReportView({ results, columns, city }) {
                         return (
                           <div key={li} style={{
                             marginBottom: 10,
-                            fontWeight:   700,
-                            fontSize:     "0.88rem",
-                            color:        "#f59e0b",
+                            fontWeight: 700,
+                            fontSize: "0.88rem",
+                            color: "#f59e0b",
                             borderBottom: "1px solid #f59e0b44",
-                            paddingBottom:6,
+                            paddingBottom: 6,
                           }}>
                             {line.trim()}
                           </div>
@@ -368,14 +368,14 @@ function ReportView({ results, columns, city }) {
                       if (isHeader) {
                         return (
                           <div key={li} style={{
-                            marginTop:    li === 0 ? 0 : 18,
+                            marginTop: li === 0 ? 0 : 18,
                             marginBottom: 6,
-                            fontWeight:   700,
-                            fontSize:     "0.78rem",
-                            letterSpacing:"0.08em",
-                            color:        headerColors[line.trim()] || "#94a3b8",
+                            fontWeight: 700,
+                            fontSize: "0.78rem",
+                            letterSpacing: "0.08em",
+                            color: headerColors[line.trim()] || "#94a3b8",
                             borderBottom: `1px solid ${headerColors[line.trim()] || "#94a3b8"}33`,
-                            paddingBottom:4,
+                            paddingBottom: 4,
                           }}>
                             {line.trim()}
                           </div>
@@ -421,19 +421,19 @@ function ReportView({ results, columns, city }) {
 export default function SearchResults({ searchPayload, baseUrl, onBack }) {
   const BASE = (baseUrl || "").replace(/\/+$/, "");
 
-  const [taskId,        setTaskId]        = useState(null);
-  const [running,       setRunning]       = useState(false);
-  const [progress,      setProgress]      = useState(0);
+  const [taskId, setTaskId] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("Starting...");
-  const [results,       setResults]       = useState([]);
-  const [viewType,      setViewType]      = useState("table");
-  const [currentBatch,  setCurrentBatch]  = useState(0);
-  const [totalBatches,    setTotalBatches]    = useState(0);
+  const [results, setResults] = useState([]);
+  const [viewType, setViewType] = useState("table");
+  const [currentBatch, setCurrentBatch] = useState(0);
+  const [totalBatches, setTotalBatches] = useState(0);
   const [quadrantSummary, setQuadrantSummary] = useState({});
-  const [error,         setError]         = useState(null);
+  const [error, setError] = useState(null);
 
   const intervalRef = useRef(null);
-  const startedRef  = useRef(false);
+  const startedRef = useRef(false);
 
   const { keyword, report_type, city, country, radius_km, place_name } = searchPayload || {};
   const columns = deriveColumns(results);
@@ -444,6 +444,38 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
     startSearch();
     // eslint-disable-next-line
   }, []);
+
+  function prettifyStatus(msg) {
+    if (!msg) return "Preparing your report...";
+
+    const lower = msg.toLowerCase();
+
+    if (lower.includes("starting")) {
+      return "Preparing your report...";
+    }
+
+    if (lower.includes("fetch")) {
+      return "Collecting nearby business data...";
+    }
+
+    if (lower.includes("cluster")) {
+      return "Grouping businesses by region...";
+    }
+
+    if (lower.includes("process")) {
+      return "Analyzing market patterns...";
+    }
+
+    if (lower.includes("generat")) {
+      return "Generating insights and recommendations...";
+    }
+
+    if (lower.includes("complete")) {
+      return "Your report is ready.";
+    }
+
+    return "Building your analysis...";
+  }
 
   async function startSearch() {
     setRunning(true);
@@ -468,20 +500,20 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
       intervalRef.current = setInterval(async () => {
         try {
           const poll = await axios.get(`${BASE}/search-progress/${resp.data.task_id}`);
-          const d    = poll.data;
+          const d = poll.data;
 
           setProgress(d.progress || 0);
-          setStatusMessage(d.status_message || "");
+          setStatusMessage(prettifyStatus(d.status_message));
           setCurrentBatch(d.current_batch || 0);
           setTotalBatches(d.total_batches || 0);
-          if (d.quadrant_summary)    setQuadrantSummary(d.quadrant_summary);
+          if (d.quadrant_summary) setQuadrantSummary(d.quadrant_summary);
           if (d.results?.length > 0) setResults(d.results);
-          if (d.view_type)           setViewType(d.view_type);
-          if (d.error)  { setError(d.error); setRunning(false); clearInterval(intervalRef.current); }
+          if (d.view_type) setViewType(d.view_type);
+          if (d.error) { setError(d.error); setRunning(false); clearInterval(intervalRef.current); }
           if (!d.running) { setRunning(false); clearInterval(intervalRef.current); }
 
         } catch (pollErr) {
-          setError("Lost connection to server.");
+          setError("Connection interrupted. Retrying may help.");
           clearInterval(intervalRef.current);
           setRunning(false);
         }
@@ -499,7 +531,7 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
 
   async function handleCancel() {
     if (!taskId) return;
-    try { await axios.post(`${BASE}/cancel-search/${taskId}`); } catch {}
+    try { await axios.post(`${BASE}/cancel-search/${taskId}`); } catch { }
     clearInterval(intervalRef.current);
     setRunning(false);
   }
@@ -507,13 +539,13 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
   function handleDownloadCsv() {
     if (!results.length || !columns.length) return;
     const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const csv    = [
+    const csv = [
       columns.join(","),
       ...results.map((r) => columns.map((c) => escape(r[c])).join(",")),
     ].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
     a.href = url;
     a.download = `${keyword}_${city}_results.csv`.replace(/\s+/g, "_").toLowerCase();
     a.style.display = "none";
@@ -531,7 +563,7 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 28 }}>
           <button onClick={onBack} style={S.btnSecondary}>Back</button>
           <div>
-            <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>Search Results</h2>
+            <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>Analysis Report</h2>
             <p style={{ margin: 0, ...S.muted }}>
               {keyword} &middot; {city}, {country} &middot; {radius_km} km
             </p>
@@ -552,10 +584,16 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
                 borderRadius: 99, transition: "width 0.4s ease",
               }} />
             </div>
-            {totalBatches > 0 && (
+            {/* {totalBatches > 0 && (
               <p style={{ ...S.muted, marginBottom: 8 }}>
                 Quadrant {currentBatch} of {totalBatches}
                 {results.length > 0 && ` — ${results.length} results so far`}
+              </p>
+            )} */}
+            {totalBatches > 0 && (
+              <p style={{ ...S.muted, marginBottom: 8 }}>
+                Analyzing nearby business clusters
+                {results.length > 0 && ` — ${results.length} businesses processed`}
               </p>
             )}
             {/* Quadrant point distribution — shown once inscriber data arrives */}
@@ -563,12 +601,12 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 {Object.entries(quadrantSummary).map(([name, count]) => (
                   <span key={name} style={{
-                    background:   "#1e293b",
+                    background: "#1e293b",
                     borderRadius: 6,
-                    padding:      "3px 10px",
-                    fontSize:     "0.75rem",
-                    color:        count > 0 ? "#94a3b8" : "#334155",
-                    fontWeight:   600,
+                    padding: "3px 10px",
+                    fontSize: "0.75rem",
+                    color: count > 0 ? "#94a3b8" : "#334155",
+                    fontWeight: 600,
                   }}>
                     {name} · {count} pts
                   </span>
@@ -580,7 +618,12 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
         )}
 
         {/* Error */}
-        {error && <div style={S.error}>Error: {error}</div>}
+        {error && (
+          <div style={S.error}>
+            Something went wrong while generating the report.
+            Please try again in a few moments.
+          </div>
+        )}
 
         {/* Toolbar */}
         {results.length > 0 && (
@@ -590,30 +633,32 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <span style={S.muted}>
-                <strong style={{ color: "#f1f5f9" }}>{results.length}</strong> results
+                <strong style={{ color: "#f1f5f9" }}>{results.length}</strong> businesses analyzed
               </span>
               {/* View type toggle — user can override Gemini's suggestion */}
               <div style={{ display: "flex", gap: 6 }}>
-                {["table", "report"].map((v) => (
-                  <button key={v} onClick={() => setViewType(v)} style={{
-                    background:   viewType === v ? "#0ea5e9" : "none",
-                    border:       `1px solid ${viewType === v ? "#0ea5e9" : "#1e293b"}`,
+                {[
+                  { key: "table", label: "Data View" },
+                  { key: "report", label: "Insights View" },
+                ].map((v) => (
+                  <button key={v.key} onClick={() => setViewType(v.key)} style={{
+                    background: viewType === v.key ? "#0ea5e9" : "none",
+                    border: `1px solid ${viewType === v.key ? "#0ea5e9" : "#1e293b"}`,
                     borderRadius: 6,
-                    color:        viewType === v ? "#fff" : "#94a3b8",
-                    padding:      "4px 12px",
-                    fontSize:     "0.78rem",
-                    fontWeight:   600,
-                    cursor:       "pointer",
-                    textTransform:"capitalize",
+                    color: viewType === v.key ? "#fff" : "#94a3b8",
+                    padding: "4px 12px",
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
                   }}>
-                    {v}
+                    {v.label}
                   </button>
                 ))}
               </div>
             </div>
             {!running && (
               <button onClick={handleDownloadCsv} style={S.btnSecondary}>
-                Download CSV
+                Download Report as CSV
               </button>
             )}
           </div>
@@ -632,7 +677,8 @@ export default function SearchResults({ searchPayload, baseUrl, onBack }) {
 
         {!running && results.length === 0 && !error && (
           <div style={{ textAlign: "center", padding: "60px 20px", ...S.muted }}>
-            No results found. Try adjusting your search radius or prompt.
+            We could not generate enough insights for this area yet.
+            Try increasing the radius or choosing a broader category.
           </div>
         )}
 
