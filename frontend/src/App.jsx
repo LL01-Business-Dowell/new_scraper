@@ -333,24 +333,6 @@ const App = () => {
 
       <div className="content-container">
 
-        {/* Header */}
-        <header className="app-header">
-          <div className="header-container">
-            <div className="logo-container">
-              {/* <div className="logo">
-                <img
-                  src="https://dowellfileuploader.uxlivinglab.online/hr/logo-2-min-min.png"
-                  alt="DoWell logo"
-                />
-              </div> */}
-              <h1 className="app-title">DoWell Samanta Analysis</h1>
-            </div>
-            {/* <div className="app-badge">
-              <span>Data Extraction Tool</span>
-            </div> */}
-          </div>
-        </header>
-
         <div className="main-content">
 
           {/* Left: Form */}
@@ -371,7 +353,7 @@ const App = () => {
                   className="form-input"
                   style={{ cursor: "pointer" }}
                 >
-                  <option value="" disabled>Select a Keyword</option>
+                  <option value="" disabled>Select a Category</option>
                   {Array.from(new Set(KEYWORD_OPTIONS.map(k => k.group))).map(group => (
                     <optgroup key={group} label={group}>
                       {KEYWORD_OPTIONS
@@ -394,6 +376,7 @@ const App = () => {
                   className="form-input"
                   style={{ cursor: "pointer" }}
                 >
+                  <option value="" disabled>Select Analysis Type</option>
                   {REPORT_TYPES.map(rt => (
                     <option key={rt.value} value={rt.value}>{rt.label}</option>
                   ))}
@@ -413,7 +396,7 @@ const App = () => {
                   />
                   {selectedReportType === "swot" && (
                     <p style={{ fontSize: "0.72rem", color: "#334155", marginTop: 4 }}>
-                      Optional — adds a personal SWOT card for your establishment.
+                      adds a personal SWOT card for your establishment.
                     </p>
                   )}
                 </div>
@@ -446,7 +429,7 @@ const App = () => {
                       document.getElementById("countryDropdown").classList.toggle("show")
                     }
                   >
-                    {selectedCountry || "Select a Country"}
+                    {selectedCountry || "Select a Country to Analyse"}
                   </div>
                   <div id="countryDropdown" className="select-items">
                     <div className="search-container">
@@ -480,7 +463,7 @@ const App = () => {
                     required
                     className="hidden-select"
                   >
-                    <option value="" disabled>Select a Country</option>
+                    <option value="" disabled>Select a Country to Analyse</option>
                     {countries.map((c, i) => (
                       <option key={i} value={c}>{c}</option>
                     ))}
@@ -499,7 +482,7 @@ const App = () => {
                         document.getElementById("cityDropdown").classList.toggle("show")
                       }
                     >
-                      {selectedCity || "Select a City"}
+                      {selectedCity || "Select a City to Analyse"}
                     </div>
                     <div id="cityDropdown" className="select-items">
                       <div className="search-container">
@@ -533,7 +516,7 @@ const App = () => {
                       required
                       className="hidden-select"
                     >
-                      <option value="" disabled>Select a City</option>
+                      <option value="" disabled>Select a City to Analyse</option>
                       {cities.map((c, i) => (
                         <option key={i} value={c}>{c}</option>
                       ))}
@@ -549,7 +532,7 @@ const App = () => {
                 className={`submit-button ${isRunning ? "disabled" : ""}`}
               >
                 <FaSearch className="button-icon" />
-                {isRunning ? "Processing..." : "Start Search"}
+                {isRunning ? "Processing..." : "Analyse"}
               </button>
 
               {/* Progress bar for CSV scraping */}
