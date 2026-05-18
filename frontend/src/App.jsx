@@ -337,17 +337,17 @@ const App = () => {
         <header className="app-header">
           <div className="header-container">
             <div className="logo-container">
-              <div className="logo">
+              {/* <div className="logo">
                 <img
                   src="https://dowellfileuploader.uxlivinglab.online/hr/logo-2-min-min.png"
                   alt="DoWell logo"
                 />
-              </div>
-              <h1 className="app-title">DoWell Samanta Scraper</h1>
+              </div> */}
+              <h1 className="app-title">DoWell Samanta Analysis</h1>
             </div>
-            <div className="app-badge">
+            {/* <div className="app-badge">
               <span>Data Extraction Tool</span>
-            </div>
+            </div> */}
           </div>
         </header>
 

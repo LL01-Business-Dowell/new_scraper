@@ -260,7 +260,7 @@ export default function PlacePicker({
             }}>
                 Your {keyword || "establishment"}
                 {required && <span style={{ color: "#ef4444", marginLeft: 4 }}>*required</span>}
-                {!required && <span style={{ color: "#334155", marginLeft: 6, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>optional</span>}
+                {!required && <span style={{ color: "#334155", marginLeft: 6, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}></span>}
             </p>
 
             {/* Search bar row */}
