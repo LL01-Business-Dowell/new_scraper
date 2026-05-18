@@ -31,23 +31,23 @@ const BASE = API_BASE_URL.replace(/\/+$/, "");
 // ---------------------------------------------------------------------------
 const KEYWORD_OPTIONS = [
   // Healthcare / Medical
-  { group: "Healthcare",   value: "Directors of Surgical Services" },
-  { group: "Healthcare",   value: "Chief Medical Officers" },
-  { group: "Healthcare",   value: "Hospital Administrators" },
-  { group: "Healthcare",   value: "Heads of Oncology" },
-  { group: "Healthcare",   value: "Directors of Nursing" },
+  { group: "Healthcare", value: "Directors of Surgical Services" },
+  { group: "Healthcare", value: "Chief Medical Officers" },
+  { group: "Healthcare", value: "Hospital Administrators" },
+  { group: "Healthcare", value: "Heads of Oncology" },
+  { group: "Healthcare", value: "Directors of Nursing" },
   // Business / Corporate
-  { group: "Corporate",    value: "Vice Presidents of Operations" },
-  { group: "Corporate",    value: "Chief Financial Officers" },
-  { group: "Corporate",    value: "Managing Directors" },
-  { group: "Corporate",    value: "Head of Business Development" },
+  { group: "Corporate", value: "Vice Presidents of Operations" },
+  { group: "Corporate", value: "Chief Financial Officers" },
+  { group: "Corporate", value: "Managing Directors" },
+  { group: "Corporate", value: "Head of Business Development" },
   // Food & Beverage
   { group: "Food & Beverage", value: "Cafe" },
   { group: "Food & Beverage", value: "Restaurant" },
   { group: "Food & Beverage", value: "Bakery" },
   // Real Estate
-  { group: "Real Estate",  value: "Real Estate Agencies" },
-  { group: "Real Estate",  value: "Property Developers" },
+  { group: "Real Estate", value: "Real Estate Agencies" },
+  { group: "Real Estate", value: "Property Developers" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -58,19 +58,19 @@ const KEYWORD_OPTIONS = [
 // ---------------------------------------------------------------------------
 const REPORT_TYPES = [
   {
-    value:         "swot",
-    label:         "SWOT Analysis",
+    value: "swot",
+    label: "SWOT Analysis",
     requiresPlace: true,   // shows the establishment name input field
-    buildPrompt:   (keyword, city, country) =>
+    buildPrompt: (keyword, city, country) =>
       `SWOT Analysis for ${keyword} in ${city}, ${country} — ` +
       `split across geographic quadrants (North, South, East, West). ` +
       `If a specific establishment URL is provided, each quadrant card includes a comparison.`,
   },
   {
-    value:         "competitive_swot",
-    label:         "Competitive SWOT Analysis",
+    value: "competitive_swot",
+    label: "Competitive SWOT Analysis",
     requiresPlace: true,   // establishment name is required
-    buildPrompt:   (keyword, city, country) =>
+    buildPrompt: (keyword, city, country) =>
       `Competitive SWOT Analysis — benchmarks your specific ${keyword} ` +
       `against approximately 100 competitors within the selected radius in ${city}, ${country}.`,
   },
@@ -81,34 +81,34 @@ const REPORT_TYPES = [
 const App = () => {
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [searchType,       setSearchType]       = useState("location");
+  const [searchType, setSearchType] = useState("location");
   // Keyword and report type are now dropdowns — not free-form inputs
-  const [keyword,           setKeyword]           = useState("");
+  const [keyword, setKeyword] = useState("");
   const [selectedReportType, setSelectedReportType] = useState("");
-  const [radiusKm,         setRadiusKm]          = useState(5);
-  const [placeName,        setPlaceName]         = useState("");  // set by PlacePicker map component
-  const [file,             setFile]              = useState(null);
+  const [radiusKm, setRadiusKm] = useState(5);
+  const [placeName, setPlaceName] = useState("");  // set by PlacePicker map component
+  const [file, setFile] = useState(null);
 
   // ── Dropdowns ──────────────────────────────────────────────────────────────
-  const [countries,        setCountries]         = useState([]);
-  const [selectedCountry,  setSelectedCountry]   = useState("");
-  const [cities,           setCities]            = useState([]);
-  const [selectedCity,     setSelectedCity]      = useState("");
-  const [countrySearch,    setCountrySearch]     = useState("");
-  const [citySearch,       setCitySearch]        = useState("");
+  const [countries, setCountries] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState("");
+  const [cities, setCities] = useState([]);
+  const [selectedCity, setSelectedCity] = useState("");
+  const [countrySearch, setCountrySearch] = useState("");
+  const [citySearch, setCitySearch] = useState("");
 
   // ── CSV scraping task state ────────────────────────────────────────────────
-  const [taskId,           setTaskId]            = useState(null);
-  const [progress,         setProgress]          = useState(0);
-  const [results,          setResults]           = useState([]);
-  const [isRunning,        setIsRunning]         = useState(false);
-  const [searchComplete,   setSearchComplete]    = useState(false);
+  const [taskId, setTaskId] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [results, setResults] = useState([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [searchComplete, setSearchComplete] = useState(false);
 
   // ── Navigation: when set, renders SearchResults instead of this page ───────
-  const [searchPayload,    setSearchPayload]     = useState(null);
+  const [searchPayload, setSearchPayload] = useState(null);
   const [showCsvProcessor, setShowCsvProcessor] = useState(false);
 
-  const intervalRef  = useRef(null);
+  const intervalRef = useRef(null);
   const fileInputRef = useRef(null);
 
   axios.defaults.baseURL = BASE;
@@ -169,7 +169,7 @@ const App = () => {
         const d = r.data;
 
         if (d.progress !== undefined) setProgress(d.progress);
-        if (d.results?.length > 0)    setResults(d.results);
+        if (d.results?.length > 0) setResults(d.results);
 
         if (d.error) {
           console.error("Scraping error:", d.error);
@@ -218,10 +218,10 @@ const App = () => {
     setSearchPayload({
       keyword,
       report_type: selectedReportType,
-      city:        selectedCity,
-      country:     selectedCountry,
-      radius_km:   radiusKm,
-      place_name:  placeName.trim() || undefined,
+      city: selectedCity,
+      country: selectedCountry,
+      radius_km: radiusKm,
+      place_name: placeName.trim() || undefined,
     });
   };
 
@@ -252,9 +252,9 @@ const App = () => {
       const url = window.URL.createObjectURL(
         new Blob([r.data], { type: "text/csv" })
       );
-      const a         = document.createElement("a");
-      a.href          = url;
-      a.download      = `results_${taskId}.csv`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `results_${taskId}.csv`;
       a.style.display = "none";
       document.body.appendChild(a);
       a.click();
@@ -383,24 +383,29 @@ const App = () => {
                 </select>
               </div>
 
-              {/* Establishment map picker — shown when report type requires it */}
-              {REPORT_TYPES.find(r => r.value === selectedReportType)?.requiresPlace && (
-                <div style={{ width: "100%", marginBottom: 8 }}>
-                  <PlacePicker
-                    keyword={keyword}
-                    city={selectedCity}
-                    country={selectedCountry}
-                    onSelect={(place) => setPlaceName(place ? place.name : "")}
-                    selectedName={placeName}
-                    required={selectedReportType === "competitive_swot"}
-                  />
-                  {selectedReportType === "swot" && (
-                    <p style={{ fontSize: "0.72rem", color: "#334155", marginTop: 4 }}>
-                      adds a personal SWOT card for your establishment.
-                    </p>
-                  )}
-                </div>
-              )}
+              {/* Establishment map picker — always visible */}
+              <div style={{ width: "100%", marginBottom: 8 }}>
+                <PlacePicker
+                  keyword={keyword}
+                  city={selectedCity}
+                  country={selectedCountry}
+                  onSelect={(place) => setPlaceName(place ? place.name : "")}
+                  selectedName={placeName}
+                  required={selectedReportType === "competitive_swot"}
+                />
+
+                {selectedReportType === "swot" && (
+                  <p style={{ fontSize: "0.72rem", color: "#334155", marginTop: 4 }}>
+                    adds a personal SWOT card for your establishment.
+                  </p>
+                )}
+
+                {selectedReportType === "competitive_swot" && (
+                  <p style={{ fontSize: "0.72rem", color: "#334155", marginTop: 4 }}>
+                    select your establishment for competitor benchmarking.
+                  </p>
+                )}
+              </div>
 
               {/* Radius slider */}
               <div className="input-container">
