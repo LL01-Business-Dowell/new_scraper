@@ -44,6 +44,9 @@ from .csv_routes import router as csv_router
 from .gemini_rotator import gemini_rotator
 from .session_routes import router as session_router
 
+from .google_maps_scraper import search_google_maps_competitors
+from .swot_analyzer import analyze_batch_swot
+
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -79,6 +82,7 @@ app.include_router(search_router)
 app.include_router(csv_router)
 
 app.include_router(session_router)
+app.include_router(competitor_router)
 
 tasks = {}
 

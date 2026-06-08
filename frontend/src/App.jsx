@@ -18,6 +18,7 @@ import SearchResults from "./SearchResults";
 import CsvProcessor from "./CsvProcessor";
 import SessionPage from "./SessionPage";
 import PlacePicker from "./PlacePicker";
+import CompetitorAnalysis from "./CompetitorAnalysis";
 import "./App.css";
 
 // Normalise base URL — strip trailing slash once
@@ -107,6 +108,8 @@ const App = () => {
   // ── Navigation: when set, renders SearchResults instead of this page ───────
   const [searchPayload, setSearchPayload] = useState(null);
   const [showCsvProcessor, setShowCsvProcessor] = useState(false);
+
+  const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState(false);
 
   const intervalRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -307,6 +310,15 @@ const App = () => {
       <CsvProcessor
         baseUrl={BASE}
         onBack={() => setShowCsvProcessor(false)}
+      />
+    );
+  }
+
+  if (showCompetitorAnalysis) {
+    return (
+      <CompetitorAnalysis
+        baseUrl={BASE}
+        onBack={() => setShowCompetitorAnalysis(false)}
       />
     );
   }
@@ -538,6 +550,17 @@ const App = () => {
               >
                 <FaSearch className="button-icon" />
                 {isRunning ? "Processing..." : "Analyse"}
+              </button>
+
+              {/* Competitor Analysis button */}
+              <button
+                type="button"
+                onClick={() => setShowCompetitorAnalysis(true)}
+                className="submit-button"
+                style={{ background: "#f97316", marginTop: 8 }}
+              >
+                <FaSearch className="button-icon" />
+                Competitor Analysis
               </button>
 
               {/* Progress bar for CSV scraping */}
