@@ -79,7 +79,7 @@ def search_google_maps_competitors(
         driver = init_driver()
 
         # Search URL — "100 cafe near me" style search scoped to city
-        query = f"{limit} {keyword} near me in {city}"
+        query = f"{keyword} in {city}"
         import urllib.parse
         encoded = urllib.parse.quote_plus(query)
         search_url = f"https://www.google.com/maps/search/{encoded}"
@@ -108,7 +108,7 @@ def search_google_maps_competitors(
             return results
 
         stale_count = 0
-        max_stale = 15
+        max_stale = 25
 
         while len(results) < limit and stale_count < max_stale:
             prev_count = len(results)
@@ -117,7 +117,7 @@ def search_google_maps_competitors(
             driver.execute_script(
                 "arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed
             )
-            time.sleep(random.uniform(1.5, 2.5))
+            time.sleep(random.uniform(2.5, 3.5))
 
             # Extract all visible place cards
             cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")

@@ -1,14 +1,14 @@
 /**
  * CompetitorAnalysis.jsx
  * ----------------------
- * Two-view component:
- * 1. Search for competitors + approve/edit list
- * 2. View SWOT analysis results with competitive summary
+ * Styled to match App.jsx / App.css dark theme exactly.
+ * Uses same background, form-container, gradient-border, input-container,
+ * form-input, submit-button, progress-bar, and table classes.
  */
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { FaSearch, FaTimes, FaCheckCircle } from "react-icons/fa";
+import { FaSearch, FaCheckCircle, FaArrowLeft, FaStore, FaStar, FaChartBar } from "react-icons/fa";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const BASE = API_BASE_URL.replace(/\/+$/, "");
@@ -22,7 +22,6 @@ export default function CompetitorAnalysis({
   radiusKm: radiusKmProp = 5,
   establishmentName: establishmentNameProp = "",
 }) {
-  // Search phase — skip "input" if props are passed from App.jsx
   const hasProps = Boolean(keywordProp && cityProp && countryProp);
   const [searchPhase, setSearchPhase] = useState(hasProps ? "searching" : "input");
   const [keyword, setKeyword] = useState(keywordProp);
@@ -31,44 +30,35 @@ export default function CompetitorAnalysis({
   const [establishmentName, setEstablishmentName] = useState(establishmentNameProp);
   const [radiusKm, setRadiusKm] = useState(radiusKmProp);
   const [searchTaskId, setSearchTaskId] = useState(null);
-  
-  // Approval phase
+
   const [places, setPlaces] = useState([]);
   const [checkedPlaces, setCheckedPlaces] = useState({});
-  
-  // Results phase
+
   const [swotResults, setSwotResults] = useState([]);
   const [competitiveAnalysis, setCompetitiveAnalysis] = useState(null);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
-  
+
   const pollIntervalRef = useRef(null);
 
-  // Auto-start search if props were passed from App.jsx
   useEffect(() => {
     if (hasProps) {
       startSearch(keywordProp, cityProp, countryProp, radiusKmProp, establishmentNameProp);
     }
   }, []);
 
-  // Poll task progress
   useEffect(() => {
     if (!searchTaskId) return;
-
     const pollProgress = async () => {
       try {
         const resp = await axios.get(`${BASE}/api/competitors/progress/${searchTaskId}`);
         const data = resp.data;
-
         setProgress(data.progress);
         setStatusMessage(data.status_message);
-
         if (data.status === "ready_for_approval") {
           setPlaces(data.places || []);
           const checked = {};
-          (data.places || []).forEach((p, i) => {
-            checked[i] = p.selected !== false;
-          });
+          (data.places || []).forEach((p, i) => { checked[i] = p.selected !== false; });
           setCheckedPlaces(checked);
           setSearchPhase("approving");
           clearInterval(pollIntervalRef.current);
@@ -86,23 +76,16 @@ export default function CompetitorAnalysis({
         console.error("Poll error:", err.message);
       }
     };
-
     pollProgress();
     pollIntervalRef.current = setInterval(pollProgress, 2000);
-
     return () => clearInterval(pollIntervalRef.current);
   }, [searchTaskId]);
 
-  // Start search — called either from form submit or auto-started via props
   const startSearch = async (kw, ct, cntry, radius, estName) => {
     try {
       const resp = await axios.post(`${BASE}/api/competitors/search`, {
-        keyword: kw,
-        city: ct,
-        country: cntry,
-        establishment_name: estName,
-        radius_km: radius,
-        limit: 100,
+        keyword: kw, city: ct, country: cntry,
+        establishment_name: estName, radius_km: radius, limit: 100,
       });
       setSearchTaskId(resp.data.task_id);
       setSearchPhase("searching");
@@ -115,412 +98,448 @@ export default function CompetitorAnalysis({
 
   const handleStartSearch = async (e) => {
     e.preventDefault();
-    if (!keyword || !city || !country || !establishmentName) {
-      alert("Please fill in all fields");
-      return;
-    }
+    if (!keyword || !city || !country) { alert("Please fill in all fields"); return; }
     await startSearch(keyword, city, country, radiusKm, establishmentName);
   };
 
-  // Approve and analyze
   const handleApproveAndAnalyze = async () => {
-    const approvedPlaces = places.map((place, i) => ({
-      ...place,
-      selected: checkedPlaces[i] !== false,
-    }));
-
+    const approvedPlaces = places.map((place, i) => ({ ...place, selected: checkedPlaces[i] !== false }));
     try {
-      const resp = await axios.post(`${BASE}/api/competitors/approve-and-analyze`, {
-        task_id: searchTaskId,
-        approved_places: approvedPlaces,
+      await axios.post(`${BASE}/api/competitors/approve-and-analyze`, {
+        task_id: searchTaskId, approved_places: approvedPlaces,
       });
-
       setSearchPhase("analyzing");
       setProgress(0);
-      setStatusMessage("Analyzing SWOT...");
+      setStatusMessage("Running SWOT analysis...");
     } catch (err) {
       alert(`Analysis failed: ${err.message}`);
     }
   };
 
-  // Toggle place selection
   const togglePlace = (index) => {
-    setCheckedPlaces((prev) => ({
-      ...prev,
-      [index]: !prev[index],
-    }));
+    setCheckedPlaces((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER: Input phase
-  // ─────────────────────────────────────────────────────────────────────────
+  const selectedCount = Object.values(checkedPlaces).filter(Boolean).length;
+
+  // ── Shared page shell ─────────────────────────────────────────────────────
+  const Shell = ({ children }) => (
+    <div className="app-container">
+      <div className="animated-background">
+        <div className="gradient-overlay" />
+        <div className="dot-pattern" />
+      </div>
+      <div className="content-container">
+        <div className="main-content">
+          <div className="form-container" style={{ maxWidth: 900 }}>
+            <div className="gradient-border" />
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Page header ───────────────────────────────────────────────────────────
+  const PageHeader = ({ title, subtitle }) => (
+    <div style={{ marginBottom: 24 }}>
+      <button
+        onClick={onBack}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: "none", border: "none", color: "#a78bfa",
+          cursor: "pointer", fontSize: "0.85rem", fontWeight: 600,
+          marginBottom: 16, padding: 0,
+        }}
+      >
+        <FaArrowLeft style={{ fontSize: 12 }} /> Back
+      </button>
+      <h2 style={{
+        margin: 0, fontSize: "1.4rem", fontWeight: 700,
+        background: "linear-gradient(to right, #a78bfa, #818cf8)",
+        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+      }}>
+        {title}
+      </h2>
+      {subtitle && (
+        <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "#6b7280" }}>{subtitle}</p>
+      )}
+    </div>
+  );
+
+  // ── Progress bar ──────────────────────────────────────────────────────────
+  const ProgressBar = ({ value, color = "linear-gradient(to right, #9333ea, #4f46e5)" }) => (
+    <div style={{ marginBottom: 20 }}>
+      <p style={{ fontSize: "0.875rem", color: "#9ca3af", marginBottom: 8 }}>{statusMessage}</p>
+      <div className="progress-bar-container">
+        <div className="progress-bar" style={{ width: `${value}%`, background: color }} />
+      </div>
+      <p style={{ fontSize: "0.75rem", color: "#4b5563", marginTop: 6, textAlign: "right" }}>{value}%</p>
+    </div>
+  );
+
+  // ── RENDER: Input phase ───────────────────────────────────────────────────
   if (searchPhase === "input") {
     return (
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: 20 }}>
-        <h2>Competitor Analysis</h2>
-        <p style={{ color: "#666", marginBottom: 20 }}>
-          Search for competitors, review the list, then run SWOT analysis on all of them.
-        </p>
-
-        <form onSubmit={handleStartSearch} style={{ display: "flex", flexDirection: "column", gap: 15 }}>
-          <div>
-            <label style={{ display: "block", marginBottom: 5, fontWeight: 600 }}>
-              Your Establishment Name
-            </label>
+      <Shell>
+        <PageHeader
+          title="Competitor Analysis"
+          subtitle="Find and analyse competitors from Google Maps in your area"
+        />
+        <form onSubmit={handleStartSearch} className="scraper-form">
+          <div className="input-container">
+            <FaStore className="input-icon" />
             <input
-              type="text"
-              value={establishmentName}
+              type="text" value={establishmentName}
               onChange={(e) => setEstablishmentName(e.target.value)}
-              placeholder="e.g. Blue Tokai Coffee"
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                fontSize: 14,
-                boxSizing: "border-box",
-              }}
-              required
+              placeholder="Your establishment name (e.g. Blue Tokai Coffee)"
+              className="form-input"
             />
           </div>
-
-          <div>
-            <label style={{ display: "block", marginBottom: 5, fontWeight: 600 }}>
-              Keyword / Category
-            </label>
+          <div className="input-container">
+            <FaSearch className="input-icon" />
             <input
-              type="text"
-              value={keyword}
+              type="text" value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="e.g. Cafe, Restaurant"
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                fontSize: 14,
-                boxSizing: "border-box",
-              }}
-              required
+              placeholder="Category (e.g. Cafe, Restaurant)"
+              className="form-input" required
             />
           </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>
-              <label style={{ display: "block", marginBottom: 5, fontWeight: 600 }}>
-                City
-              </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="input-container">
               <input
-                type="text"
-                value={city}
+                type="text" value={city}
                 onChange={(e) => setCity(e.target.value)}
-                placeholder="e.g. Delhi"
-                style={{
-                  width: "100%",
-                  padding: 10,
-                  borderRadius: 8,
-                  border: "1px solid #ddd",
-                  fontSize: 14,
-                  boxSizing: "border-box",
-                }}
-                required
+                placeholder="City"
+                className="form-input" style={{ paddingLeft: "0.75rem" }} required
               />
             </div>
-            <div>
-              <label style={{ display: "block", marginBottom: 5, fontWeight: 600 }}>
-                Country
-              </label>
+            <div className="input-container">
               <input
-                type="text"
-                value={country}
+                type="text" value={country}
                 onChange={(e) => setCountry(e.target.value)}
-                placeholder="e.g. India"
-                style={{
-                  width: "100%",
-                  padding: 10,
-                  borderRadius: 8,
-                  border: "1px solid #ddd",
-                  fontSize: 14,
-                  boxSizing: "border-box",
-                }}
-                required
+                placeholder="Country"
+                className="form-input" style={{ paddingLeft: "0.75rem" }} required
               />
             </div>
           </div>
-
-          <div>
-            <label style={{ display: "block", marginBottom: 5, fontWeight: 600 }}>
-              Search Radius (km)
+          <div className="input-container">
+            <label className="slider-label" style={{ width: "100%", color: "#9ca3af", fontSize: "0.875rem" }}>
+              Search radius: {radiusKm} km
+              <input
+                type="range" min="1" max="50" step="1" value={radiusKm}
+                onChange={(e) => setRadiusKm(Number(e.target.value))}
+                className="slider-input" style={{ width: "100%" }}
+              />
             </label>
-            <input
-              type="number"
-              min="1"
-              max="50"
-              value={radiusKm}
-              onChange={(e) => setRadiusKm(Number(e.target.value))}
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                fontSize: 14,
-                boxSizing: "border-box",
-              }}
-            />
           </div>
-
-          <button
-            type="submit"
-            style={{
-              padding: "10px 20px",
-              background: "#0ea5e9",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            <FaSearch style={{ marginRight: 8 }} />
-            Search Competitors
-          </button>
-
-          <button
-            type="button"
-            onClick={onBack}
-            style={{
-              padding: "10px 20px",
-              background: "transparent",
-              color: "#0ea5e9",
-              border: "1px solid #0ea5e9",
-              borderRadius: 8,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            Back
+          <button type="submit" className="submit-button">
+            <FaSearch className="button-icon" /> Search Competitors
           </button>
         </form>
-      </div>
+      </Shell>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER: Searching / Approving phase
-  // ─────────────────────────────────────────────────────────────────────────
-  if (searchPhase === "searching" || searchPhase === "approving") {
+  // ── RENDER: Searching ─────────────────────────────────────────────────────
+  if (searchPhase === "searching") {
     return (
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: 20 }}>
-        <h2>Competitor Search</h2>
-        
-        {searchPhase === "searching" && (
-          <div style={{ marginBottom: 20 }}>
-            <p>{statusMessage}</p>
-            <div style={{
-              width: "100%",
-              height: 20,
-              background: "#e5e7eb",
-              borderRadius: 10,
-              overflow: "hidden",
-            }}>
-              <div style={{
-                width: `${progress}%`,
-                height: "100%",
-                background: "#0ea5e9",
-                transition: "width 0.3s",
-              }} />
-            </div>
+      <Shell>
+        <PageHeader title="Searching Google Maps..." />
+        <ProgressBar value={progress} />
+        <div style={{
+          background: "#1f2937", borderRadius: 12, padding: 20,
+          border: "1px solid #374151", textAlign: "center",
+        }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: "50%", margin: "0 auto 12px",
+            background: "linear-gradient(to right, #9333ea, #4f46e5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <FaSearch style={{ color: "#fff", fontSize: 18 }} />
           </div>
-        )}
-
-        {searchPhase === "approving" && places.length > 0 && (
-          <div>
-            <p style={{ marginBottom: 15, color: "#666" }}>
-              Found {places.length} places. Uncheck any you want to exclude, then click "Analyze".
-            </p>
-
-            <div style={{
-              maxHeight: 500,
-              overflowY: "auto",
-              border: "1px solid #ddd",
-              borderRadius: 8,
-              marginBottom: 20,
-            }}>
-              {places.map((place, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: 12,
-                    borderBottom: idx < places.length - 1 ? "1px solid #eee" : "none",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checkedPlaces[idx] !== false}
-                    onChange={() => togglePlace(idx)}
-                    style={{ width: 18, height: 18, cursor: "pointer" }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600 }}>{place.name}</div>
-                    <div style={{ fontSize: 12, color: "#666" }}>
-                      {place.address}
-                      {place.rating && ` • ★${place.rating}`}
-                      {place.reviews > 0 && ` • ${place.reviews} reviews`}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button
-                onClick={handleApproveAndAnalyze}
-                style={{
-                  flex: 1,
-                  padding: "10px 20px",
-                  background: "#10b981",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                <FaCheckCircle style={{ marginRight: 8 }} />
-                Analyze Selected Places
-              </button>
-              <button
-                onClick={onBack}
-                style={{
-                  padding: "10px 20px",
-                  background: "transparent",
-                  border: "1px solid #ddd",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  cursor: "pointer",
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+          <p style={{ color: "#d1d5db", margin: 0, fontSize: "0.95rem" }}>
+            Scraping Google Maps for <strong style={{ color: "#a78bfa" }}>{keyword}</strong> in <strong style={{ color: "#a78bfa" }}>{city}</strong>
+          </p>
+          <p style={{ color: "#6b7280", margin: "6px 0 0", fontSize: "0.8rem" }}>
+            This may take 1–2 minutes. Please wait.
+          </p>
+        </div>
+      </Shell>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER: Analyzing / Complete phase
-  // ─────────────────────────────────────────────────────────────────────────
-  if (searchPhase === "analyzing" || searchPhase === "complete") {
+  // ── RENDER: Approving ─────────────────────────────────────────────────────
+  if (searchPhase === "approving") {
     return (
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: 20 }}>
-        <h2>SWOT Analysis Results</h2>
+      <Shell>
+        <PageHeader
+          title={`Found ${places.length} Places`}
+          subtitle={`${selectedCount} selected — uncheck any to exclude before running SWOT analysis`}
+        />
 
-        {searchPhase === "analyzing" && (
-          <div style={{ marginBottom: 20 }}>
-            <p>{statusMessage}</p>
-            <div style={{
-              width: "100%",
-              height: 20,
-              background: "#e5e7eb",
-              borderRadius: 10,
-              overflow: "hidden",
+        {/* Stats bar */}
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 12, marginBottom: 20,
+        }}>
+          {[
+            { label: "Total Found", value: places.length, color: "#a78bfa" },
+            { label: "Selected", value: selectedCount, color: "#10b981" },
+            { label: "Excluded", value: places.length - selectedCount, color: "#ef4444" },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{
+              background: "#1f2937", borderRadius: 10, padding: "12px 16px",
+              border: "1px solid #374151", textAlign: "center",
             }}>
-              <div style={{
-                width: `${progress}%`,
-                height: "100%",
-                background: "#10b981",
-                transition: "width 0.3s",
-              }} />
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, color }}>{value}</div>
+              <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 2 }}>{label}</div>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
 
-        {searchPhase === "complete" && (
-          <div>
-            {/* Competitive Analysis Summary */}
-            {competitiveAnalysis && (
+        {/* Places list */}
+        <div style={{
+          maxHeight: 420, overflowY: "auto",
+          border: "1px solid #374151", borderRadius: 12,
+          marginBottom: 20, background: "#1A1E2E",
+        }}>
+          {places.map((place, idx) => (
+            <div
+              key={idx}
+              onClick={() => togglePlace(idx)}
+              style={{
+                padding: "12px 16px",
+                borderBottom: idx < places.length - 1 ? "1px solid #1f2937" : "none",
+                display: "flex", alignItems: "center", gap: 12,
+                cursor: "pointer",
+                background: checkedPlaces[idx] === false ? "rgba(239,68,68,0.05)" : "transparent",
+                transition: "background 0.2s",
+              }}
+            >
+              {/* Checkbox */}
               <div style={{
-                background: "#f0f9ff",
-                border: "1px solid #0ea5e9",
-                borderRadius: 8,
-                padding: 15,
-                marginBottom: 20,
+                width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                border: `2px solid ${checkedPlaces[idx] === false ? "#4b5563" : "#9333ea"}`,
+                background: checkedPlaces[idx] === false ? "transparent" : "linear-gradient(to right, #9333ea, #4f46e5)",
+                display: "flex", alignItems: "center", justifyContent: "center",
               }}>
-                <h3 style={{ marginTop: 0 }}>Market Overview</h3>
-                <p><strong>Total Analyzed:</strong> {competitiveAnalysis.total_competitors_analyzed}</p>
-                <p><strong>Average Rating:</strong> {competitiveAnalysis.average_rating}/5</p>
-                <p><strong>Market Leader:</strong> {competitiveAnalysis.market_leader} ({competitiveAnalysis.market_leader_rating}★)</p>
-                <p><strong>Key Insight:</strong> {competitiveAnalysis.market_insights?.[0]}</p>
+                {checkedPlaces[idx] !== false && (
+                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
               </div>
-            )}
 
-            {/* Individual SWOT Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: 15 }}>
-              {swotResults.map((result, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    border: "1px solid #ddd",
-                    borderRadius: 8,
-                    padding: 15,
-                    background: result.name === establishmentName ? "#fef3c7" : "#fff",
-                  }}
-                >
-                  <h4 style={{ margin: "0 0 10px 0" }}>
-                    {result.name}
-                    {result.rating && ` (★${result.rating})`}
-                  </h4>
-
-                  <div style={{ fontSize: 12, marginBottom: 10 }}>
-                    <div>📊 Sentiment: <strong>{result.sentiment_score > 0 ? "Positive" : "Neutral"}</strong></div>
-                  </div>
-
-                  <div style={{ fontSize: 12 }}>
-                    <div style={{ marginBottom: 8 }}>
-                      <strong style={{ color: "#10b981" }}>Strengths:</strong>
-                      <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
-                        {result.swot.strengths.map((s, i) => (
-                          <li key={i} style={{ fontSize: 11 }}>{s}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <strong style={{ color: "#ef4444" }}>Weaknesses:</strong>
-                      <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
-                        {result.swot.weaknesses.map((w, i) => (
-                          <li key={i} style={{ fontSize: 11 }}>{w}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+              {/* Place info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontWeight: 600, fontSize: "0.9rem", color: "#f1f1f1",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}>
+                  {place.is_user_establishment && (
+                    <span style={{
+                      fontSize: "0.65rem", background: "linear-gradient(to right, #9333ea, #4f46e5)",
+                      color: "#fff", padding: "1px 6px", borderRadius: 4, fontWeight: 700,
+                    }}>YOU</span>
+                  )}
+                  {place.name}
                 </div>
-              ))}
+                <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 2, display: "flex", gap: 10 }}>
+                  {place.address && <span>{place.address}</span>}
+                  {place.rating && (
+                    <span style={{ color: "#f59e0b", display: "flex", alignItems: "center", gap: 3 }}>
+                      <FaStar style={{ fontSize: 10 }} /> {place.rating}
+                    </span>
+                  )}
+                  {place.reviews > 0 && (
+                    <span style={{ color: "#4b5563" }}>{place.reviews.toLocaleString()} reviews</span>
+                  )}
+                </div>
+              </div>
             </div>
+          ))}
+        </div>
 
-            <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={handleApproveAndAnalyze}
+            className="submit-button"
+            style={{ flex: 1 }}
+          >
+            <FaChartBar className="button-icon" />
+            Analyse {selectedCount} Places
+          </button>
+          <button
+            onClick={onBack}
+            className="reset-button"
+            style={{ width: "auto", marginTop: 0, padding: "0.75rem 1.5rem" }}
+          >
+            Cancel
+          </button>
+        </div>
+      </Shell>
+    );
+  }
+
+  // ── RENDER: Analyzing ─────────────────────────────────────────────────────
+  if (searchPhase === "analyzing") {
+    return (
+      <Shell>
+        <PageHeader title="Running SWOT Analysis..." />
+        <ProgressBar value={progress} color="linear-gradient(to right, #10b981, #059669)" />
+        <div style={{
+          background: "#1f2937", borderRadius: 12, padding: 20,
+          border: "1px solid #374151", textAlign: "center",
+        }}>
+          <p style={{ color: "#d1d5db", margin: 0 }}>
+            Analysing <strong style={{ color: "#10b981" }}>{selectedCount}</strong> places using NLTK sentiment analysis
+          </p>
+          <p style={{ color: "#6b7280", margin: "6px 0 0", fontSize: "0.8rem" }}>
+            No API calls — running locally on server
+          </p>
+        </div>
+      </Shell>
+    );
+  }
+
+  // ── RENDER: Complete ──────────────────────────────────────────────────────
+  if (searchPhase === "complete") {
+    return (
+      <div className="app-container">
+        <div className="animated-background">
+          <div className="gradient-overlay" />
+          <div className="dot-pattern" />
+        </div>
+        <div className="content-container">
+          <div className="main-content" style={{ maxWidth: 1200, width: "100%" }}>
+            <div style={{ width: "100%", padding: "2.5rem 1.5rem" }}>
+
+              {/* Back button */}
               <button
                 onClick={onBack}
                 style={{
-                  padding: "10px 20px",
-                  background: "#0ea5e9",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "none", border: "none", color: "#a78bfa",
+                  cursor: "pointer", fontSize: "0.85rem", fontWeight: 600,
+                  marginBottom: 20, padding: 0,
                 }}
               >
-                Back
+                <FaArrowLeft style={{ fontSize: 12 }} /> Back to Search
               </button>
+
+              <h2 style={{
+                margin: "0 0 24px", fontSize: "1.4rem", fontWeight: 700,
+                background: "linear-gradient(to right, #a78bfa, #818cf8)",
+                WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              }}>
+                SWOT Analysis Results
+              </h2>
+
+              {/* Market overview card */}
+              {competitiveAnalysis && (
+                <div style={{
+                  background: "#1A1E2E", borderRadius: 16, padding: 24,
+                  border: "1px solid #374151", marginBottom: 24,
+                  boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+                }}>
+                  <h3 style={{ margin: "0 0 16px", color: "#a78bfa", fontSize: "1rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Market Overview
+                  </h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+                    {[
+                      { label: "Analysed", value: competitiveAnalysis.total_competitors_analyzed, color: "#a78bfa" },
+                      { label: "Avg Rating", value: `${competitiveAnalysis.average_rating} / 5`, color: "#f59e0b" },
+                      { label: "Market Leader", value: competitiveAnalysis.market_leader, color: "#10b981", small: true },
+                      { label: "Leader Rating", value: `★ ${competitiveAnalysis.market_leader_rating}`, color: "#10b981" },
+                    ].map(({ label, value, color, small }) => (
+                      <div key={label} style={{
+                        background: "#1f2937", borderRadius: 10, padding: "14px 16px",
+                        border: "1px solid #374151",
+                      }}>
+                        <div style={{ fontSize: "0.7rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{label}</div>
+                        <div style={{ fontSize: small ? "0.85rem" : "1.3rem", fontWeight: 700, color }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {competitiveAnalysis.market_insights?.length > 0 && (
+                    <div style={{ background: "rgba(147,51,234,0.1)", borderRadius: 8, padding: "10px 14px", border: "1px solid rgba(147,51,234,0.2)" }}>
+                      <p style={{ margin: 0, fontSize: "0.85rem", color: "#d1d5db" }}>
+                        💡 {competitiveAnalysis.market_insights[0]}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SWOT cards grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+                {swotResults.map((result, idx) => {
+                  const isUser = result.name === (establishmentName || establishmentNameProp);
+                  return (
+                    <div key={idx} style={{
+                      background: isUser ? "rgba(245,158,11,0.08)" : "#1A1E2E",
+                      borderRadius: 14, padding: 18,
+                      border: `1px solid ${isUser ? "#f59e0b" : "#374151"}`,
+                      boxShadow: "0 4px 24px rgba(0,0,0,0.2)",
+                    }}>
+                      {/* Card header */}
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          {isUser && (
+                            <span style={{
+                              fontSize: "0.65rem", background: "#f59e0b",
+                              color: "#000", padding: "1px 6px", borderRadius: 4, fontWeight: 800,
+                            }}>YOUR PLACE</span>
+                          )}
+                          <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: isUser ? "#fbbf24" : "#f1f1f1" }}>
+                            {result.name}
+                          </h4>
+                        </div>
+                        <div style={{ display: "flex", gap: 12, fontSize: "0.75rem", color: "#6b7280" }}>
+                          {result.rating && (
+                            <span style={{ color: "#f59e0b", display: "flex", alignItems: "center", gap: 3 }}>
+                              <FaStar style={{ fontSize: 10 }} /> {result.rating}
+                            </span>
+                          )}
+                          {result.review_count > 0 && <span>{result.review_count.toLocaleString()} reviews</span>}
+                          <span style={{ color: result.sentiment_score > 0 ? "#10b981" : "#ef4444" }}>
+                            {result.sentiment_score > 0 ? "▲ Positive" : "▼ Neutral"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* SWOT grid */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        {[
+                          { key: "strengths",    label: "Strengths",    color: "#10b981", bg: "rgba(16,185,129,0.08)",  border: "rgba(16,185,129,0.2)"  },
+                          { key: "weaknesses",   label: "Weaknesses",   color: "#ef4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.2)"   },
+                          { key: "opportunities",label: "Opportunities", color: "#3b82f6", bg: "rgba(59,130,246,0.08)",  border: "rgba(59,130,246,0.2)"  },
+                          { key: "threats",      label: "Threats",      color: "#f59e0b", bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.2)"  },
+                        ].map(({ key, label, color, bg, border }) => (
+                          <div key={key} style={{ background: bg, borderRadius: 8, padding: "8px 10px", border: `1px solid ${border}` }}>
+                            <div style={{ fontSize: "0.65rem", fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
+                              {label}
+                            </div>
+                            <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+                              {(result.swot[key] || []).map((item, i) => (
+                                <li key={i} style={{ fontSize: "0.72rem", color: "#d1d5db", marginBottom: 3, paddingLeft: 8, position: "relative" }}>
+                                  <span style={{ position: "absolute", left: 0, color }}>·</span>
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
             </div>
           </div>
-        )}
+        </div>
       </div>
     );
   }
