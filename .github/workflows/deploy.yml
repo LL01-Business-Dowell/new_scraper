@@ -25,66 +25,62 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
 
-      - name: Deploy application
+      - name: Pull latest code
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST "bash -s" << 'ENDSSH'
-
             set -e
-
-            export DOCKER_BUILDKIT=1
-            export COMPOSE_DOCKER_CLI_BUILD=1
-
             DEPLOY_PATH=/home/SamantaScraper
-
-            echo "=== Starting deployment ==="
-
             mkdir -p $DEPLOY_PATH
             cd $DEPLOY_PATH
-
-            # First deploy
             if [ ! -d ".git" ]; then
               echo "=== Cloning repository ==="
               git clone git@github.com:LL01-Business-Dowell/new_scraper.git .
             fi
-
             echo "=== Pulling latest code ==="
             git fetch origin main
             git reset --hard origin/main
+            echo "=== Code updated ==="
+          ENDSSH
 
-            echo "=== Writing environment variables ==="
-            cat > .env << EOF
-            CRUD_API_KEY=${{ secrets.CRUD_API_KEY }}
-            DATABASE_ID=${{ secrets.DATABASE_ID }}
-            GEMINI_KEY_1=${{ secrets.GEMINI_KEY_1 }}
-            GEMINI_KEY_2=${{ secrets.GEMINI_KEY_2 }}
-            GEMINI_KEY_3=${{ secrets.GEMINI_KEY_3 }}
-            EOF
+      - name: Write environment variables
+        # This step runs on the GitHub Actions runner, NOT inside a heredoc,
+        # so ${{ secrets.* }} expands correctly before being sent to the server.
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST "cat > /home/SamantaScraper/.env" << EOF
+          CRUD_API_KEY=${{ secrets.CRUD_API_KEY }}
+          DATABASE_ID=${{ secrets.DATABASE_ID }}
+          GEMINI_KEY_1=${{ secrets.GEMINI_KEY_1 }}
+          GEMINI_KEY_2=${{ secrets.GEMINI_KEY_2 }}
+          GEMINI_KEY_3=${{ secrets.GEMINI_KEY_3 }}
+          EOF
 
-            echo "=== Docker login ==="
-            echo "${{ secrets.DOCKERHUB_TOKEN }}" | \
-            docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      - name: Docker login on server
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST \
+            "echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin"
 
-            echo "=== Building updated services only ==="
+      - name: Build and restart containers
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST "bash -s" << 'ENDSSH'
+            set -e
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+            cd /home/SamantaScraper
+            echo "=== Building updated services ==="
             docker compose build
-
             echo "=== Restarting containers ==="
             docker compose up -d
-
-            echo "=== Cleaning dangling images only ==="
+            echo "=== Cleaning dangling images ==="
             docker image prune -f
-
             echo "=== Running containers ==="
             docker compose ps
-
             echo "=== Deployment complete ==="
-
           ENDSSH
 
       - name: Verify deployment
         run: |
           echo "Waiting 20 seconds for startup..."
           sleep 20
-
           curl -f https://reviewanalysis.uxlivinglab.org/countries \
             && echo "SUCCESS — backend is responding" \
             || (echo "FAILED — check logs" && exit 1)
