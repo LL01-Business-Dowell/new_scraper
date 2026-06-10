@@ -319,6 +319,11 @@ const App = () => {
       <CompetitorAnalysis
         baseUrl={BASE}
         onBack={() => setShowCompetitorAnalysis(false)}
+        keyword={keyword}
+        city={selectedCity}
+        country={selectedCountry}
+        radiusKm={radiusKm}
+        establishmentName={placeName}
       />
     );
   }

@@ -1,47 +1,50 @@
 """
 google_maps_scraper.py
 ----------------------
-Selenium-based scraper to find competitor businesses on Google Maps.
-Searches for keyword in a given city/radius, extracts name/address/rating/URL.
-Returns ~100 places for user approval before SWOT analysis.
+Selenium scraper to find competitor businesses on Google Maps.
+CSS selectors verified against live Google Maps HTML (June 2026).
 """
 
 import time
 import random
+import re
 import logging
+from typing import List, Dict, Optional, Callable
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from typing import List, Dict
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+    StaleElementReferenceException,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def init_driver():
-    """Initialize headless Chrome driver with anti-bot detection measures."""
-    chrome_options = Options()
-    chrome_options.binary_location = "/usr/bin/chromium"
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--lang=en-US")
-    chrome_options.add_argument(
-        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    """Initialize headless Chromium with anti-bot measures."""
+    options = Options()
+    options.binary_location = "/usr/bin/chromium"
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--lang=en-US,en")
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     )
-    
     service = Service("/usr/bin/chromedriver")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    
-    # Hide webdriver flags
+    driver = webdriver.Chrome(service=service, options=options)
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
-        {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"}
+        {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
     )
     return driver
 
@@ -51,134 +54,160 @@ def search_google_maps_competitors(
     city: str,
     radius_km: float = 5,
     limit: int = 100,
-    progress_callback=None
+    progress_callback: Optional[Callable] = None,
 ) -> List[Dict]:
     """
-    Search Google Maps for competitors matching keyword in city + radius.
-    
-    Returns list of dicts:
-    {
-        "name": "Cafe Name",
-        "address": "Street, City",
-        "rating": 4.5,
-        "reviews": 123,
-        "url": "https://maps.google.com/...",
-        "selected": True
-    }
-    
-    progress_callback: function(current, total, status_text) — for progress updates
+    Search Google Maps for businesses matching keyword in city.
+
+    Selectors verified against Google Maps HTML June 2026:
+      feed container : div.m6QErb[role="feed"]
+      place card     : div.Nv2PK (role="article")
+      place link/url : a.hfpxzc  (href contains /maps/place/)
+      name           : div.qBF1Pd
+      rating         : span.MW4etd
+      review count   : span.UY7F9
+      address line   : div.W4Efsd > div.W4Efsd > span > span (second W4Efsd block)
+
+    Returns list of dicts with keys:
+        name, address, rating, reviews, url, selected
     """
     driver = None
     results = []
-    
+    seen_urls = set()
+
     try:
         driver = init_driver()
-        
-        # Build Google Maps search URL
-        search_url = f"https://www.google.com/maps/search/{keyword}+in+{city}/@0,0,11z"
-        logger.info(f"[SCRAPER] Searching: {search_url}")
+
+        # Search URL — "100 cafe near me" style search scoped to city
+        query = f"{limit} {keyword} near me in {city}"
+        import urllib.parse
+        encoded = urllib.parse.quote_plus(query)
+        search_url = f"https://www.google.com/maps/search/{encoded}"
+
+        logger.info(f"[SCRAPER] Loading: {search_url}")
         driver.get(search_url)
-        
-        # Wait for search results to load
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_all_elements_located((By.XPATH, '//a[@data-item-id]'))
-        )
-        
-        time.sleep(3)
-        
-        # Find the results list container
+
+        # Wait for the results feed to appear
         try:
-            results_container = driver.find_element(By.XPATH, '//div[@role="feed"]')
-        except:
-            results_container = driver.find_element(By.XPATH, '//*[@id="QA0Szd"]/div/div/div[1]/div[2]/div')
-        
-        extracted_places = set()
-        stale_scroll_count = 0
-        max_stale_attempts = 20
-        
-        while len(results) < limit and stale_scroll_count < max_stale_attempts:
-            current_count = len(results)
-            
-            # Scroll down to load more results
-            driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", results_container)
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "div.m6QErb[role='feed']")
+                )
+            )
+        except TimeoutException:
+            logger.error("[SCRAPER] Results feed did not load within 20s")
+            return results
+
+        time.sleep(2)
+
+        # Get feed container for scrolling
+        try:
+            feed = driver.find_element(By.CSS_SELECTOR, "div.m6QErb[role='feed']")
+        except NoSuchElementException:
+            logger.error("[SCRAPER] Could not find feed container")
+            return results
+
+        stale_count = 0
+        max_stale = 15
+
+        while len(results) < limit and stale_count < max_stale:
+            prev_count = len(results)
+
+            # Scroll feed down
+            driver.execute_script(
+                "arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed
+            )
             time.sleep(random.uniform(1.5, 2.5))
-            
+
             # Extract all visible place cards
-            place_elements = driver.find_elements(By.XPATH, '//a[@data-item-id]')
-            
-            for elem in place_elements:
+            cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
+
+            for card in cards:
                 if len(results) >= limit:
                     break
-                
                 try:
-                    # Get place URL
-                    place_url = elem.get_attribute("href") or ""
-                    
-                    # Create unique key
-                    place_id = elem.get_attribute("data-item-id")
-                    if place_id in extracted_places:
+                    # URL — from the anchor tag
+                    try:
+                        anchor = card.find_element(By.CSS_SELECTOR, "a.hfpxzc")
+                        url = anchor.get_attribute("href") or ""
+                    except NoSuchElementException:
+                        url = ""
+
+                    # Skip duplicates
+                    if url and url in seen_urls:
                         continue
-                    extracted_places.add(place_id)
-                    
-                    # Extract place info from the element
-                    place_card = elem.find_element(By.XPATH, './/div[contains(@class, "lI9Gke")]')
-                    
+                    if url:
+                        seen_urls.add(url)
+
                     # Name
                     try:
-                        name = place_card.find_element(By.XPATH, './/div[@class="qBF1Pd"]').text
-                    except:
+                        name = card.find_element(By.CSS_SELECTOR, "div.qBF1Pd").text.strip()
+                    except NoSuchElementException:
                         name = "Unknown"
-                    
-                    # Address
-                    try:
-                        address = place_card.find_element(By.XPATH, './/div[@class="W4Efje"]').text
-                    except:
-                        address = "Address not available"
-                    
+
+                    if not name or name == "Unknown":
+                        continue
+
                     # Rating
                     try:
-                        rating_text = place_card.find_element(By.XPATH, './/span[@class="MW4etd"]').text
-                        rating = float(rating_text.split()[0])
-                    except:
+                        rating_text = card.find_element(
+                            By.CSS_SELECTOR, "span.MW4etd"
+                        ).text.strip()
+                        rating = float(rating_text) if rating_text else None
+                    except (NoSuchElementException, ValueError):
                         rating = None
-                    
-                    # Number of reviews
+
+                    # Review count — strip brackets and commas: "(1,367)" → 1367
                     try:
-                        reviews_text = place_card.find_element(By.XPATH, './/span[@class="UY7F9"]').text
-                        reviews_count = int(''.join(filter(str.isdigit, reviews_text)))
-                    except:
-                        reviews_count = 0
-                    
-                    place_data = {
-                        "name": name,
-                        "address": address,
-                        "rating": rating,
-                        "reviews": reviews_count,
-                        "url": place_url,
-                        "selected": True  # Default to selected, user can deselect
-                    }
-                    
-                    results.append(place_data)
-                    
+                        review_text = card.find_element(
+                            By.CSS_SELECTOR, "span.UY7F9"
+                        ).text.strip()
+                        review_count = int(re.sub(r"[^\d]", "", review_text))
+                    except (NoSuchElementException, ValueError):
+                        review_count = 0
+
+                    # Address — second W4Efsd block inside the card
+                    try:
+                        address_spans = card.find_elements(
+                            By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd span span"
+                        )
+                        address = address_spans[1].text.strip() if len(address_spans) > 1 else ""
+                    except (NoSuchElementException, IndexError):
+                        address = ""
+
+                    results.append({
+                        "name":     name,
+                        "address":  address,
+                        "rating":   rating,
+                        "reviews":  review_count,
+                        "url":      url,
+                        "selected": True,
+                    })
+
                     if progress_callback:
-                        progress_callback(len(results), limit, f"Found {len(results)} places...")
-                    
-                except Exception as e:
-                    logger.warning(f"[SCRAPER] Error extracting place info: {e}")
+                        progress_callback(
+                            len(results), limit, f"Found {len(results)} places..."
+                        )
+
+                except StaleElementReferenceException:
                     continue
-            
-            if len(results) == current_count:
-                stale_scroll_count += 1
+                except Exception as e:
+                    logger.warning(f"[SCRAPER] Card parse error: {e}")
+                    continue
+
+            if len(results) == prev_count:
+                stale_count += 1
+                logger.info(f"[SCRAPER] No new results (stale {stale_count}/{max_stale})")
             else:
-                stale_scroll_count = 0
-        
-        logger.info(f"[SCRAPER] Finished. Found {len(results)} places")
-        return results
-        
+                stale_count = 0
+
+        logger.info(f"[SCRAPER] Done — found {len(results)} places")
+
     except Exception as e:
         logger.error(f"[SCRAPER] Fatal error: {e}")
-        return results
-        
+
     finally:
         if driver:
             driver.quit()
+
+    return results

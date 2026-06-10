@@ -13,14 +13,23 @@ import { FaSearch, FaTimes, FaCheckCircle } from "react-icons/fa";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const BASE = API_BASE_URL.replace(/\/+$/, "");
 
-export default function CompetitorAnalysis({ baseUrl = BASE, onBack }) {
-  // Search phase
-  const [searchPhase, setSearchPhase] = useState("input"); // "input" | "approving" | "analyzing" | "complete"
-  const [keyword, setKeyword] = useState("");
-  const [city, setCity] = useState("");
-  const [country, setCountry] = useState("");
-  const [establishmentName, setEstablishmentName] = useState("");
-  const [radiusKm, setRadiusKm] = useState(5);
+export default function CompetitorAnalysis({
+  baseUrl = BASE,
+  onBack,
+  keyword: keywordProp = "",
+  city: cityProp = "",
+  country: countryProp = "",
+  radiusKm: radiusKmProp = 5,
+  establishmentName: establishmentNameProp = "",
+}) {
+  // Search phase — skip "input" if props are passed from App.jsx
+  const hasProps = Boolean(keywordProp && cityProp && countryProp);
+  const [searchPhase, setSearchPhase] = useState(hasProps ? "searching" : "input");
+  const [keyword, setKeyword] = useState(keywordProp);
+  const [city, setCity] = useState(cityProp);
+  const [country, setCountry] = useState(countryProp);
+  const [establishmentName, setEstablishmentName] = useState(establishmentNameProp);
+  const [radiusKm, setRadiusKm] = useState(radiusKmProp);
   const [searchTaskId, setSearchTaskId] = useState(null);
   
   // Approval phase
@@ -34,6 +43,13 @@ export default function CompetitorAnalysis({ baseUrl = BASE, onBack }) {
   const [statusMessage, setStatusMessage] = useState("");
   
   const pollIntervalRef = useRef(null);
+
+  // Auto-start search if props were passed from App.jsx
+  useEffect(() => {
+    if (hasProps) {
+      startSearch(keywordProp, cityProp, countryProp, radiusKmProp, establishmentNameProp);
+    }
+  }, []);
 
   // Poll task progress
   useEffect(() => {
@@ -77,31 +93,33 @@ export default function CompetitorAnalysis({ baseUrl = BASE, onBack }) {
     return () => clearInterval(pollIntervalRef.current);
   }, [searchTaskId]);
 
-  // Start search
+  // Start search — called either from form submit or auto-started via props
+  const startSearch = async (kw, ct, cntry, radius, estName) => {
+    try {
+      const resp = await axios.post(`${BASE}/api/competitors/search`, {
+        keyword: kw,
+        city: ct,
+        country: cntry,
+        establishment_name: estName,
+        radius_km: radius,
+        limit: 100,
+      });
+      setSearchTaskId(resp.data.task_id);
+      setSearchPhase("searching");
+      setProgress(0);
+      setStatusMessage("Searching Google Maps...");
+    } catch (err) {
+      alert(`Search failed: ${err.message}`);
+    }
+  };
+
   const handleStartSearch = async (e) => {
     e.preventDefault();
     if (!keyword || !city || !country || !establishmentName) {
       alert("Please fill in all fields");
       return;
     }
-
-    try {
-      const resp = await axios.post(`${BASE}/api/competitors/search`, {
-        keyword,
-        city,
-        country,
-        establishment_name: establishmentName,
-        radius_km: radiusKm,
-        limit: 100,
-      });
-
-      setSearchTaskId(resp.data.task_id);
-      setSearchPhase("searching");
-      setProgress(0);
-      setStatusMessage("Starting search...");
-    } catch (err) {
-      alert(`Search failed: ${err.message}`);
-    }
+    await startSearch(keyword, city, country, radiusKm, establishmentName);
   };
 
   // Approve and analyze
