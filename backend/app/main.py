@@ -46,6 +46,7 @@ from .session_routes import router as session_router
 
 from .google_maps_scraper import search_google_maps_competitors
 from .swot_analyzer import analyze_batch_swot
+from .competitor_routes import router as competitor_router
 
 
 # ─── Logging ────────────────────────────────────────────────────────────────
