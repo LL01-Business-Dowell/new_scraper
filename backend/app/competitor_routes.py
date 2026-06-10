@@ -12,8 +12,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 import requests
 
-from google_maps_scraper import search_google_maps_competitors
-from swot_analyzer import analyze_batch_swot
+from .google_maps_scraper import search_google_maps_competitors
+from .swot_analyzer import analyze_batch_swot
 
 logger = logging.getLogger(__name__)
 

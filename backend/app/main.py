@@ -44,8 +44,8 @@ from .csv_routes import router as csv_router
 from .gemini_rotator import gemini_rotator
 from .session_routes import router as session_router
 
-from .google_maps_scraper import search_google_maps_competitors
-from .swot_analyzer import analyze_batch_swot
+# from .google_maps_scraper import search_google_maps_competitors
+# from .swot_analyzer import analyze_batch_swot
 from .competitor_routes import router as competitor_router
 
 
