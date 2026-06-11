@@ -19,6 +19,30 @@ except Exception as e:
     logger.warning(f"[SWOT] VADER not available: {e}. Will use rating-based fallback.")
     sia = None
 
+def analyze_batch_swot(places, progress_callback=None):
+    individual_analyses = []
+
+    selected_places = [p for p in places if p.get("selected", True)]
+    total = len(selected_places)
+
+    for i, place in enumerate(selected_places):
+        individual_analyses.append(
+            analyze_place_swot(place)
+        )
+
+        if progress_callback:
+            progress_callback(
+                i + 1,
+                total,
+                f"Analyzing {place.get('name', 'place')} ({i+1}/{total})..."
+            )
+
+    return {
+        "individual_analyses": individual_analyses,
+        "competitive_analysis": generate_competitive_analysis(
+            individual_analyses
+        )
+    }
 
 def analyze_place_swot(place_data: Dict) -> Dict:
     """

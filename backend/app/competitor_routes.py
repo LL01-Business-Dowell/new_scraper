@@ -13,7 +13,7 @@ from pydantic import BaseModel
 import requests
 
 from .google_maps_scraper import search_google_maps_competitors
-from .swot_analyzer import analyze_place_swot
+from .swot_analyzer import analyze_batch_swot
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +181,7 @@ def _analysis_worker(task_id: str, places: List[dict]):
             competitor_tasks[task_id]["status_message"] = status_text
         
         # Run batch SWOT analysis
-        analysis_results = analyze_place_swot(places, progress_callback=progress_callback)
+        analysis_results = analyze_batch_swot(places, progress_callback=progress_callback)
         
         competitor_tasks[task_id]["swot_results"] = analysis_results["individual_analyses"]
         competitor_tasks[task_id]["competitive_analysis"] = analysis_results["competitive_analysis"]
