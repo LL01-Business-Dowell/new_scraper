@@ -12,8 +12,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 import requests
 
-from .google_maps_scraper import search_google_maps_competitors
-from .swot_analyzer import analyze_batch_swot
+from google_maps_scraper import search_google_maps_competitors
+from swot_analyzer import analyze_batch_swot
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ def _search_worker(task_id: str, keyword: str, city: str, radius_km: float, limi
         places = search_google_maps_competitors(
             keyword=keyword,
             city=city,
+            establishment_name=establishment_name,
             radius_km=radius_km,
             limit=limit,
             progress_callback=progress_callback,
@@ -278,3 +279,129 @@ async def download_results(task_id: str, format: str = "json"):
     
     else:
         raise HTTPException(status_code=400, detail="Unsupported format")
+
+
+# ── Scrape-all endpoint ────────────────────────────────────────────────────
+
+class ScrapeAllRequest(BaseModel):
+    task_id: str
+    approved_places: List[dict]
+
+
+@router.post("/scrape-and-analyze")
+async def scrape_and_analyze_all(request: ScrapeAllRequest, background_tasks: BackgroundTasks):
+    """
+    Takes the approved competitor list, scrapes reviews for each place,
+    runs VADER SWOT on real reviews, then produces a combined report.
+
+    Frontend polls GET /competitors/progress/{task_id} — same as before.
+    Status flow: searching → scraping → complete
+    """
+    if request.task_id not in competitor_tasks:
+        raise HTTPException(status_code=404, detail="Original search task not found")
+
+    task = competitor_tasks[request.task_id]
+    task["status"]         = "scraping"
+    task["progress"]       = 0
+    task["status_message"] = "Starting review scraping..."
+    task["approved_places"] = request.approved_places
+
+    background_tasks.add_task(
+        _scrape_all_worker,
+        task_id=request.task_id,
+        places=request.approved_places,
+    )
+
+    return {"task_id": request.task_id, "status": "scraping"}
+
+
+def _scrape_all_worker(task_id: str, places: List[dict]):
+    """
+    For each selected place:
+      1. Scrape Google Maps reviews using review_scraper.py
+      2. Run VADER SWOT on the real reviews
+    Then generate combined competitive analysis.
+    """
+    from .review_scraper import scrape_place_reviews
+    from .swot_analyzer import analyze_place_swot, generate_competitive_analysis
+
+    selected = [p for p in places if p.get("selected", True)]
+    total    = len(selected)
+
+    logger.info(f"[SCRAPE ALL] task_id={task_id} scraping {total} places")
+
+    individual_results = []
+    errors             = []
+
+    for i, place in enumerate(selected):
+        place_name = place.get("name", f"Place {i+1}")
+        url        = place.get("url", "")
+
+        competitor_tasks[task_id]["status_message"] = (
+            f"Scraping {place_name} ({i+1}/{total})..."
+        )
+        competitor_tasks[task_id]["progress"] = int((i / total) * 90)
+
+        if not url:
+            # No URL — use rating-only SWOT
+            logger.info(f"[SCRAPE ALL] No URL for {place_name}, using rating-only SWOT")
+            swot_result = analyze_place_swot({
+                **place,
+                "scraped_reviews": [],
+            })
+            individual_results.append(swot_result)
+            continue
+
+        try:
+            scraped = scrape_place_reviews(
+                url=url,
+                max_reviews=50,   # 50 per place keeps total time reasonable
+                days_back=365,
+            )
+
+            # Merge scraped business details with the Maps listing data
+            biz = scraped.get("business_details", {})
+            merged_place = {
+                **place,
+                "name":            biz.get("name") or place.get("name"),
+                "address":         biz.get("address") or place.get("address"),
+                "rating":          biz.get("rating") or place.get("rating"),
+                "scraped_reviews": scraped.get("reviews", []),
+            }
+
+            swot_result = analyze_place_swot(merged_place)
+            swot_result["scraped_review_count"] = len(scraped.get("reviews", []))
+            individual_results.append(swot_result)
+
+            logger.info(
+                f"[SCRAPE ALL] {place_name} — "
+                f"{len(scraped.get('reviews', []))} reviews scraped, "
+                f"sentiment={swot_result.get('sentiment_score')}"
+            )
+
+        except Exception as e:
+            logger.error(f"[SCRAPE ALL] Failed for {place_name}: {e}")
+            errors.append({"name": place_name, "error": str(e)})
+            # Still add a fallback entry so the place appears in results
+            individual_results.append(analyze_place_swot({
+                **place,
+                "scraped_reviews": [],
+            }))
+
+    # Combined competitive analysis
+    competitive = generate_competitive_analysis(individual_results)
+
+    competitor_tasks[task_id]["swot_results"]         = individual_results
+    competitor_tasks[task_id]["competitive_analysis"] = competitive
+    competitor_tasks[task_id]["scrape_errors"]        = errors
+    competitor_tasks[task_id]["status"]               = "complete"
+    competitor_tasks[task_id]["progress"]             = 100
+    competitor_tasks[task_id]["status_message"]       = (
+        f"Done! Analysed {len(individual_results)} places "
+        f"({len(errors)} errors)."
+    )
+
+    logger.info(
+        f"[SCRAPE ALL] task_id={task_id} complete — "
+        f"{len(individual_results)} analysed, {len(errors)} errors"
+    )

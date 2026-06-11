@@ -386,17 +386,39 @@ export default function CompetitorAnalysis({
   if (searchPhase === "analyzing") {
     return (
       <Shell>
-        <PageHeader title="Running SWOT Analysis..." />
+        <PageHeader title="Scraping Reviews & Running SWOT..." />
         <ProgressBar value={progress} color="linear-gradient(to right, #10b981, #059669)" />
         <div style={{
           background: "#1f2937", borderRadius: 12, padding: 20,
-          border: "1px solid #374151", textAlign: "center",
+          border: "1px solid #374151",
         }}>
-          <p style={{ color: "#d1d5db", margin: 0 }}>
-            Analysing <strong style={{ color: "#10b981" }}>{selectedCount}</strong> places using NLTK sentiment analysis
+          <p style={{ color: "#d1d5db", margin: "0 0 10px", fontWeight: 600 }}>
+            {statusMessage || "Processing..."}
           </p>
-          <p style={{ color: "#6b7280", margin: "6px 0 0", fontSize: "0.8rem" }}>
-            No API calls — running locally on server
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[
+              { step: 1, label: "Scraping Google Maps reviews for each place", done: progress > 10 },
+              { step: 2, label: "Running VADER sentiment analysis on reviews", done: progress > 60 },
+              { step: 3, label: "Generating individual SWOT reports", done: progress > 80 },
+              { step: 4, label: "Building combined competitive analysis", done: progress >= 100 },
+            ].map(({ step, label, done }) => (
+              <div key={step} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                  background: done ? "linear-gradient(to right, #10b981, #059669)" : "#374151",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 11, color: "#fff", fontWeight: 700,
+                }}>
+                  {done ? "✓" : step}
+                </div>
+                <span style={{ fontSize: "0.82rem", color: done ? "#10b981" : "#6b7280" }}>
+                  {label}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p style={{ color: "#4b5563", margin: "12px 0 0", fontSize: "0.75rem" }}>
+            This takes 2–5 minutes depending on the number of places. Please keep this tab open.
           </p>
         </div>
       </Shell>
@@ -405,142 +427,444 @@ export default function CompetitorAnalysis({
 
   // ── RENDER: Complete ──────────────────────────────────────────────────────
   if (searchPhase === "complete") {
-    return (
-      <div className="app-container">
-        <div className="animated-background">
-          <div className="gradient-overlay" />
-          <div className="dot-pattern" />
-        </div>
-        <div className="content-container">
-          <div className="main-content" style={{ maxWidth: 1200, width: "100%" }}>
-            <div style={{ width: "100%", padding: "2.5rem 1.5rem" }}>
+    return <ResultsScreen
+      swotResults={swotResults}
+      competitiveAnalysis={competitiveAnalysis}
+      establishmentName={establishmentName || establishmentNameProp}
+      keyword={keyword || keywordProp}
+      city={city || cityProp}
+      onBack={onBack}
+    />;
+  }
+}
 
-              {/* Back button */}
-              <button
-                onClick={onBack}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  background: "none", border: "none", color: "#a78bfa",
-                  cursor: "pointer", fontSize: "0.85rem", fontWeight: 600,
-                  marginBottom: 20, padding: 0,
-                }}
-              >
-                <FaArrowLeft style={{ fontSize: 12 }} /> Back to Search
-              </button>
+// ── Results screen (separate component to keep it clean) ──────────────────
+function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, keyword, city, onBack }) {
+  const [expandedIdx, setExpandedIdx] = useState(null);
+  const [activeTab,   setActiveTab]   = useState("individual"); // "individual" | "combined"
 
-              <h2 style={{
-                margin: "0 0 24px", fontSize: "1.4rem", fontWeight: 700,
-                background: "linear-gradient(to right, #a78bfa, #818cf8)",
-                WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+  // ── Download individual report as text file ───────────────────────────
+  const downloadIndividual = (result) => {
+    const isUser = result.name === establishmentName;
+    const lines = [
+      `SWOT ANALYSIS REPORT`,
+      `${"=".repeat(60)}`,
+      ``,
+      `${isUser ? "YOUR ESTABLISHMENT: " : ""}${result.name}`,
+      result.rating    ? `Rating:          ★ ${result.rating}` : "",
+      result.review_count > 0 ? `Reviews:         ${result.review_count.toLocaleString()}` : "",
+      result.scraped_count > 0 ? `Reviews Scraped: ${result.scraped_count}` : "",
+      `Sentiment Score: ${result.sentiment_score > 0 ? "+" : ""}${result.sentiment_score} (${result.sentiment_score > 0.2 ? "Positive" : result.sentiment_score < -0.1 ? "Negative" : "Neutral"})`,
+      ``,
+      `STRENGTHS`,
+      `${"-".repeat(40)}`,
+      ...(result.swot?.strengths || []).map(s => `  • ${s}`),
+      ``,
+      `WEAKNESSES`,
+      `${"-".repeat(40)}`,
+      ...(result.swot?.weaknesses || []).map(w => `  • ${w}`),
+      ``,
+      `OPPORTUNITIES`,
+      `${"-".repeat(40)}`,
+      ...(result.swot?.opportunities || []).map(o => `  • ${o}`),
+      ``,
+      `THREATS`,
+      `${"-".repeat(40)}`,
+      ...(result.swot?.threats || []).map(t => `  • ${t}`),
+      ``,
+      `Generated by DoWell Samanta Scraper`,
+    ].filter(l => l !== undefined);
+
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `swot_${result.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Download combined report ──────────────────────────────────────────
+  const downloadCombined = () => {
+    if (!competitiveAnalysis) return;
+    const ca = competitiveAnalysis;
+    const lines = [
+      `COMPETITIVE ANALYSIS REPORT`,
+      `${"=".repeat(60)}`,
+      `Keyword:  ${keyword}`,
+      `Location: ${city}`,
+      ``,
+      `MARKET OVERVIEW`,
+      `${"-".repeat(40)}`,
+      `Total Analysed:    ${ca.total_analyzed}`,
+      `Average Rating:    ★ ${ca.average_rating}`,
+      `Average Sentiment: ${ca.average_sentiment}`,
+      `Market Leader:     ${ca.market_leader} (★${ca.market_leader_rating})`,
+      `Lowest Rated:      ${ca.lowest_rated} (★${ca.lowest_rated_rating})`,
+      ``,
+      `MARKET INSIGHTS`,
+      `${"-".repeat(40)}`,
+      ...(ca.market_insights || []).map(i => `  • ${i}`),
+      ``,
+      `COMMON STRENGTHS ACROSS MARKET`,
+      `${"-".repeat(40)}`,
+      ...(ca.common_strengths || []).map(([s, c]) => `  • ${s} (${c} places)`),
+      ``,
+      `COMMON WEAKNESSES ACROSS MARKET`,
+      `${"-".repeat(40)}`,
+      ...(ca.common_weaknesses || []).map(([w, c]) => `  • ${w} (${c} places)`),
+      ``,
+      `INDIVIDUAL RESULTS SUMMARY`,
+      `${"-".repeat(40)}`,
+      ...(swotResults || []).map((r, i) =>
+        `  ${i + 1}. ${r.name}${r.name === establishmentName ? " [YOUR PLACE]" : ""} — ★${r.rating || "N/A"} — Sentiment: ${r.sentiment_score}`
+      ),
+      ``,
+      `Generated by DoWell Samanta Scraper`,
+    ];
+
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `competitive_analysis_${city.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const swotColors = [
+    { key: "strengths",     label: "Strengths",     color: "#10b981", bg: "rgba(16,185,129,0.08)",  border: "rgba(16,185,129,0.2)"  },
+    { key: "weaknesses",    label: "Weaknesses",     color: "#ef4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.2)"   },
+    { key: "opportunities", label: "Opportunities",  color: "#3b82f6", bg: "rgba(59,130,246,0.08)",  border: "rgba(59,130,246,0.2)"  },
+    { key: "threats",       label: "Threats",        color: "#f59e0b", bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.2)"  },
+  ];
+
+  // Sort: user's place first, then by rating desc
+  const sorted = [...(swotResults || [])].sort((a, b) => {
+    if (a.name === establishmentName) return -1;
+    if (b.name === establishmentName) return  1;
+    return (b.rating || 0) - (a.rating || 0);
+  });
+
+  return (
+    <div className="app-container">
+      <div className="animated-background">
+        <div className="gradient-overlay" />
+        <div className="dot-pattern" />
+      </div>
+      <div className="content-container">
+        <div style={{ width: "100%", maxWidth: 1000, margin: "0 auto", padding: "2.5rem 1.5rem" }}>
+
+          {/* Back */}
+          <button onClick={onBack} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: "none", border: "none", color: "#a78bfa",
+            cursor: "pointer", fontSize: "0.85rem", fontWeight: 600,
+            marginBottom: 20, padding: 0,
+          }}>
+            <FaArrowLeft style={{ fontSize: 12 }} /> Back to Search
+          </button>
+
+          {/* Title */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <h2 style={{
+              margin: 0, fontSize: "1.4rem", fontWeight: 700,
+              background: "linear-gradient(to right, #a78bfa, #818cf8)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+            }}>
+              Analysis Results — {sorted.length} Places
+            </h2>
+          </div>
+
+          {/* Tab switcher */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "#1f2937", borderRadius: 10, padding: 4 }}>
+            {[
+              { id: "individual", label: `Individual Reports (${sorted.length})` },
+              { id: "combined",   label: "Combined Competitive Analysis" },
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+                flex: 1, padding: "8px 12px", borderRadius: 8, border: "none",
+                cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, transition: "all 0.2s",
+                background: activeTab === tab.id ? "linear-gradient(to right, #9333ea, #4f46e5)" : "transparent",
+                color: activeTab === tab.id ? "#fff" : "#6b7280",
               }}>
-                SWOT Analysis Results
-              </h2>
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-              {/* Market overview card */}
-              {competitiveAnalysis && (
-                <div style={{
-                  background: "#1A1E2E", borderRadius: 16, padding: 24,
-                  border: "1px solid #374151", marginBottom: 24,
-                  boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-                }}>
-                  <h3 style={{ margin: "0 0 16px", color: "#a78bfa", fontSize: "1rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    Market Overview
-                  </h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
-                    {[
-                      { label: "Analysed", value: competitiveAnalysis.total_competitors_analyzed, color: "#a78bfa" },
-                      { label: "Avg Rating", value: `${competitiveAnalysis.average_rating} / 5`, color: "#f59e0b" },
-                      { label: "Market Leader", value: competitiveAnalysis.market_leader, color: "#10b981", small: true },
-                      { label: "Leader Rating", value: `★ ${competitiveAnalysis.market_leader_rating}`, color: "#10b981" },
-                    ].map(({ label, value, color, small }) => (
-                      <div key={label} style={{
-                        background: "#1f2937", borderRadius: 10, padding: "14px 16px",
-                        border: "1px solid #374151",
+          {/* ── Individual reports tab ──────────────────────────────── */}
+          {activeTab === "individual" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {sorted.map((result, idx) => {
+                const isUser    = result.name === establishmentName;
+                const isExpanded = expandedIdx === idx;
+                const sentPos   = result.sentiment_score > 0.2;
+                const sentNeg   = result.sentiment_score < -0.1;
+
+                return (
+                  <div key={idx} style={{
+                    background: isUser ? "rgba(245,158,11,0.06)" : "#1A1E2E",
+                    borderRadius: 12,
+                    border: `1px solid ${isUser ? "#f59e0b" : isExpanded ? "#9333ea" : "#374151"}`,
+                    overflow: "hidden",
+                    transition: "border-color 0.2s",
+                  }}>
+                    {/* Row header — always visible, click to expand */}
+                    <div
+                      onClick={() => setExpandedIdx(isExpanded ? null : idx)}
+                      style={{
+                        padding: "14px 18px",
+                        display: "flex", alignItems: "center", gap: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {/* Expand chevron */}
+                      <span style={{
+                        fontSize: 12, color: "#6b7280", flexShrink: 0,
+                        transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                        transition: "transform 0.2s", display: "inline-block",
+                      }}>▶</span>
+
+                      {/* Rank number */}
+                      <span style={{
+                        width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+                        background: isUser ? "#f59e0b" : "#1f2937",
+                        border: `1px solid ${isUser ? "#f59e0b" : "#374151"}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "0.72rem", fontWeight: 700,
+                        color: isUser ? "#000" : "#9ca3af",
                       }}>
-                        <div style={{ fontSize: "0.7rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{label}</div>
-                        <div style={{ fontSize: small ? "0.85rem" : "1.3rem", fontWeight: 700, color }}>{value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {competitiveAnalysis.market_insights?.length > 0 && (
-                    <div style={{ background: "rgba(147,51,234,0.1)", borderRadius: 8, padding: "10px 14px", border: "1px solid rgba(147,51,234,0.2)" }}>
-                      <p style={{ margin: 0, fontSize: "0.85rem", color: "#d1d5db" }}>
-                        💡 {competitiveAnalysis.market_insights[0]}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
+                        {isUser ? "★" : idx + 1}
+                      </span>
 
-              {/* SWOT cards grid */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-                {swotResults.map((result, idx) => {
-                  const isUser = result.name === (establishmentName || establishmentNameProp);
-                  return (
-                    <div key={idx} style={{
-                      background: isUser ? "rgba(245,158,11,0.08)" : "#1A1E2E",
-                      borderRadius: 14, padding: 18,
-                      border: `1px solid ${isUser ? "#f59e0b" : "#374151"}`,
-                      boxShadow: "0 4px 24px rgba(0,0,0,0.2)",
-                    }}>
-                      {/* Card header */}
-                      <div style={{ marginBottom: 12 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      {/* Name + badges */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           {isUser && (
                             <span style={{
-                              fontSize: "0.65rem", background: "#f59e0b",
-                              color: "#000", padding: "1px 6px", borderRadius: 4, fontWeight: 800,
+                              fontSize: "0.6rem", background: "#f59e0b", color: "#000",
+                              padding: "1px 5px", borderRadius: 3, fontWeight: 800,
                             }}>YOUR PLACE</span>
                           )}
-                          <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: isUser ? "#fbbf24" : "#f1f1f1" }}>
+                          <span style={{
+                            fontWeight: 700, fontSize: "0.92rem",
+                            color: isUser ? "#fbbf24" : "#f1f1f1",
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                          }}>
                             {result.name}
-                          </h4>
+                          </span>
                         </div>
-                        <div style={{ display: "flex", gap: 12, fontSize: "0.75rem", color: "#6b7280" }}>
+                        <div style={{ display: "flex", gap: 10, fontSize: "0.72rem", color: "#6b7280", marginTop: 2, flexWrap: "wrap" }}>
                           {result.rating && (
-                            <span style={{ color: "#f59e0b", display: "flex", alignItems: "center", gap: 3 }}>
-                              <FaStar style={{ fontSize: 10 }} /> {result.rating}
+                            <span style={{ color: "#f59e0b", display: "flex", alignItems: "center", gap: 2 }}>
+                              <FaStar style={{ fontSize: 9 }} /> {result.rating}
                             </span>
                           )}
                           {result.review_count > 0 && <span>{result.review_count.toLocaleString()} reviews</span>}
-                          <span style={{ color: result.sentiment_score > 0 ? "#10b981" : "#ef4444" }}>
-                            {result.sentiment_score > 0 ? "▲ Positive" : "▼ Neutral"}
+                          {result.scraped_count > 0 && <span style={{ color: "#4b5563" }}>{result.scraped_count} scraped</span>}
+                          <span style={{ color: sentPos ? "#10b981" : sentNeg ? "#ef4444" : "#6b7280" }}>
+                            {sentPos ? "▲ Positive" : sentNeg ? "▼ Negative" : "→ Neutral"}
                           </span>
                         </div>
                       </div>
 
-                      {/* SWOT grid */}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                        {[
-                          { key: "strengths",    label: "Strengths",    color: "#10b981", bg: "rgba(16,185,129,0.08)",  border: "rgba(16,185,129,0.2)"  },
-                          { key: "weaknesses",   label: "Weaknesses",   color: "#ef4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.2)"   },
-                          { key: "opportunities",label: "Opportunities", color: "#3b82f6", bg: "rgba(59,130,246,0.08)",  border: "rgba(59,130,246,0.2)"  },
-                          { key: "threats",      label: "Threats",      color: "#f59e0b", bg: "rgba(245,158,11,0.08)",  border: "rgba(245,158,11,0.2)"  },
-                        ].map(({ key, label, color, bg, border }) => (
-                          <div key={key} style={{ background: bg, borderRadius: 8, padding: "8px 10px", border: `1px solid ${border}` }}>
-                            <div style={{ fontSize: "0.65rem", fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>
-                              {label}
+                      {/* Download button */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); downloadIndividual(result); }}
+                        style={{
+                          padding: "5px 12px", borderRadius: 6, border: "1px solid #374151",
+                          background: "transparent", color: "#9ca3af", fontSize: "0.75rem",
+                          cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap",
+                          transition: "all 0.2s",
+                        }}
+                        title="Download this report as .txt"
+                      >
+                        ↓ Download
+                      </button>
+                    </div>
+
+                    {/* Expanded SWOT content */}
+                    {isExpanded && (
+                      <div style={{ padding: "0 18px 18px", borderTop: "1px solid #1f2937" }}>
+                        <div style={{ paddingTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          {swotColors.map(({ key, label, color, bg, border }) => (
+                            <div key={key} style={{ background: bg, borderRadius: 10, padding: "10px 12px", border: `1px solid ${border}` }}>
+                              <div style={{
+                                fontSize: "0.65rem", fontWeight: 700, color,
+                                textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 7,
+                              }}>
+                                {label}
+                              </div>
+                              <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+                                {(result.swot?.[key] || []).map((item, i) => (
+                                  <li key={i} style={{
+                                    fontSize: "0.78rem", color: "#d1d5db",
+                                    marginBottom: 5, paddingLeft: 10, position: "relative",
+                                    lineHeight: 1.4,
+                                  }}>
+                                    <span style={{ position: "absolute", left: 0, color }}>·</span>
+                                    {item}
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
-                            <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-                              {(result.swot[key] || []).map((item, i) => (
-                                <li key={i} style={{ fontSize: "0.72rem", color: "#d1d5db", marginBottom: 3, paddingLeft: 8, position: "relative" }}>
-                                  <span style={{ position: "absolute", left: 0, color }}>·</span>
-                                  {item}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Combined analysis tab ───────────────────────────────── */}
+          {activeTab === "combined" && competitiveAnalysis && (
+            <div>
+              {/* Download combined */}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                <button
+                  onClick={downloadCombined}
+                  style={{
+                    padding: "8px 18px", borderRadius: 8,
+                    background: "linear-gradient(to right, #9333ea, #4f46e5)",
+                    border: "none", color: "#fff", fontSize: "0.82rem",
+                    fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  ↓ Download Full Report
+                </button>
+              </div>
+
+              {/* Stats tiles */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
+                {[
+                  { label: "Total Analysed",   value: competitiveAnalysis.total_analyzed,        color: "#a78bfa" },
+                  { label: "Average Rating",    value: `★ ${competitiveAnalysis.average_rating}`, color: "#f59e0b" },
+                  { label: "Avg Sentiment",     value: competitiveAnalysis.average_sentiment,     color: competitiveAnalysis.average_sentiment > 0 ? "#10b981" : "#ef4444" },
+                  { label: "Market Leader",     value: competitiveAnalysis.market_leader,         color: "#10b981", small: true },
+                  { label: "Leader Rating",     value: `★ ${competitiveAnalysis.market_leader_rating}`, color: "#10b981" },
+                  { label: "Lowest Rated",      value: competitiveAnalysis.lowest_rated,          color: "#ef4444", small: true },
+                ].map(({ label, value, color, small }) => (
+                  <div key={label} style={{
+                    background: "#1A1E2E", borderRadius: 10, padding: "14px 16px",
+                    border: "1px solid #374151",
+                  }}>
+                    <div style={{ fontSize: "0.65rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: small ? "0.82rem" : "1.25rem", fontWeight: 700, color, lineHeight: 1.2 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Insights */}
+              {competitiveAnalysis.market_insights?.length > 0 && (
+                <div style={{
+                  background: "#1A1E2E", borderRadius: 12, padding: 18,
+                  border: "1px solid #374151", marginBottom: 20,
+                }}>
+                  <h4 style={{ margin: "0 0 12px", color: "#a78bfa", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    Market Insights
+                  </h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {competitiveAnalysis.market_insights.map((insight, i) => (
+                      <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                        <span style={{ color: "#9333ea", fontSize: "1rem", lineHeight: 1, flexShrink: 0 }}>💡</span>
+                        <p style={{ margin: 0, fontSize: "0.85rem", color: "#d1d5db", lineHeight: 1.5 }}>{insight}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Common themes side by side */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+                {[
+                  { label: "Common Strengths Across Market",   data: competitiveAnalysis.common_strengths,  color: "#10b981", bg: "rgba(16,185,129,0.06)",  border: "rgba(16,185,129,0.2)" },
+                  { label: "Common Weaknesses Across Market",  data: competitiveAnalysis.common_weaknesses, color: "#ef4444", bg: "rgba(239,68,68,0.06)",   border: "rgba(239,68,68,0.2)" },
+                ].map(({ label, data, color, bg, border }) => (
+                  <div key={label} style={{ background: bg, borderRadius: 12, padding: 16, border: `1px solid ${border}` }}>
+                    <h4 style={{ margin: "0 0 12px", color, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      {label}
+                    </h4>
+                    {(data || []).map(([item, count], i) => (
+                      <div key={i} style={{ marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontSize: "0.78rem", color: "#d1d5db" }}>{item}</span>
+                          <span style={{ fontSize: "0.7rem", color, fontWeight: 700 }}>{count}</span>
+                        </div>
+                        <div style={{ height: 3, background: "#1f2937", borderRadius: 2, overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%", borderRadius: 2,
+                            width: `${(count / (swotResults.length || 1)) * 100}%`,
+                            background: color, transition: "width 0.5s",
+                          }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              {/* Summary table of all places */}
+              <div style={{
+                background: "#1A1E2E", borderRadius: 12,
+                border: "1px solid #374151", overflow: "hidden",
+              }}>
+                <div style={{
+                  padding: "12px 16px", background: "#252B3E",
+                  borderBottom: "1px solid #374151",
+                  display: "grid", gridTemplateColumns: "1fr 80px 80px 100px",
+                  fontSize: "0.7rem", fontWeight: 700, color: "#6b7280",
+                  textTransform: "uppercase", letterSpacing: "0.05em",
+                }}>
+                  <span>Establishment</span>
+                  <span style={{ textAlign: "center" }}>Rating</span>
+                  <span style={{ textAlign: "center" }}>Sentiment</span>
+                  <span style={{ textAlign: "center" }}>Reviews</span>
+                </div>
+                {sorted.map((r, i) => {
+                  const isUser = r.name === establishmentName;
+                  return (
+                    <div key={i} style={{
+                      padding: "10px 16px",
+                      borderBottom: i < sorted.length - 1 ? "1px solid #1f2937" : "none",
+                      display: "grid", gridTemplateColumns: "1fr 80px 80px 100px",
+                      alignItems: "center",
+                      background: isUser ? "rgba(245,158,11,0.05)" : "transparent",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {isUser && (
+                          <span style={{
+                            fontSize: "0.55rem", background: "#f59e0b", color: "#000",
+                            padding: "1px 4px", borderRadius: 3, fontWeight: 800,
+                          }}>YOU</span>
+                        )}
+                        <span style={{ fontSize: "0.82rem", color: isUser ? "#fbbf24" : "#d1d5db", fontWeight: isUser ? 700 : 400 }}>
+                          {r.name}
+                        </span>
+                      </div>
+                      <span style={{ textAlign: "center", color: "#f59e0b", fontSize: "0.82rem" }}>
+                        {r.rating ? `★ ${r.rating}` : "—"}
+                      </span>
+                      <span style={{
+                        textAlign: "center", fontSize: "0.78rem",
+                        color: r.sentiment_score > 0.2 ? "#10b981" : r.sentiment_score < -0.1 ? "#ef4444" : "#6b7280",
+                      }}>
+                        {r.sentiment_score > 0.2 ? "▲ Pos" : r.sentiment_score < -0.1 ? "▼ Neg" : "→ Neu"}
+                      </span>
+                      <span style={{ textAlign: "center", fontSize: "0.78rem", color: "#6b7280" }}>
+                        {r.review_count ? r.review_count.toLocaleString() : "—"}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-
             </div>
-          </div>
+          )}
+
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 }

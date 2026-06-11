@@ -52,6 +52,7 @@ def init_driver():
 def search_google_maps_competitors(
     keyword: str,
     city: str,
+    establishment_name: str,
     radius_km: float = 5,
     limit: int = 100,
     progress_callback: Optional[Callable] = None,
@@ -79,7 +80,7 @@ def search_google_maps_competitors(
         driver = init_driver()
 
         # Search URL — "100 cafe near me" style search scoped to city
-        query = f"{keyword} in {city}"
+        query = f"{keyword} near {establishment_name} in {city}"
         import urllib.parse
         encoded = urllib.parse.quote_plus(query)
         search_url = f"https://www.google.com/maps/search/{encoded}"
