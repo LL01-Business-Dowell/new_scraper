@@ -109,7 +109,8 @@ ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 # Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt
+ && pip install --no-cache-dir -r requirements.txt \
+ && python -m nltk.downloader vader_lexicon
 
 # Copy application code
 COPY . .
