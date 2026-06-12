@@ -168,28 +168,14 @@ def scrape_place_reviews(
         if progress_callback:
             progress_callback(0, max_reviews, f"Loaded {result['business_details'].get('name', 'place')}")
 
-        # Navigate to reviews tab
-        try:
-            for sel in [
-                "button[data-tab-index='1']",
-                "//button[contains(@aria-label,'Reviews')]",
-            ]:
-                try:
-                    if sel.startswith("//"):
-                        btn = WebDriverWait(driver, 3).until(
-                            EC.element_to_be_clickable((By.XPATH, sel))
-                        )
-                    else:
-                        btn = WebDriverWait(driver, 3).until(
-                            EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
-                        )
-                    driver.execute_script("arguments[0].click();", btn)
-                    time.sleep(2)
-                    break
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        # Navigate to reviews — append view=reviews&sort=1 and reload.
+        # This is the key step: real Google Maps place URLs need this
+        # parameter to render the reviews list in the DOM at all.
+        current_url = driver.current_url
+        if "view=reviews" not in current_url:
+            glue = "&" if "?" in current_url else "?"
+            driver.get(f"{current_url}{glue}hl=en&view=reviews&sort=1")
+            time.sleep(4)
 
         # Find scrollable feed
         scrollable = None
