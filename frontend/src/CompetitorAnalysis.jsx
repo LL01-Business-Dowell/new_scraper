@@ -105,7 +105,7 @@ export default function CompetitorAnalysis({
   const handleApproveAndAnalyze = async () => {
     const approvedPlaces = places.map((place, i) => ({ ...place, selected: checkedPlaces[i] !== false }));
     try {
-      await axios.post(`${BASE}/api/competitors/approve-and-analyze`, {
+      await axios.post(`${BASE}/api/competitors/scrape-and-analyze`, {
         task_id: searchTaskId, approved_places: approvedPlaces,
       });
       setSearchPhase("analyzing");
