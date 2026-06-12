@@ -138,11 +138,17 @@ def extract_business_details(driver) -> Dict:
 def scrape_place_reviews(
     url: str,
     max_reviews: int = 100,
-    days_back: int = 365,
+    days_back: int = 30,
     progress_callback: Optional[Callable] = None,
 ) -> Dict:
     """
     Scrape reviews for a single Google Maps place URL.
+
+    Matches the logic of the original Unified_Review_Scrape_Engine:
+      1. Reload URL with &view=reviews&sort=1 to open the reviews panel
+      2. Click the "Sort" button and select "Newest" so reviews are
+         ordered newest-first — required for the days_back cutoff to work
+      3. Scroll and collect review cards until the cutoff date is passed
 
     Returns dict:
     {
@@ -168,9 +174,7 @@ def scrape_place_reviews(
         if progress_callback:
             progress_callback(0, max_reviews, f"Loaded {result['business_details'].get('name', 'place')}")
 
-        # Navigate to reviews — append view=reviews&sort=1 and reload.
-        # This is the key step: real Google Maps place URLs need this
-        # parameter to render the reviews list in the DOM at all.
+        # Step 1 — Navigate to reviews via URL param + reload
         current_url = driver.current_url
         if "view=reviews" not in current_url:
             glue = "&" if "?" in current_url else "?"
@@ -181,7 +185,7 @@ def scrape_place_reviews(
         scrollable = None
         for sel in [
             'div[role="feed"]',
-            "div.m6QErb.DxyBCb",
+            "div.m6QErb.DxyBCb.kA9KIf.dS8AEf",
             "div.m6QErb[aria-label]",
         ]:
             try:
@@ -195,6 +199,49 @@ def scrape_place_reviews(
                     break
             except Exception:
                 continue
+
+        # Step 2 — Click "Sort" then select "Newest"
+        # This is required: without it, reviews load oldest/most-relevant
+        # first and the days_back cutoff triggers immediately with 0 results.
+        try:
+            sort_button = None
+            sort_selectors = [
+                '//button[contains(@aria-label, "Sort")]',
+                '//button[contains(., "Sort")]',
+                '//span[contains(text(), "Sort")]/ancestor::button',
+            ]
+            for sel in sort_selectors:
+                try:
+                    elements = driver.find_elements(By.XPATH, sel)
+                    for el in elements:
+                        if el.is_displayed():
+                            sort_button = el
+                            break
+                    if sort_button:
+                        break
+                except Exception:
+                    pass
+
+            if sort_button:
+                driver.execute_script("arguments[0].click();", sort_button)
+                time.sleep(2)
+
+                newest_option = None
+                for sel in [
+                    '//div[@role="menuitemradio" and contains(., "Newest")]',
+                    '//div[@role="menuitem" and contains(., "Newest")]',
+                ]:
+                    items = driver.find_elements(By.XPATH, sel)
+                    if items:
+                        newest_option = items[0]
+                        break
+
+                if newest_option:
+                    driver.execute_script("arguments[0].click();", newest_option)
+                    logger.info("[REVIEW SCRAPER] Sorted by newest reviews")
+                    time.sleep(3)
+        except Exception as e:
+            logger.warning(f"[REVIEW SCRAPER] Sort by newest failed: {e}")
 
         cutoff = datetime.datetime.now() - datetime.timedelta(days=days_back)
         reviews = []
@@ -306,13 +353,13 @@ def scrape_place_reviews(
             else:
                 consecutive_oob = 0
             if consecutive_oob >= 5:
+                logger.info(f"[REVIEW SCRAPER] Hit {days_back}-day cutoff — stopping")
                 break
 
             if len(reviews) >= max_reviews:
                 break
 
             # Scroll
-            prev_scroll = 0
             if scrollable:
                 try:
                     prev_scroll = driver.execute_script("return arguments[0].scrollTop", scrollable)

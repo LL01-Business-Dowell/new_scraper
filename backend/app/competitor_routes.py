@@ -356,7 +356,7 @@ def _scrape_all_worker(task_id: str, places: List[dict]):
             scraped = scrape_place_reviews(
                 url=url,
                 max_reviews=50,   # 50 per place keeps total time reasonable
-                days_back=365,
+                days_back=30,
             )
 
             # Merge scraped business details with the Maps listing data
