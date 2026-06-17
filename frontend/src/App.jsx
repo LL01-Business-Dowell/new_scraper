@@ -31,24 +31,24 @@ const BASE = API_BASE_URL.replace(/\/+$/, "");
 // Add new keywords here; they will appear in the dropdown automatically.
 // ---------------------------------------------------------------------------
 const KEYWORD_OPTIONS = [
-  // Healthcare / Medical
-  { group: "Healthcare", value: "Directors of Surgical Services" },
-  { group: "Healthcare", value: "Chief Medical Officers" },
-  { group: "Healthcare", value: "Hospital Administrators" },
-  { group: "Healthcare", value: "Heads of Oncology" },
-  { group: "Healthcare", value: "Directors of Nursing" },
-  // Business / Corporate
-  { group: "Corporate", value: "Vice Presidents of Operations" },
-  { group: "Corporate", value: "Chief Financial Officers" },
-  { group: "Corporate", value: "Managing Directors" },
-  { group: "Corporate", value: "Head of Business Development" },
+  // // Healthcare / Medical
+  // { group: "Healthcare", value: "Directors of Surgical Services" },
+  // { group: "Healthcare", value: "Chief Medical Officers" },
+  // { group: "Healthcare", value: "Hospital Administrators" },
+  // { group: "Healthcare", value: "Heads of Oncology" },
+  // { group: "Healthcare", value: "Directors of Nursing" },
+  // // Business / Corporate
+  // { group: "Corporate", value: "Vice Presidents of Operations" },
+  // { group: "Corporate", value: "Chief Financial Officers" },
+  // { group: "Corporate", value: "Managing Directors" },
+  // { group: "Corporate", value: "Head of Business Development" },
   // Food & Beverage
   { group: "Food & Beverage", value: "Cafe" },
   { group: "Food & Beverage", value: "Restaurant" },
   { group: "Food & Beverage", value: "Bakery" },
-  // Real Estate
-  { group: "Real Estate", value: "Real Estate Agencies" },
-  { group: "Real Estate", value: "Property Developers" },
+  // // Real Estate
+  // { group: "Real Estate", value: "Real Estate Agencies" },
+  // { group: "Real Estate", value: "Property Developers" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -58,15 +58,15 @@ const KEYWORD_OPTIONS = [
 // Add new report types here — the prompt preview updates automatically.
 // ---------------------------------------------------------------------------
 const REPORT_TYPES = [
-  {
-    value: "swot",
-    label: "SWOT Analysis",
-    requiresPlace: true,   // shows the establishment name input field
-    buildPrompt: (keyword, city, country) =>
-      `SWOT Analysis for ${keyword} in ${city}, ${country} — ` +
-      `split across geographic quadrants (North, South, East, West). ` +
-      `If a specific establishment URL is provided, each quadrant card includes a comparison.`,
-  },
+  // {
+  //   value: "swot",
+  //   label: "SWOT Analysis",
+  //   requiresPlace: true,   // shows the establishment name input field
+  //   buildPrompt: (keyword, city, country) =>
+  //     `SWOT Analysis for ${keyword} in ${city}, ${country} — ` +
+  //     `split across geographic quadrants (North, South, East, West). ` +
+  //     `If a specific establishment URL is provided, each quadrant card includes a comparison.`,
+  // },
   {
     value: "competitive_swot",
     label: "Competitive SWOT Analysis",
@@ -88,6 +88,8 @@ const App = () => {
   const [selectedReportType, setSelectedReportType] = useState("");
   const [radiusKm, setRadiusKm] = useState(5);
   const [placeName, setPlaceName] = useState("");  // set by PlacePicker map component
+  const [placeCity, setPlaceCity] = useState("");
+  const [placeCountry, setPlaceCountry] = useState("");
   const [file, setFile] = useState(null);
 
   // ── Dropdowns ──────────────────────────────────────────────────────────────
@@ -275,6 +277,8 @@ const App = () => {
     setKeyword("");
     setSelectedReportType(REPORT_TYPES[0].value);
     setPlaceName("");
+    setPlaceCity("");
+    setPlaceCountry("");
     setSelectedCountry("");
     setSelectedCity("");
     setFile(null);
@@ -320,8 +324,8 @@ const App = () => {
         baseUrl={BASE}
         onBack={() => setShowCompetitorAnalysis(false)}
         keyword={keyword}
-        city={selectedCity}
-        country={selectedCountry}
+        city={placeCity}
+        country={placeCountry}
         radiusKm={radiusKm}
         establishmentName={placeName}
       />
@@ -406,7 +410,18 @@ const App = () => {
                   keyword={keyword}
                   city={selectedCity}
                   country={selectedCountry}
-                  onSelect={(place) => setPlaceName(place ? place.name : "")}
+                  // onSelect={(place) => setPlaceName(place ? place.name : "")}
+                  onSelect={(place) => {
+                    if (place) {
+                      setPlaceName(place.name || "");
+                      setPlaceCity(place.city || place.vicinity || "");
+                      setPlaceCountry(place.country || "");
+                    } else {
+                      setPlaceName("");
+                      setPlaceCity("");
+                      setPlaceCountry("");
+                    }
+                  }}
                   selectedName={placeName}
                   required={selectedReportType === "competitive_swot"}
                 />
@@ -440,8 +455,8 @@ const App = () => {
                   />
                 </label>
               </div>
-
-              {/* Country dropdown */}
+              
+              {/* Country dropdown — removed, location inferred from PlacePicker
               <div className="input-container">
                 <FaMapMarkerAlt className="input-icon" />
                 <div className="custom-select">
@@ -492,8 +507,9 @@ const App = () => {
                   </select>
                 </div>
               </div>
+              */}
 
-              {/* City dropdown — shown after country is picked */}
+              {/* City dropdown — shown after country is picked
               {selectedCountry && (
                 <div className="input-container">
                   <FaMapMarkerAlt className="input-icon" />
@@ -546,8 +562,9 @@ const App = () => {
                   </div>
                 </div>
               )}
+                */}
 
-              {/* Submit */}
+              {/* Submit
               <button
                 type="submit"
                 disabled={isRunning}
@@ -556,6 +573,7 @@ const App = () => {
                 <FaSearch className="button-icon" />
                 {isRunning ? "Processing..." : "Analyse"}
               </button>
+              */}
 
               {/* Competitor Analysis button */}
               <button
