@@ -414,8 +414,14 @@ const App = () => {
                   onSelect={(place) => {
                     if (place) {
                       setPlaceName(place.name || "");
-                      setPlaceCity(place.city || place.vicinity || "");
-                      setPlaceCountry(place.country || "");
+                      // display_name format: "Name, Street, City, State, Postcode, Country"
+                      // Last part is always country, city is usually 3rd or 4th from end
+                      const parts = (place.display_name || "").split(",").map(s => s.trim());
+                      const extractedCountry = parts[parts.length - 1] || "";
+                      // Skip postcode (numeric) when finding city
+                      const extractedCity = parts.slice(1).find(p => p && !/^\d+$/.test(p) && p !== extractedCountry) || "";
+                      setPlaceCity(extractedCity);
+                      setPlaceCountry(extractedCountry);
                     } else {
                       setPlaceName("");
                       setPlaceCity("");

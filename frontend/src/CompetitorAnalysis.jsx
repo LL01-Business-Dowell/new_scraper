@@ -22,7 +22,7 @@ export default function CompetitorAnalysis({
     radiusKm: radiusKmProp = 5,
     establishmentName: establishmentNameProp = "",
 }) {
-    const hasProps = Boolean(keywordProp && cityProp && countryProp);
+    const hasProps = Boolean(keywordProp && establishmentNameProp);
     const [searchPhase, setSearchPhase] = useState(hasProps ? "searching" : "input");
     const [keyword, setKeyword] = useState(keywordProp);
     const [city, setCity] = useState(cityProp);
