@@ -81,6 +81,7 @@ def parse_relative_date(text: str) -> datetime.datetime:
         return now - datetime.timedelta(weeks=int(match.group(1)) if match else 1)
     if "month" in text:
         match = re.search(r"(\d+)", text)
+        # Give a slight buffer room for the "1 month ago" crossover point
         return now - datetime.timedelta(days=30 * (int(match.group(1)) if match else 1))
     if "year" in text:
         match = re.search(r"(\d+)", text)
@@ -231,7 +232,7 @@ def scrape_place_reviews(
         reviews = []
         processed_ids = set()
         stale_count = 0
-        global_min_date_found = datetime.datetime.now()
+        consecutive_out_of_bounds = 0
 
         # Infinite Scroll Extraction Loop
         for scroll_loop in range(120):
@@ -318,12 +319,13 @@ def scrape_place_reviews(
 
                     # Parse date and log chronological baseline progress globally
                     parsed_date = parse_relative_date(date_str)
-                    if parsed_date < global_min_date_found:
-                        global_min_date_found = parsed_date
 
                     # Filter elements into payload only if inside timeframe scope
                     if parsed_date >= cutoff:
                         reviews.append({"author": author, "rating": rating, "date": date_str, "text": review_text})
+                        consecutive_out_of_bounds = 0
+                    else:
+                        consecutive_out_of_bounds += 1
                     
                     processed_ids.add(rev_id)
                     new_this_round += 1
@@ -337,20 +339,22 @@ def scrape_place_reviews(
                     logger.debug(f"[REVIEW SCRAPER] Card parse error: {e}")
                     continue
 
-            # Verify if our global chronological tracker has completely passed the threshold
-            if global_min_date_found < cutoff:
-                logger.info(f"[REVIEW SCRAPER] Cleanly verified all reviews within {days_back}-day boundary. Exiting.")
+            if len(reviews) >= max_reviews:
                 break
 
-            if len(reviews) >= max_reviews:
+            # SAFETY BREAKOUT: If we have scraped cards and seen 15+ processed items in a row 
+            # completely older than our cutoff window, we have genuinely passed the 30-day timeline.
+            if new_this_round > 0 and consecutive_out_of_bounds >= 15:
+                logger.info(f"[REVIEW SCRAPER] Safe boundary validation reached ({days_back} days). Finalizing.")
                 break
 
             # Handle Infinite Scrolling Mechanics
             if scrollable:
                 try:
                     prev_scroll = driver.execute_script("return arguments[0].scrollTop", scrollable)
+                    # Directly scroll to the container's physical dynamic bottom
                     driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", scrollable)
-                    time.sleep(random.uniform(2.5, 3.5))
+                    time.sleep(random.uniform(2.0, 3.0))
                     new_scroll = driver.execute_script("return arguments[0].scrollTop", scrollable)
                     
                     if new_scroll <= prev_scroll and new_this_round == 0:
@@ -374,7 +378,7 @@ def scrape_place_reviews(
                 logger.info("[REVIEW SCRAPER] Feed end reached or scrolling completely stalled.")
                 break
 
-        # CRITICAL FIX: Assign your successfully parsed list back to the return layout dictionary
+        # Assign successfully parsed list back to the return layout dictionary
         result["reviews"] = reviews
         logger.info(f"[REVIEW SCRAPER] Done — scraped {len(reviews)} reviews for {result['business_details'].get('name')}")
 
@@ -386,416 +390,3 @@ def scrape_place_reviews(
             driver.quit()
 
     return result
-
-# def scrape_place_reviews(
-#     url: str,
-#     max_reviews: int = 100,
-#     days_back: int = 30,
-#     progress_callback: Optional[Callable] = None,
-# ) -> Dict:
-#     """
-#     Scrape reviews for a single Google Maps place URL.
-
-#     Matches the logic of the original Unified_Review_Scrape_Engine:
-#       1. Reload URL with &view=reviews&sort=1 to open the reviews panel
-#       2. Click the "Sort" button and select "Newest" so reviews are
-#          ordered newest-first — required for the days_back cutoff to work
-#       3. Scroll and collect review cards until the cutoff date is passed
-
-#     Returns dict:
-#     {
-#         "business_details": {...},
-#         "reviews": [{"author", "rating", "date", "text"}, ...],
-#         "error": None | str
-#     }
-
-#     progress_callback(current, total, status_text) — optional, called periodically.
-#     """
-#     driver = None
-#     result = {"business_details": {}, "reviews": [], "error": None}
-
-#     try:
-#         driver = init_driver()
-#         logger.info(f"[REVIEW SCRAPER] Loading: {url}")
-
-#         driver.get(url)
-#         time.sleep(4)
-
-#         result["business_details"] = extract_business_details(driver)
-
-#         if progress_callback:
-#             progress_callback(0, max_reviews, f"Loaded {result['business_details'].get('name', 'place')}")
-
-#         # Step 1 — Navigate to reviews via URL param + reload
-#         current_url = driver.current_url
-#         if "view=reviews" not in current_url:
-#             glue = "&" if "?" in current_url else "?"
-#             driver.get(f"{current_url}{glue}hl=en&view=reviews&sort=1")
-#             time.sleep(4)
-
-#         # Find scrollable feed
-#         scrollable = None
-#         for sel in [
-#             'div[role="feed"]',
-#             "div.m6QErb.DxyBCb.kA9KIf.dS8AEf",
-#             "div.m6QErb[aria-label]",
-#         ]:
-#             try:
-#                 el = WebDriverWait(driver, 5).until(
-#                     EC.presence_of_element_located((By.CSS_SELECTOR, sel))
-#                 )
-#                 if el.is_displayed() and driver.execute_script(
-#                     "return arguments[0].scrollHeight > arguments[0].clientHeight;", el
-#                 ):
-#                     scrollable = el
-#                     break
-#             except Exception:
-#                 continue
-
-#         # Step 2 — Click "Sort" then select "Newest"
-#         # This is required: without it, reviews load oldest/most-relevant
-#         # first and the days_back cutoff triggers immediately with 0 results.
-#         try:
-#             sort_button = None
-#             sort_selectors = [
-#                 '//button[contains(@aria-label, "Sort")]',
-#                 '//button[contains(., "Sort")]',
-#                 '//span[contains(text(), "Sort")]/ancestor::button',
-#             ]
-#             for sel in sort_selectors:
-#                 try:
-#                     elements = driver.find_elements(By.XPATH, sel)
-#                     for el in elements:
-#                         if el.is_displayed():
-#                             sort_button = el
-#                             break
-#                     if sort_button:
-#                         break
-#                 except Exception:
-#                     pass
-
-#             if sort_button:
-#                 driver.execute_script("arguments[0].click();", sort_button)
-#                 time.sleep(2)
-
-#                 newest_option = None
-#                 for sel in [
-#                     '//div[@role="menuitemradio" and contains(., "Newest")]',
-#                     '//div[@role="menuitem" and contains(., "Newest")]',
-#                 ]:
-#                     items = driver.find_elements(By.XPATH, sel)
-#                     if items:
-#                         newest_option = items[0]
-#                         break
-
-#                 if newest_option:
-#                     driver.execute_script("arguments[0].click();", newest_option)
-#                     logger.info("[REVIEW SCRAPER] Sorted by newest reviews")
-#                     time.sleep(3)
-#         except Exception as e:
-#             logger.warning(f"[REVIEW SCRAPER] Sort by newest failed: {e}")
-
-#         cutoff = datetime.datetime.now() - datetime.timedelta(days=days_back)
-#         reviews = []
-#         processed_ids = set()
-#         stale_count = 0
-        
-#         # Track the minimum date found globally across all processed items
-#         global_min_date_found = datetime.datetime.now()
-
-#         # Increased range headroom to allow deep scroll extraction loops
-#         for scroll_loop in range(120):
-#             # Expand "More" buttons to expose hidden review texts
-#             try:
-#                 for btn in driver.find_elements(By.CSS_SELECTOR, "button.w8nwRe")[:15]:
-#                     try:
-#                         if btn.is_displayed():
-#                             driver.execute_script("arguments[0].click();", btn)
-#                     except Exception:
-#                         pass
-#             except Exception:
-#                 pass
-
-#             # Extract review elements
-#             cards = driver.find_elements(By.CSS_SELECTOR, 'div.jftiEf[data-review-id]')
-#             if not cards:
-#                 for fb in ['div[data-review-id]', 'div.jftiEf', 'div[role="article"]']:
-#                     cards = driver.find_elements(By.CSS_SELECTOR, fb)
-#                     if cards:
-#                         break
-
-#             new_this_round = 0
-
-#             for card in cards:
-#                 if len(reviews) >= max_reviews:
-#                     break
-#                 try:
-#                     # Review ID - uniquely identity this card item
-#                     rev_id = card.get_attribute("data-review-id")
-                    
-#                     # Author Extraction
-#                     author = "Google User"
-#                     for sel in [".d4r55", "button.al6Kxe", ".TSUbDb"]:
-#                         try:
-#                             t = card.find_element(By.CSS_SELECTOR, sel).text.strip()
-#                             if t:
-#                                 author = t
-#                                 break
-#                         except Exception:
-#                             pass
-
-#                     # Date String Extraction
-#                     date_str = "Recent"
-#                     for sel in ["span.rsqaWe", ".rsqaWe"]:
-#                         try:
-#                             t = card.find_element(By.CSS_SELECTOR, sel).text.strip()
-#                             if t:
-#                                 date_str = t
-#                                 break
-#                         except Exception:
-#                             pass
-
-#                     # Text Content Extraction
-#                     review_text = ""
-#                     for sel in ["span.wiI7pd", "div.MyEned", ".wiI7pd"]:
-#                         try:
-#                             t = card.find_element(By.CSS_SELECTOR, sel).text.strip()
-#                             if t and t.upper() != "NEW":
-#                                 review_text = t
-#                                 break
-#                         except Exception:
-#                             pass
-#                     if not review_text:
-#                         review_text = "[Rating Only]"
-
-#                     if not rev_id:
-#                         rev_id = f"{author}_{date_str}_{hashlib.md5(review_text.encode()).hexdigest()[:8]}"
-
-#                     # FIX 1: Instantly skip cards we have already captured to eliminate duplicate processing
-#                     if rev_id in processed_ids:
-#                         continue
-
-#                     # Rating Extraction
-#                     rating = 5
-#                     for sel in ["span.kvMYJc", 'span[aria-label*="star"]']:
-#                         try:
-#                             aria = card.find_element(By.CSS_SELECTOR, sel).get_attribute("aria-label")
-#                             m = re.search(r"(\d+)", aria or "")
-#                             if m:
-#                                 rating = int(m.group(1))
-#                                 break
-#                         except Exception:
-#                             pass
-
-#                     # Parse date and log chronological progress globally
-#                     parsed_date = parse_relative_date(date_str)
-#                     if parsed_date < global_min_date_found:
-#                         global_min_date_found = parsed_date
-
-#                     # Only filter items into the payload if they match the time criteria
-#                     if parsed_date >= cutoff:
-#                         reviews.append({"author": author, "rating": rating, "date": date_str, "text": review_text})
-                    
-#                     processed_ids.add(rev_id)
-#                     new_this_round += 1
-
-#                     if progress_callback:
-#                         progress_callback(len(reviews), max_reviews, f"Scraped {len(reviews)} reviews...")
-
-#                 except StaleElementReferenceException:
-#                     continue
-#                 except Exception as e:
-#                     logger.debug(f"[REVIEW SCRAPER] Card parse error: {e}")
-#                     continue
-
-#             # FIX 2: Break only if our global chronological tracker has completely passed the time threshold
-#             if global_min_date_found < cutoff:
-#                 logger.info(f"[REVIEW SCRAPER] Cleanly verified all reviews within {days_back}-day boundary. Exiting.")
-#                 break
-
-#             if len(reviews) >= max_reviews:
-#                 break
-
-#             # FIX 3: Maximized Infinite Scroll execution handling against the feed panel
-#             if scrollable:
-#                 try:
-#                     prev_scroll = driver.execute_script("return arguments[0].scrollTop", scrollable)
-#                     # Scroll to the absolute maximum bottom bounds of the panel
-#                     driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", scrollable)
-#                     time.sleep(random.uniform(2.5, 3.5))
-#                     new_scroll = driver.execute_script("return arguments[0].scrollTop", scrollable)
-                    
-#                     if new_scroll <= prev_scroll and new_this_round == 0:
-#                         stale_count += 1
-#                     else:
-#                         stale_count = 0
-#                 except Exception:
-#                     stale_count += 1
-#             else:
-#                 prev_h = driver.execute_script("return document.documentElement.scrollHeight")
-#                 driver.execute_script("window.scrollTo(0, document.documentElement.scrollHeight);")
-#                 time.sleep(2.5)
-#                 new_h = driver.execute_script("return document.documentElement.scrollHeight")
-#                 if new_h == prev_h and new_this_round == 0:
-#                     stale_count += 1
-#                 else:
-#                     stale_count = 0
-
-#             # Safe headroom brake to prevent infinite cycles if internet drops or feed terminates
-#             if stale_count >= 12:
-#                 logger.info("[REVIEW SCRAPER] Feed end reached or scrolling stalled.")
-#                 break
-
-#         # cutoff = datetime.datetime.now() - datetime.timedelta(days=days_back)
-#         # reviews = []
-#         # processed_ids = set()
-#         # stale_count = 0
-#         # consecutive_oob = 0
-
-#         # for scroll_loop in range(60):
-#         #     # Expand "More" buttons
-#         #     try:
-#         #         for btn in driver.find_elements(By.CSS_SELECTOR, "button.w8nwRe")[:10]:
-#         #             try:
-#         #                 if btn.is_displayed():
-#         #                     driver.execute_script("arguments[0].click();", btn)
-#         #             except Exception:
-#         #                 pass
-#         #     except Exception:
-#         #         pass
-
-#         #     # Extract cards
-#         #     cards = driver.find_elements(By.CSS_SELECTOR, 'div.jftiEf[data-review-id]')
-#         #     if not cards:
-#         #         for fb in ['div[data-review-id]', 'div.jftiEf', 'div[role="article"]']:
-#         #             cards = driver.find_elements(By.CSS_SELECTOR, fb)
-#         #             if cards:
-#         #                 break
-
-#         #     new_this_round = 0
-#         #     oob_this_round = 0
-
-#         #     for idx, card in enumerate(cards):
-#         #         if len(reviews) >= max_reviews:
-#         #             break
-#         #         try:
-#         #             # Author
-#         #             author = "Google User"
-#         #             for sel in [".d4r55", "button.al6Kxe", ".TSUbDb"]:
-#         #                 try:
-#         #                     t = card.find_element(By.CSS_SELECTOR, sel).text.strip()
-#         #                     if t:
-#         #                         author = t
-#         #                         break
-#         #                 except Exception:
-#         #                     pass
-
-#         #             # Date
-#         #             date_str = "Recent"
-#         #             for sel in ["span.rsqaWe", ".rsqaWe"]:
-#         #                 try:
-#         #                     t = card.find_element(By.CSS_SELECTOR, sel).text.strip()
-#         #                     if t:
-#         #                         date_str = t
-#         #                         break
-#         #                 except Exception:
-#         #                     pass
-
-#         #             # Text
-#         #             review_text = ""
-#         #             for sel in ["span.wiI7pd", "div.MyEned", ".wiI7pd"]:
-#         #                 try:
-#         #                     t = card.find_element(By.CSS_SELECTOR, sel).text.strip()
-#         #                     if t and t.upper() != "NEW":
-#         #                         review_text = t
-#         #                         break
-#         #                 except Exception:
-#         #                     pass
-#         #             if not review_text:
-#         #                 review_text = "[Rating Only]"
-
-#         #             # Review ID
-#         #             rev_id = card.get_attribute("data-review-id") or \
-#         #                 f"{author}_{date_str}_{hashlib.md5(review_text.encode()).hexdigest()[:8]}"
-#         #             if rev_id in processed_ids:
-#         #                 continue
-
-#         #             # Rating
-#         #             rating = 5
-#         #             for sel in ["span.kvMYJc", 'span[aria-label*="star"]']:
-#         #                 try:
-#         #                     aria = card.find_element(By.CSS_SELECTOR, sel).get_attribute("aria-label")
-#         #                     m = re.search(r"(\d+)", aria or "")
-#         #                     if m:
-#         #                         rating = int(m.group(1))
-#         #                         break
-#         #                 except Exception:
-#         #                     pass
-
-#         #             parsed_date = parse_relative_date(date_str)
-#         #             if parsed_date < cutoff:
-#         #                 oob_this_round += 1
-#         #                 continue
-
-#         #             reviews.append({"author": author, "rating": rating, "date": date_str, "text": review_text})
-#         #             processed_ids.add(rev_id)
-#         #             new_this_round += 1
-#         #             consecutive_oob = 0
-
-#         #             if progress_callback:
-#         #                 progress_callback(len(reviews), max_reviews, f"Scraped {len(reviews)} reviews...")
-
-#         #         except StaleElementReferenceException:
-#         #             continue
-#         #         except Exception as e:
-#         #             logger.debug(f"[REVIEW SCRAPER] Card parse error: {e}")
-#         #             continue
-
-#         #     if oob_this_round > 0 and new_this_round == 0:
-#         #         consecutive_oob += 1
-#         #     else:
-#         #         consecutive_oob = 0
-#         #     if consecutive_oob >= 5:
-#         #         logger.info(f"[REVIEW SCRAPER] Hit {days_back}-day cutoff — stopping")
-#         #         break
-
-#         #     if len(reviews) >= max_reviews:
-#         #         break
-
-#         #     # Scroll
-#         #     if scrollable:
-#         #         try:
-#         #             prev_scroll = driver.execute_script("return arguments[0].scrollTop", scrollable)
-#         #             driver.execute_script("arguments[0].scrollBy(0, 3000);", scrollable)
-#         #             time.sleep(2.5)
-#         #             new_scroll = driver.execute_script("return arguments[0].scrollTop", scrollable)
-#         #             if new_scroll <= prev_scroll:
-#         #                 stale_count += 1
-#         #             else:
-#         #                 stale_count = 0
-#         #         except Exception:
-#         #             stale_count += 1
-#         #     else:
-#         #         prev_h = driver.execute_script("return document.documentElement.scrollHeight")
-#         #         driver.execute_script("window.scrollTo(0, document.documentElement.scrollHeight);")
-#         #         time.sleep(2.5)
-#         #         new_h = driver.execute_script("return document.documentElement.scrollHeight")
-#         #         if new_h == prev_h and new_this_round == 0:
-#         #             stale_count += 1
-#         #         else:
-#         #             stale_count = 0
-
-#         #     if stale_count >= 8:
-#         #         break
-
-#         # result["reviews"] = reviews
-#         # logger.info(f"[REVIEW SCRAPER] Done — scraped {len(reviews)} reviews for {result['business_details'].get('name')}")
-
-#     except Exception as e:
-#         result["error"] = str(e)
-#         logger.error(f"[REVIEW SCRAPER] Fatal error for {url}: {e}")
-#     finally:
-#         if driver:
-#             driver.quit()
-
-#     return result

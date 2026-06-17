@@ -315,11 +315,39 @@ const App = () => {
     );
   }
 
+  // if (showCompetitorAnalysis) {
+  //   return (
+  //     <CompetitorAnalysis
+  //       baseUrl={BASE}
+  //       onBack={() => setShowCompetitorAnalysis(false)}
+  //       keyword={keyword}
+  //       city={placeCity}
+  //       country={placeCountry}
+  //       radiusKm={radiusKm}
+  //       establishmentName={placeName}
+  //     />
+  //   );
+  // }
+
   if (showCompetitorAnalysis) {
     return (
       <CompetitorAnalysis
         baseUrl={BASE}
-        onBack={() => setShowCompetitorAnalysis(false)}
+        onBack={() => {
+          setShowCompetitorAnalysis(false);
+          setKeyword("");
+          setSelectedReportType("");
+          setPlaceName("");
+          setPlaceCity("");
+          setPlaceCountry("");
+          setRadiusKm(5);
+          setTaskId(null);
+          setProgress(0);
+          setResults([]);
+          setIsRunning(false);
+          setSearchComplete(false);
+          setSearchPayload(null);
+        }}
         keyword={keyword}
         city={placeCity}
         country={placeCountry}

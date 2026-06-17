@@ -9,6 +9,7 @@ import time
 import random
 import re
 import logging
+import urllib.parse
 from typing import List, Dict, Optional, Callable
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -59,18 +60,8 @@ def search_google_maps_competitors(
 ) -> List[Dict]:
     """
     Search Google Maps for businesses matching keyword in city.
-
-    Selectors verified against Google Maps HTML June 2026:
-      feed container : div.m6QErb[role="feed"]
-      place card     : div.Nv2PK (role="article")
-      place link/url : a.hfpxzc  (href contains /maps/place/)
-      name           : div.qBF1Pd
-      rating         : span.MW4etd
-      review count   : span.UY7F9
-      address line   : div.W4Efsd > div.W4Efsd > span > span (second W4Efsd block)
-
-    Returns list of dicts with keys:
-        name, address, rating, reviews, url, selected
+    Scrolls progressively using small intervals to reliably trigger AJAX loads,
+    continuing until the limit is matched or Google specifies no more listings exist.
     """
     driver = None
     results = []
@@ -79,9 +70,7 @@ def search_google_maps_competitors(
     try:
         driver = init_driver()
 
-        # Search URL — "100 cafe near me" style search scoped to city
         query = f"{keyword} in {city}"
-        import urllib.parse
         encoded = urllib.parse.quote_plus(query)
         search_url = f"https://www.google.com/maps/search/{encoded}"
 
@@ -101,7 +90,7 @@ def search_google_maps_competitors(
 
         time.sleep(2)
 
-        # Get feed container for scrolling
+        # Get feed container for scrolling operations
         try:
             feed = driver.find_element(By.CSS_SELECTOR, "div.m6QErb[role='feed']")
         except NoSuchElementException:
@@ -109,20 +98,29 @@ def search_google_maps_competitors(
             return results
 
         scroll_attempts = 0
-        max_scroll_attempts = 45  # Increased headroom to outlast heavy container rendering lags
+        max_scroll_attempts = 35  
         
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
-            # Capture the layout metrics before executing the scroll
+            # Capture layout height prior to structural moving actions
             last_height = driver.execute_script("return arguments[0].scrollHeight", feed)
             
-            # 1. Force structural scrolling manipulation deep into the feed window
+            # FIX 1: Progressive Human-Like Scrolling Sequence
+            # Divides current height into 3 segments, executing scrolling steps incrementally.
+            # This triggers Google's scroll listeners far more reliably than an instantaneous jump.
+            for scroll_step in range(3):
+                driver.execute_script(
+                    f"arguments[0].scrollBy(0, {int(last_height / 3)});", feed
+                )
+                time.sleep(random.uniform(0.6, 1.0))
+                
+            # Bring viewport explicitly down to absolute container floor baseline
             driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
-            time.sleep(random.uniform(2.0, 3.0)) # Stable throttle signature
+            time.sleep(random.uniform(2.0, 3.0)) 
             
-            # Check if the container actually grew or if it's waiting for items to load
+            # Check if the container grew or remained unchanged
             new_height = driver.execute_script("return arguments[0].scrollHeight", feed)
             
-            # 2. Extract and parse all matching cards currently loaded in the DOM tree
+            # Extract and parse matching elements currently visible inside DOM layout
             cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
             prev_count = len(results)
             
@@ -130,20 +128,20 @@ def search_google_maps_competitors(
                 if len(results) >= limit:
                     break
                 try:
-                    # URL — from the anchor tag
+                    # URL Extraction
                     try:
                         anchor = card.find_element(By.CSS_SELECTOR, "a.hfpxzc")
                         url = anchor.get_attribute("href") or ""
                     except NoSuchElementException:
                         url = ""
 
-                    # Skip duplicates
+                    # Skip duplicate entries
                     if url and url in seen_urls:
                         continue
                     if url:
                         seen_urls.add(url)
 
-                    # Name
+                    # Name Extraction
                     try:
                         name = card.find_element(By.CSS_SELECTOR, "div.qBF1Pd").text.strip()
                     except NoSuchElementException:
@@ -152,21 +150,21 @@ def search_google_maps_competitors(
                     if not name or name == "Unknown":
                         continue
 
-                    # Rating
+                    # Rating Extraction
                     try:
                         rating_text = card.find_element(By.CSS_SELECTOR, "span.MW4etd").text.strip()
                         rating = float(rating_text) if rating_text else None
                     except (NoSuchElementException, ValueError):
                         rating = None
 
-                    # Review count
+                    # Review Count Extraction
                     try:
                         review_text = card.find_element(By.CSS_SELECTOR, "span.UY7F9").text.strip()
                         review_count = int(re.sub(r"[^\d]", "", review_text))
                     except (NoSuchElementException, ValueError):
                         review_count = 0
 
-                    # Address — second W4Efsd block inside the card
+                    # Address Extraction
                     try:
                         address_spans = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd span span")
                         address = address_spans[1].text.strip() if len(address_spans) > 1 else ""
@@ -191,113 +189,22 @@ def search_google_maps_competitors(
                     logger.warning(f"[SCRAPER] Card parse error: {e}")
                     continue
 
-            # 3. Dynamic adjustment check
+            # Check if execution stalled
             if len(results) == prev_count and new_height == last_height:
-                # If neither the height changed nor new entries appended, increment stall count
                 scroll_attempts += 1
                 logger.info(f"[SCRAPER] Container pending update (Stall cycle {scroll_attempts}/{max_scroll_attempts})")
                 
-                # Check for the hard boundary text element to prevent endless loops at small cities
-                source_html = driver.page_source
-                if "You've reached the end of the list" in source_html:
+                # FIX 2: Case-Insensitive Multi-String Boundary Termination Check
+                source_html = driver.page_source.lower()
+                if (
+                    "you've reached the end of the list" in source_html 
+                    or "no more results" in source_html
+                ):
                     logger.info("[SCRAPER] Hard endpoint reached — Google Maps reports list end boundary.")
                     break
             else:
-                # Reset counter as long as progress is being made
+                # Reset instantly if items were scraped or structural growth occurred
                 scroll_attempts = 0
-        # stale_count = 0
-        # max_stale = 25
-
-        # while len(results) < limit and stale_count < max_stale:
-        #     prev_count = len(results)
-
-        #     # Scroll feed down
-        #     driver.execute_script(
-        #         "arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed
-        #     )
-        #     time.sleep(random.uniform(2.5, 3.5))
-
-        #     # Extract all visible place cards
-        #     cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
-
-        #     for card in cards:
-        #         if len(results) >= limit:
-        #             break
-        #         try:
-        #             # URL — from the anchor tag
-        #             try:
-        #                 anchor = card.find_element(By.CSS_SELECTOR, "a.hfpxzc")
-        #                 url = anchor.get_attribute("href") or ""
-        #             except NoSuchElementException:
-        #                 url = ""
-
-        #             # Skip duplicates
-        #             if url and url in seen_urls:
-        #                 continue
-        #             if url:
-        #                 seen_urls.add(url)
-
-        #             # Name
-        #             try:
-        #                 name = card.find_element(By.CSS_SELECTOR, "div.qBF1Pd").text.strip()
-        #             except NoSuchElementException:
-        #                 name = "Unknown"
-
-        #             if not name or name == "Unknown":
-        #                 continue
-
-        #             # Rating
-        #             try:
-        #                 rating_text = card.find_element(
-        #                     By.CSS_SELECTOR, "span.MW4etd"
-        #                 ).text.strip()
-        #                 rating = float(rating_text) if rating_text else None
-        #             except (NoSuchElementException, ValueError):
-        #                 rating = None
-
-        #             # Review count — strip brackets and commas: "(1,367)" → 1367
-        #             try:
-        #                 review_text = card.find_element(
-        #                     By.CSS_SELECTOR, "span.UY7F9"
-        #                 ).text.strip()
-        #                 review_count = int(re.sub(r"[^\d]", "", review_text))
-        #             except (NoSuchElementException, ValueError):
-        #                 review_count = 0
-
-        #             # Address — second W4Efsd block inside the card
-        #             try:
-        #                 address_spans = card.find_elements(
-        #                     By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd span span"
-        #                 )
-        #                 address = address_spans[1].text.strip() if len(address_spans) > 1 else ""
-        #             except (NoSuchElementException, IndexError):
-        #                 address = ""
-
-        #             results.append({
-        #                 "name":     name,
-        #                 "address":  address,
-        #                 "rating":   rating,
-        #                 "reviews":  review_count,
-        #                 "url":      url,
-        #                 "selected": True,
-        #             })
-
-        #             if progress_callback:
-        #                 progress_callback(
-        #                     len(results), limit, f"Found {len(results)} places..."
-        #                 )
-
-        #         except StaleElementReferenceException:
-        #             continue
-        #         except Exception as e:
-        #             logger.warning(f"[SCRAPER] Card parse error: {e}")
-        #             continue
-
-        #     if len(results) == prev_count:
-        #         stale_count += 1
-        #         logger.info(f"[SCRAPER] No new results (stale {stale_count}/{max_stale})")
-        #     else:
-        #         stale_count = 0
 
         logger.info(f"[SCRAPER] Done — found {len(results)} places")
 
