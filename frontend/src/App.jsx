@@ -31,12 +31,9 @@ const BASE = API_BASE_URL.replace(/\/+$/, "");
 // Add new keywords here; they will appear in the dropdown automatically.
 // ---------------------------------------------------------------------------
 const KEYWORD_OPTIONS = [
-  // // Healthcare / Medical
-  // { group: "Healthcare", value: "Directors of Surgical Services" },
-  // { group: "Healthcare", value: "Chief Medical Officers" },
-  // { group: "Healthcare", value: "Hospital Administrators" },
-  // { group: "Healthcare", value: "Heads of Oncology" },
-  // { group: "Healthcare", value: "Directors of Nursing" },
+  // Healthcare / Medical
+  { group: "Healthcare", value: "Hospital" },
+  { group: "Healthcare", value: "Pharmacy" },
   // // Business / Corporate
   // { group: "Corporate", value: "Vice Presidents of Operations" },
   // { group: "Corporate", value: "Chief Financial Officers" },
