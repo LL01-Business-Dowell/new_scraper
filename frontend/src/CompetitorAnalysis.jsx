@@ -91,8 +91,13 @@ export default function CompetitorAnalysis({
     const startSearch = async (kw, ct, cntry, radius, estName) => {
         try {
             const resp = await axios.post(`${BASE}/api/competitors/search`, {
-                keyword: kw, city: ct, country: cntry,
-                establishment_name: estName, radius_km: radius, limit: 100,
+            keyword: kw,
+            city: ct,
+            country: cntry,
+            establishment_name: estName,
+            radius_km: radius,
+            limit: 100,
+            location_hint: ct && cntry ? `${ct}, ${cntry}` : ct || cntry || "",
             });
             setSearchTaskId(resp.data.task_id);
             setSearchPhase("searching");

@@ -414,12 +414,28 @@ const App = () => {
                   onSelect={(place) => {
                     if (place) {
                       setPlaceName(place.name || "");
-                      // display_name format: "Name, Street, City, State, Postcode, Country"
-                      // Last part is always country, city is usually 3rd or 4th from end
+
                       const parts = (place.display_name || "").split(",").map(s => s.trim());
                       const extractedCountry = parts[parts.length - 1] || "";
-                      // Skip postcode (numeric) when finding city
-                      const extractedCity = parts.slice(1).find(p => p && !/^\d+$/.test(p) && p !== extractedCountry) || "";
+
+                      // Remove country and postcodes from consideration
+                      const candidates = parts
+                        .slice(1)                          // drop the establishment name itself
+                        .filter(p =>
+                          p &&
+                          p !== extractedCountry &&
+                          !/^\d[\d\s-]*$/.test(p)          // drop pure postcodes
+                        );
+
+                      // Pick the part closest to the end that isn't a very short abbreviation
+                      // — this tends to be the district/city rather than the suburb.
+                      // We reverse and skip 1 (state) to land on city/district level.
+                      const reversed = [...candidates].reverse();
+                      const extractedCity =
+                        reversed[1] ||   // [0] = state/province, [1] = city/district
+                        reversed[0] ||
+                        "";
+
                       setPlaceCity(extractedCity);
                       setPlaceCountry(extractedCountry);
                     } else {
@@ -461,7 +477,7 @@ const App = () => {
                   />
                 </label>
               </div>
-              
+
               {/* Country dropdown — removed, location inferred from PlacePicker
               <div className="input-container">
                 <FaMapMarkerAlt className="input-icon" />

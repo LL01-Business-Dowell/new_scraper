@@ -29,6 +29,7 @@ class SearchRequest(BaseModel):
     city: str
     country: str
     establishment_name: str
+    location_hint: str = ""
     radius_km: float = 5.0
     limit: int = 100
 
@@ -69,6 +70,7 @@ async def search_competitors(request: SearchRequest, background_tasks: Backgroun
         task_id=task_id,
         keyword=request.keyword,
         city=request.city,
+        location_hint=request.location_hint,
         radius_km=request.radius_km,
         limit=request.limit,
         establishment_name=request.establishment_name,
@@ -77,7 +79,7 @@ async def search_competitors(request: SearchRequest, background_tasks: Backgroun
     return {"task_id": task_id}
 
 
-def _search_worker(task_id: str, keyword: str, city: str, radius_km: float, limit: int, establishment_name: str):
+def _search_worker(task_id: str, keyword: str, city: str, location_hint: str, radius_km: float, limit: int, establishment_name: str):
     """Background worker to search for competitors."""
     try:
         def progress_callback(current, total, status_text):
@@ -86,7 +88,7 @@ def _search_worker(task_id: str, keyword: str, city: str, radius_km: float, limi
         
         places = search_google_maps_competitors(
             keyword=keyword,
-            city=city,
+            city=location_hint or city,
             establishment_name=establishment_name,
             radius_km=radius_km,
             limit=limit,
