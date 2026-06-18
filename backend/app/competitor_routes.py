@@ -25,21 +25,21 @@ router = APIRouter(prefix="/api/competitors", tags=["competitors"])
 # In-memory task store for competitor analysis
 competitor_tasks = {}
 
-CRUD_BASE_URL       = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
-CRUD_API_KEY        = os.getenv("CRUD_API_KEY", "sk_test_4c55VUiETbO9dZ2q9lzXBOS-u0vQSCTxxM1QE5BkMks")
-DATABASE_ID         = os.getenv("DATABASE_ID", "6a3388322db12be41ed3bdeb")
-SEARCH_COLLECTION   = "competitor_searches"
+CRUD_BASE_URL = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
+CRUD_API_KEY = os.getenv("CRUD_API_KEY", "")
+SAMANTA_DATABASE_ID = os.getenv("SAMANTA_DATABASE_ID", "")
+SEARCH_COLLECTION = "competitor_searches"
 
 def _save_competitor_search(task_id, keyword, city, country, radius_km, establishment_name, places_found):
     """Save competitor search input to Datacube v2. Never raises — failure never blocks the search."""
-    if not CRUD_API_KEY or not DATABASE_ID:
+    if not CRUD_API_KEY or not SAMANTA_DATABASE_ID:
         logger.warning("[COMPETITOR] Datacube credentials not set — skipping save.")
         return
     try:
         resp = requests.post(
             f"{CRUD_BASE_URL.rstrip('/')}/crud/",
             json={
-                "database_id":     DATABASE_ID,
+                "database_id":     SAMANTA_DATABASE_ID,
                 "collection_name": SEARCH_COLLECTION,
                 "documents": [{
                     "task_id":            task_id,
