@@ -60,7 +60,7 @@ def search_google_maps_competitors(
 ) -> List[Dict]:
     """
     Search Google Maps for businesses matching keyword in city.
-    Scrolls progressively using small intervals to reliably trigger AJAX loads,
+    Scrolls progressively using absolute intervals to reliably trigger AJAX loads,
     continuing until the limit is matched or Google specifies no more listings exist.
     """
     driver = None
@@ -101,25 +101,43 @@ def search_google_maps_competitors(
         max_scroll_attempts = 35  
         
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
-            # Capture snapshot configurations
-            current_scroll_top = driver.execute_script("return arguments[0].scrollTop;", feed)
-            last_height = driver.execute_script("return arguments[0].scrollHeight", feed)
+            # Capture baseline tracking metrics from both potential scroll panels
+            current_scroll_top = driver.execute_script(
+                "return arguments[0].scrollTop || (arguments[0].parentElement ? arguments[0].parentElement.scrollTop : 0);", 
+                feed
+            )
+            last_height = driver.execute_script(
+                "return arguments[0].scrollHeight || (arguments[0].parentElement ? arguments[0].parentElement.scrollHeight : 0);", 
+                feed
+            )
             
-            # FIXED PROGRESSIVE HUMAN-LIKE SCROLLING
-            # We scroll to absolute positions in controlled increments of 800px instead of dividing total height.
+            # Progressive Human-Like Absolute Scrolling Strategy
+            # FIXED: We target both the feed element AND its parent container to ensure the layout engine catches the scroll context.
             for step in range(4):
                 next_scroll = current_scroll_top + ((step + 1) * 800)
                 if next_scroll > last_height:
                     next_scroll = last_height
-                driver.execute_script(f"arguments[0].scrollTo(0, {next_scroll});", feed)
+                
+                driver.execute_script(
+                    "arguments[0].scrollTo(0, arguments[1]); "
+                    "if(arguments[0].parentElement) { arguments[0].parentElement.scrollTo(0, arguments[1]); }", 
+                    feed, next_scroll
+                )
                 time.sleep(random.uniform(0.4, 0.7))
                 
             # Bring viewport explicitly down to absolute container floor baseline
-            driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
-            time.sleep(random.uniform(2.5, 3.5))  # Give AJAX calls a true breather to fetch results
+            driver.execute_script(
+                "arguments[0].scrollTo(0, arguments[0].scrollHeight); "
+                "if(arguments[0].parentElement) { arguments[0].parentElement.scrollTo(0, arguments[0].parentElement.scrollHeight); }", 
+                feed
+            )
+            time.sleep(random.uniform(2.5, 3.5)) 
             
             # Check if the container grew or remained unchanged
-            new_height = driver.execute_script("return arguments[0].scrollHeight", feed)
+            new_height = driver.execute_script(
+                "return arguments[0].scrollHeight || (arguments[0].parentElement ? arguments[0].parentElement.scrollHeight : 0);", 
+                feed
+            )
             
             # Extract and parse matching elements currently visible inside DOM layout
             cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
@@ -161,15 +179,24 @@ def search_google_maps_competitors(
                     # Review Count Extraction
                     try:
                         review_text = card.find_element(By.CSS_SELECTOR, "span.UY7F9").text.strip()
-                        review_count = int(re.sub(r"[^\d]", "", review_text))
+                        review_count = int(re.sub(r"[^\d]", "", review_text)) if review_text else 0
                     except (NoSuchElementException, ValueError):
                         review_count = 0
 
-                    # Address Extraction
+                    # Resilient Fallback Address Processing Logic
+                    address = ""
                     try:
-                        address_spans = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd span span")
-                        address = address_spans[1].text.strip() if len(address_spans) > 1 else ""
-                    except (NoSuchElementException, IndexError):
+                        detail_spans = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd > span")
+                        span_texts = [s.text.strip() for s in detail_spans if s.text.strip()]
+                        clean_elements = [txt for txt in span_texts if txt and txt != "·" and len(txt) > 2]
+                        
+                        if len(clean_elements) > 1:
+                            raw_address = clean_elements[-1]
+                            address = raw_address.lstrip("· ").strip()
+                        elif len(clean_elements) == 1:
+                            address = clean_elements[0]
+                    except Exception as addr_err:
+                        logger.debug(f"[SCRAPER] Address array exception, falling back to empty text: {addr_err}")
                         address = ""
 
                     results.append({
@@ -196,13 +223,21 @@ def search_google_maps_competitors(
                 logger.info(f"[SCRAPER] Container pending update (Stall cycle {scroll_attempts}/{max_scroll_attempts})")
                 
                 # FIXED NUDGE STRATEGY:
-                # Scroll up slightly by 300px to wake up the virtual list dynamic tracking handler
-                driver.execute_script("arguments[0].scrollBy(0, -300);", feed)
+                # Displace both containers upward slightly, then snap them down to break structural UI freezes.
+                driver.execute_script(
+                    "arguments[0].scrollBy(0, -300); "
+                    "if(arguments[0].parentElement) { arguments[0].parentElement.scrollBy(0, -300); }", 
+                    feed
+                )
                 time.sleep(0.5)
-                driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
+                driver.execute_script(
+                    "arguments[0].scrollTo(0, arguments[0].scrollHeight); "
+                    "if(arguments[0].parentElement) { arguments[0].parentElement.scrollTo(0, arguments[0].parentElement.scrollHeight); }", 
+                    feed
+                )
                 time.sleep(1.5)
 
-                # Target selector check using element targeting instead of full page DOM serialization
+                # Native endpoint tracking by targeted element checking rather than massive DOM serialization
                 try:
                     end_banner = driver.find_element(By.CSS_SELECTOR, "span.HlvSq")
                     if end_banner and end_banner.is_displayed():
