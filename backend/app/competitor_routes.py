@@ -12,6 +12,9 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 import requests
 
+import datetime
+import os
+
 from .google_maps_scraper import search_google_maps_competitors
 from .swot_analyzer import analyze_batch_swot
 
@@ -22,6 +25,45 @@ router = APIRouter(prefix="/api/competitors", tags=["competitors"])
 # In-memory task store for competitor analysis
 competitor_tasks = {}
 
+CRUD_BASE_URL       = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
+CRUD_API_KEY        = os.getenv("CRUD_API_KEY", "sk_test_4c55VUiETbO9dZ2q9lzXBOS-u0vQSCTxxM1QE5BkMks")
+DATABASE_ID         = os.getenv("DATABASE_ID", "6a3388322db12be41ed3bdeb")
+SEARCH_COLLECTION   = "competitor_searches"
+
+def _save_competitor_search(task_id, keyword, city, country, radius_km, establishment_name, places_found):
+    """Save competitor search input to Datacube v2. Never raises — failure never blocks the search."""
+    if not CRUD_API_KEY or not DATABASE_ID:
+        logger.warning("[COMPETITOR] Datacube credentials not set — skipping save.")
+        return
+    try:
+        resp = requests.post(
+            f"{CRUD_BASE_URL.rstrip('/')}/crud/",
+            json={
+                "database_id":     DATABASE_ID,
+                "collection_name": SEARCH_COLLECTION,
+                "documents": [{
+                    "task_id":            task_id,
+                    "keyword":            keyword,
+                    "city":               city,
+                    "country":            country,
+                    "radius_km":          radius_km,
+                    "establishment_name": establishment_name,
+                    "places_found":       places_found,
+                    "created_at":         datetime.datetime.utcnow().isoformat() + "Z",
+                }],
+            },
+            headers={
+                "Content-Type":  "application/json",
+                "Authorization": f"Api-Key {CRUD_API_KEY}",
+            },
+            timeout=10,
+        )
+        if resp.status_code in (200, 201):
+            logger.info(f"[COMPETITOR] Search saved to Datacube — task_id={task_id} keyword={keyword} city={city}")
+        else:
+            logger.warning(f"[COMPETITOR] Datacube save failed {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.error(f"[COMPETITOR] Datacube save error: {e}")
 
 class SearchRequest(BaseModel):
     """Request to search for competitors on Google Maps."""
@@ -70,6 +112,7 @@ async def search_competitors(request: SearchRequest, background_tasks: Backgroun
         task_id=task_id,
         keyword=request.keyword,
         city=request.city,
+        country=request.country,
         location_hint=request.location_hint,
         radius_km=request.radius_km,
         limit=request.limit,
@@ -79,7 +122,7 @@ async def search_competitors(request: SearchRequest, background_tasks: Backgroun
     return {"task_id": task_id}
 
 
-def _search_worker(task_id: str, keyword: str, city: str, location_hint: str, radius_km: float, limit: int, establishment_name: str):
+def _search_worker(task_id: str, keyword: str, city: str, country: str, location_hint: str, radius_km: float, limit: int, establishment_name: str):
     """Background worker to search for competitors."""
     try:
         def progress_callback(current, total, status_text):
@@ -113,6 +156,16 @@ def _search_worker(task_id: str, keyword: str, city: str, location_hint: str, ra
         competitor_tasks[task_id]["status_message"] = f"Found {len(places)} places. Please review and approve."
         
         logger.info(f"[COMPETITOR SEARCH] task_id={task_id} completed. Found {len(places)} places.")
+
+        _save_competitor_search(
+            task_id=task_id,
+            keyword=keyword,
+            city=city,
+            country=country,          
+            radius_km=radius_km,
+            establishment_name=establishment_name,
+            places_found=len(places),
+        )
         
     except Exception as e:
         logger.error(f"[COMPETITOR SEARCH] task_id={task_id} failed: {str(e)}")
