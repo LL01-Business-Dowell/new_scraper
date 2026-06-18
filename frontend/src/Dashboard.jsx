@@ -168,7 +168,7 @@ export default function Dashboard() {
                 background: "linear-gradient(to right, #a78bfa, #818cf8)",
                 WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
               }}>
-                DoWell Samanta Scraper
+                DoWell Samanta AI
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
@@ -176,9 +176,9 @@ export default function Dashboard() {
                 <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 800, ...gradientText }}>
                   Search Analytics
                 </h1>
-                <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "#6b7280" }}>
+                {/* <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "#6b7280" }}>
                   All competitor searches saved to Datacube
-                </p>
+                </p> */}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {lastUpdated && (
@@ -209,7 +209,7 @@ export default function Dashboard() {
           )}
 
           {/* ── KPI tiles ──────────────────────────────────────────────── */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14, marginBottom: 24 }}>
+          {/* <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 14, marginBottom: 24 }}>
             {[
               { label: "Total Searches",    value: totalSearches,         color: "#a78bfa", icon: <FaSearch /> },
               { label: "Unique Keywords",   value: uniqueKeywords.length, color: "#3b82f6", icon: <FaChartBar /> },
@@ -226,7 +226,7 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
-          </div>
+          </div> */}
 
           {/* ── Activity timeline ───────────────────────────────────────── */}
           <div style={{ ...card, marginBottom: 20 }}>
@@ -267,7 +267,7 @@ export default function Dashboard() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
 
             {/* Top Keywords */}
-            <div style={{ ...card }}>
+            {/* <div style={{ ...card }}>
               <p style={{ ...label, marginBottom: 16 }}>Top Keywords</p>
               {topKeywords.length === 0 ? (
                 <p style={{ color: "#4b5563", fontSize: "0.82rem" }}>No data yet</p>
@@ -287,10 +287,10 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-            </div>
+            </div> */}
 
             {/* Top Cities */}
-            <div style={{ ...card }}>
+            {/* <div style={{ ...card }}>
               <p style={{ ...label, marginBottom: 16 }}>Top Cities</p>
               {topCities.length === 0 ? (
                 <p style={{ color: "#4b5563", fontSize: "0.82rem" }}>No data yet</p>
@@ -310,7 +310,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-            </div>
+            </div> */}
           </div>
 
           {/* ── Recent searches table ────────────────────────────────────── */}
