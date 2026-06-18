@@ -21,6 +21,8 @@ import PlacePicker from "./PlacePicker";
 import CompetitorAnalysis from "./CompetitorAnalysis";
 import "./App.css";
 
+import Dashboard from "./Dashboard";
+
 // Normalise base URL — strip trailing slash once
 const BASE = API_BASE_URL.replace(/\/+$/, "");
 
@@ -303,6 +305,10 @@ const App = () => {
         baseUrl={BASE}
       />
     );
+  }
+
+  if (window.location.pathname === "/dashboard") {
+    return <Dashboard />;
   }
 
   // Navigate to CsvProcessor page for By CSV mode

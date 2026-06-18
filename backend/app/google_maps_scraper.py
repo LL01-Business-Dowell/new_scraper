@@ -99,12 +99,18 @@ def search_google_maps_competitors(
             return results
 
         scroll_attempts = 0
-        max_scroll_attempts = 45  
+        max_scroll_attempts = 25 
+        max_total_scrolls = 120 
         
         actions = ActionChains(driver)
         scroll_origin = ScrollOrigin.from_element(feed)
 
+        total_scrolls = 0
+        max_stale = 25
+        max_total = 120
+
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
+            total_scrolls += 1
             prev_count = len(results)
             
             # Read browser dimensions before moving
@@ -113,11 +119,11 @@ def search_google_maps_competitors(
             logger.info(f"[DEBUG] Pre-scroll metrics -> Top: {js_scroll_top}px, Full Height: {js_scroll_height}px")
 
             logger.info("[DEBUG] Executing physical mouse wheel actions...")
-            for i in range(5):
-                actions.scroll_from_origin(scroll_origin, 0, 750).perform()
-                time.sleep(random.uniform(0.5, 0.8))
+            for i in range(8):
+                actions.scroll_from_origin(scroll_origin, 0, 1200).perform()
+                time.sleep(random.uniform(0.3, 0.5))
                 
-            time.sleep(random.uniform(2.5, 3.5)) 
+            time.sleep(random.uniform(1.2, 1.8)) 
             
             # Post-scroll sizing evaluation
             post_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
@@ -205,9 +211,9 @@ def search_google_maps_competitors(
                 logger.warning(f"[SCRAPER] Stall warning triggered! (Cycle {scroll_attempts}/{max_scroll_attempts}). Zero progress made.")
                 
                 logger.info("[DEBUG] Activating defensive recovery nudge sequence...")
-                actions.scroll_from_origin(scroll_origin, 0, -400).perform()
-                time.sleep(0.6)
-                actions.scroll_from_origin(scroll_origin, 0, 1000).perform()
+                actions.scroll_from_origin(scroll_origin, 0, -2000).perform()
+                time.sleep(0.8)
+                actions.scroll_from_origin(scroll_origin, 0, 3000).perform()
                 time.sleep(2.0)
 
                 try:
@@ -219,6 +225,15 @@ def search_google_maps_competitors(
                     pass
             else:
                 scroll_attempts = 0
+            try:
+                end_of_list = driver.find_elements(By.CSS_SELECTOR, "div.lXJj5c.Hk4XGb")
+                if end_of_list:
+                    spinner = driver.find_elements(By.CSS_SELECTOR, "div.lXJj5c .OBAKjf")
+                    if not spinner:
+                        logger.info("[SCRAPER] End of list spinner gone — stopping.")
+                        break
+            except Exception:
+                pass
 
         logger.info(f"[SCRAPER] Done — found {len(results)} places")
 
