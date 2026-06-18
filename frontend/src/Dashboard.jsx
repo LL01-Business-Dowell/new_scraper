@@ -142,7 +142,7 @@ export default function Dashboard() {
         <div className="gradient-overlay" /><div className="dot-pattern" />
       </div>
       <div className="content-container">
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "2.5rem 1.5rem" }}>
+        <div style={{ maxWidth: 1600, margin: "0 auto", padding: "2.5rem 1.5rem" }}>
 
           {/* ── Header ─────────────────────────────────────────────────── */}
           <div style={{ marginBottom: 28 }}>
@@ -231,7 +231,7 @@ export default function Dashboard() {
           {/* ── Activity timeline ───────────────────────────────────────── */}
           <div style={{ ...card, marginBottom: 20 }}>
             <p style={{ ...label, marginBottom: 16 }}>Activity — Last 14 Days</p>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 100 }}>
               {activityByDay.map(({ day, label: dayLabel, count }) => (
                 <div key={day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                   <div style={{ position: "relative", width: "100%", display: "flex", justifyContent: "center" }}>
@@ -242,7 +242,7 @@ export default function Dashboard() {
                       }}>{count}</span>
                     )}
                     <div style={{
-                      width: "100%", maxWidth: 28,
+                      width: "100%", maxWidth: 36,
                       height: Math.max((count / maxActivity) * 60, count > 0 ? 4 : 2),
                       background: count > 0
                         ? "linear-gradient(to top, #9333ea, #a78bfa)"
@@ -325,7 +325,7 @@ export default function Dashboard() {
             {/* Table header */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr 90px 80px 140px",
+              gridTemplateColumns: "2.5fr 1.5fr 1.5fr 90px 80px 140px",
               padding: "8px 12px",
               background: "#252B3E", borderRadius: "8px 8px 0 0",
               fontSize: "0.65rem", fontWeight: 700, color: "#6b7280",
@@ -349,7 +349,7 @@ export default function Dashboard() {
               ) : pageData.map((row, i) => (
                 <div key={row.task_id || i} style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr 90px 80px 140px",
+                  gridTemplateColumns: "2.5fr 1.5fr 1.5fr 90px 80px 140px",
                   padding: "10px 12px",
                   borderBottom: i < pageData.length - 1 ? "1px solid #1f2937" : "none",
                   alignItems: "center",
@@ -360,7 +360,7 @@ export default function Dashboard() {
                 >
                   <span style={{
                     fontSize: "0.82rem", color: "#f1f1f1", fontWeight: 500,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    lineHeight: 1.4, whiteSpace: "normal", wordBreak: "break-word"
                   }}>
                     {row.establishment_name || "—"}
                   </span>
