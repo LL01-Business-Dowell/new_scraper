@@ -25,7 +25,6 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 
-# Set logging level to see debug details in the terminal
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ def init_driver():
     )
     service = Service("/usr/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=options)
-    driver.execute_cdp_cmd(
+    driver.execute_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
         {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
     )
@@ -63,11 +62,14 @@ def search_google_maps_competitors(
     progress_callback: Optional[Callable] = None,
 ) -> List[Dict]:
     """
-    Search Google Maps for businesses matching keyword in city with deep logging.
+    Search Google Maps for businesses matching keyword in city.
+    Uses target tracking ids to survive local worker container drops.
     """
     driver = None
     results = []
-    seen_urls = set()
+    
+    # Track items using unique identifiers to prevent multi-worker index resetting
+    processed_place_ids = set()
 
     try:
         driver = init_driver()
@@ -76,18 +78,15 @@ def search_google_maps_competitors(
         encoded = urllib.parse.quote_plus(query)
         search_url = f"https://www.google.com/maps/search/{encoded}"
 
-        logger.info(f"[SCRAPER] Loading: {search_url}")
+        logger.info(f"[SCRAPER] Loading payload canvas target: {search_url}")
         driver.get(search_url)
 
         try:
             WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "div.m6QErb[role='feed']")
-                )
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div.m6QErb[role='feed']"))
             )
-            logger.info("[DEBUG] Found results feed container in DOM.")
         except TimeoutException:
-            logger.error("[SCRAPER] Results feed did not load within 20s")
+            logger.error("[SCRAPER] Results feed timeout.")
             return results
 
         time.sleep(2)
@@ -95,55 +94,46 @@ def search_google_maps_competitors(
         try:
             feed = driver.find_element(By.CSS_SELECTOR, "div.m6QErb[role='feed']")
         except NoSuchElementException:
-            logger.error("[SCRAPER] Could not find feed container")
+            logger.error("[SCRAPER] Missing main feed container framework element.")
             return results
 
         scroll_attempts = 0
-        max_scroll_attempts = 45  
+        max_scroll_attempts = 30  
         
         actions = ActionChains(driver)
         scroll_origin = ScrollOrigin.from_element(feed)
 
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
-            prev_count = len(results)
+            # Snapshot baseline loop metrics
+            initial_count = len(results)
             
-            # Read browser dimensions before moving
-            js_scroll_top = driver.execute_script("return arguments[0].scrollTop;", feed)
-            js_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
-            logger.info(f"[DEBUG] Pre-scroll metrics -> Top: {js_scroll_top}px, Full Height: {js_scroll_height}px")
-
-            logger.info("[DEBUG] Executing physical mouse wheel actions...")
-            for i in range(5):
-                actions.scroll_from_origin(scroll_origin, 0, 750).perform()
-                time.sleep(random.uniform(0.5, 0.8))
+            # Fire structural canvas wheel rotation events
+            for _ in range(4):
+                actions.scroll_from_origin(scroll_origin, 0, 850).perform()
+                time.sleep(random.uniform(0.4, 0.6))
                 
-            time.sleep(random.uniform(2.5, 3.5)) 
+            time.sleep(random.uniform(2.0, 3.0)) 
             
-            # Post-scroll sizing evaluation
-            post_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
-            logger.info(f"[DEBUG] Post-scroll height tracking -> Old: {js_scroll_height}px, New: {post_scroll_height}px")
-            
+            # Capture structural card components inside current viewport
             cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
-            logger.info(f"[DEBUG] DOM Scan: Located {len(cards)} matching card elements ('div.Nv2PK') in current view frame.")
             
-            parsed_this_loop = 0
-            duplicates_this_loop = 0
-
-            for index, card in enumerate(cards):
+            for card in cards:
                 if len(results) >= limit:
                     break
                 try:
+                    # FIX: Extract unique data attribute identifier to guarantee tracking integrity
+                    place_id = card.get_attribute("data-item-id") or ""
+                    
                     try:
                         anchor = card.find_element(By.CSS_SELECTOR, "a.hfpxzc")
                         url = anchor.get_attribute("href") or ""
                     except NoSuchElementException:
                         url = ""
 
-                    if url and url in seen_urls:
-                        duplicates_this_loop += 1
+                    # Fallback lookup verification key setup
+                    lookup_key = place_id if place_id else url
+                    if not lookup_key or lookup_key in processed_place_ids:
                         continue
-                    if url:
-                        seen_urls.add(url)
 
                     try:
                         name = card.find_element(By.CSS_SELECTOR, "div.qBF1Pd").text.strip()
@@ -175,9 +165,11 @@ def search_google_maps_competitors(
                             address = clean_elements[-1].lstrip("· ").strip()
                         elif len(clean_elements) == 1:
                             address = clean_elements[0]
-                    except Exception as addr_err:
+                    except Exception:
                         address = ""
 
+                    # Persistent assignment
+                    processed_place_ids.add(lookup_key)
                     results.append({
                         "name":     name,
                         "address":  address,
@@ -186,44 +178,40 @@ def search_google_maps_competitors(
                         "url":      url,
                         "selected": True,
                     })
-                    parsed_this_loop += 1
 
                     if progress_callback:
-                        progress_callback(len(results), limit, f"Found {len(results)} places...")
+                        progress_callback(len(results), limit, f"Collected {len(results)} matches.")
 
                 except StaleElementReferenceException:
-                    logger.debug(f"[DEBUG] Card item index {index} went stale during evaluation loop processing.")
                     continue
                 except Exception as e:
-                    logger.warning(f"[SCRAPER] Card parse error: {e}")
+                    logger.debug(f"[SCRAPER] Entry skip exception: {e}")
                     continue
 
-            logger.info(f"[DEBUG] Frame Processed: Scraped {parsed_this_loop} new items, skipped {duplicates_this_loop} duplicates. Total results: {len(results)}.")
-
-            if len(results) == prev_count:
+            # Stall mitigation handling
+            if len(results) == initial_count:
                 scroll_attempts += 1
-                logger.warning(f"[SCRAPER] Stall warning triggered! (Cycle {scroll_attempts}/{max_scroll_attempts}). Zero progress made.")
                 
-                logger.info("[DEBUG] Activating defensive recovery nudge sequence...")
-                actions.scroll_from_origin(scroll_origin, 0, -400).perform()
-                time.sleep(0.6)
-                actions.scroll_from_origin(scroll_origin, 0, 1000).perform()
-                time.sleep(2.0)
+                # Dynamic nudge displacement injection pattern
+                actions.scroll_from_origin(scroll_origin, 0, -350).perform()
+                time.sleep(0.5)
+                actions.scroll_from_origin(scroll_origin, 0, 900).perform()
+                time.sleep(1.5)
 
                 try:
                     end_banner = driver.find_element(By.CSS_SELECTOR, "span.HlvSq")
                     if end_banner and end_banner.is_displayed():
-                        logger.info("[SCRAPER] Hard end element parsed ('You've reached the end of the list'). Stopping execution cleanly.")
+                        logger.info("[SCRAPER] Natural end of list reached.")
                         break
                 except NoSuchElementException:
                     pass
             else:
                 scroll_attempts = 0
 
-        logger.info(f"[SCRAPER] Done — found {len(results)} places")
+        logger.info(f"[SCRAPER] Process completed successfully: saved {len(results)} items.")
 
     except Exception as e:
-        logger.error(f"[SCRAPER] Fatal error: {e}")
+        logger.error(f"[SCRAPER] Structural crash: {e}")
 
     finally:
         if driver:
