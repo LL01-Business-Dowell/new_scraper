@@ -25,6 +25,8 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 
+# Set logging level to see debug details in the terminal
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -61,9 +63,7 @@ def search_google_maps_competitors(
     progress_callback: Optional[Callable] = None,
 ) -> List[Dict]:
     """
-    Search Google Maps for businesses matching keyword in city.
-    Scrolls progressively using hardware ActionChains mouse wheel inputs to natively 
-    trigger AJAX payloads and break virtualization limits.
+    Search Google Maps for businesses matching keyword in city with deep logging.
     """
     driver = None
     results = []
@@ -79,20 +79,19 @@ def search_google_maps_competitors(
         logger.info(f"[SCRAPER] Loading: {search_url}")
         driver.get(search_url)
 
-        # Wait for the results feed to appear
         try:
             WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, "div.m6QErb[role='feed']")
                 )
             )
+            logger.info("[DEBUG] Found results feed container in DOM.")
         except TimeoutException:
             logger.error("[SCRAPER] Results feed did not load within 20s")
             return results
 
         time.sleep(2)
 
-        # Get feed container for scrolling operations
         try:
             feed = driver.find_element(By.CSS_SELECTOR, "div.m6QErb[role='feed']")
         except NoSuchElementException:
@@ -102,44 +101,50 @@ def search_google_maps_competitors(
         scroll_attempts = 0
         max_scroll_attempts = 45  
         
-        # Instantiate continuous browser Action Context
         actions = ActionChains(driver)
-        # Create an origin point directly inside the sidebar feed layout component
         scroll_origin = ScrollOrigin.from_element(feed)
 
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
             prev_count = len(results)
             
-            # PHYSICAL MOUSE SCROLL INPUTS
-            # Emulates continuous wheel turns directly over the targeted container element
-            for _ in range(5):
+            # Read browser dimensions before moving
+            js_scroll_top = driver.execute_script("return arguments[0].scrollTop;", feed)
+            js_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
+            logger.info(f"[DEBUG] Pre-scroll metrics -> Top: {js_scroll_top}px, Full Height: {js_scroll_height}px")
+
+            logger.info("[DEBUG] Executing physical mouse wheel actions...")
+            for i in range(5):
                 actions.scroll_from_origin(scroll_origin, 0, 750).perform()
                 time.sleep(random.uniform(0.5, 0.8))
                 
-            # Wait time for elements to load asynchronously over the network
             time.sleep(random.uniform(2.5, 3.5)) 
             
-            # Extract and parse matching elements currently visible inside DOM layout
-            cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
+            # Post-scroll sizing evaluation
+            post_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
+            logger.info(f"[DEBUG] Post-scroll height tracking -> Old: {js_scroll_height}px, New: {post_scroll_height}px")
             
-            for card in cards:
+            cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
+            logger.info(f"[DEBUG] DOM Scan: Located {len(cards)} matching card elements ('div.Nv2PK') in current view frame.")
+            
+            parsed_this_loop = 0
+            duplicates_this_loop = 0
+
+            for index, card in enumerate(cards):
                 if len(results) >= limit:
                     break
                 try:
-                    # URL Extraction
                     try:
                         anchor = card.find_element(By.CSS_SELECTOR, "a.hfpxzc")
                         url = anchor.get_attribute("href") or ""
                     except NoSuchElementException:
                         url = ""
 
-                    # Skip duplicate entries
                     if url and url in seen_urls:
+                        duplicates_this_loop += 1
                         continue
                     if url:
                         seen_urls.add(url)
 
-                    # Name Extraction
                     try:
                         name = card.find_element(By.CSS_SELECTOR, "div.qBF1Pd").text.strip()
                     except NoSuchElementException:
@@ -148,21 +153,18 @@ def search_google_maps_competitors(
                     if not name or name == "Unknown":
                         continue
 
-                    # Rating Extraction
                     try:
                         rating_text = card.find_element(By.CSS_SELECTOR, "span.MW4etd").text.strip()
                         rating = float(rating_text) if rating_text else None
                     except (NoSuchElementException, ValueError):
                         rating = None
 
-                    # Review Count Extraction
                     try:
                         review_text = card.find_element(By.CSS_SELECTOR, "span.UY7F9").text.strip()
                         review_count = int(re.sub(r"[^\d]", "", review_text)) if review_text else 0
                     except (NoSuchElementException, ValueError):
                         review_count = 0
 
-                    # Resilient Fallback Address Processing Logic
                     address = ""
                     try:
                         detail_spans = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd > span")
@@ -170,12 +172,10 @@ def search_google_maps_competitors(
                         clean_elements = [txt for txt in span_texts if txt and txt != "·" and len(txt) > 2]
                         
                         if len(clean_elements) > 1:
-                            raw_address = clean_elements[-1]
-                            address = raw_address.lstrip("· ").strip()
+                            address = clean_elements[-1].lstrip("· ").strip()
                         elif len(clean_elements) == 1:
                             address = clean_elements[0]
                     except Exception as addr_err:
-                        logger.debug(f"[SCRAPER] Address array exception, falling back to empty text: {addr_err}")
                         address = ""
 
                     results.append({
@@ -186,38 +186,38 @@ def search_google_maps_competitors(
                         "url":      url,
                         "selected": True,
                     })
+                    parsed_this_loop += 1
 
                     if progress_callback:
                         progress_callback(len(results), limit, f"Found {len(results)} places...")
 
                 except StaleElementReferenceException:
+                    logger.debug(f"[DEBUG] Card item index {index} went stale during evaluation loop processing.")
                     continue
                 except Exception as e:
                     logger.warning(f"[SCRAPER] Card parse error: {e}")
                     continue
 
-            # Check if execution stalled
+            logger.info(f"[DEBUG] Frame Processed: Scraped {parsed_this_loop} new items, skipped {duplicates_this_loop} duplicates. Total results: {len(results)}.")
+
             if len(results) == prev_count:
                 scroll_attempts += 1
-                logger.info(f"[SCRAPER] Container pending update (Stall cycle {scroll_attempts}/{max_scroll_attempts})")
+                logger.warning(f"[SCRAPER] Stall warning triggered! (Cycle {scroll_attempts}/{max_scroll_attempts}). Zero progress made.")
                 
-                # PHYSICAL NUDGE STRATEGY:
-                # Perform a slight backward mouse wheel pull up, then push down hard to break layout deadlocks.
+                logger.info("[DEBUG] Activating defensive recovery nudge sequence...")
                 actions.scroll_from_origin(scroll_origin, 0, -400).perform()
                 time.sleep(0.6)
                 actions.scroll_from_origin(scroll_origin, 0, 1000).perform()
                 time.sleep(2.0)
 
-                # Native endpoint tracking by targeted element checking
                 try:
                     end_banner = driver.find_element(By.CSS_SELECTOR, "span.HlvSq")
                     if end_banner and end_banner.is_displayed():
-                        logger.info("[SCRAPER] Hard endpoint reached via Maps End Banner element.")
+                        logger.info("[SCRAPER] Hard end element parsed ('You've reached the end of the list'). Stopping execution cleanly.")
                         break
                 except NoSuchElementException:
                     pass
             else:
-                # Reset instantly if tracking list progressed
                 scroll_attempts = 0
 
         logger.info(f"[SCRAPER] Done — found {len(results)} places")
