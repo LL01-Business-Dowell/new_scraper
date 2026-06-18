@@ -17,6 +17,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.actions.wheel_input import ScrollOrigin
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
@@ -60,8 +62,8 @@ def search_google_maps_competitors(
 ) -> List[Dict]:
     """
     Search Google Maps for businesses matching keyword in city.
-    Scrolls progressively using absolute intervals to reliably trigger AJAX loads,
-    continuing until the limit is matched or Google specifies no more listings exist.
+    Scrolls progressively using hardware ActionChains mouse wheel inputs to natively 
+    trigger AJAX payloads and break virtualization limits.
     """
     driver = None
     results = []
@@ -98,50 +100,27 @@ def search_google_maps_competitors(
             return results
 
         scroll_attempts = 0
-        max_scroll_attempts = 35  
+        max_scroll_attempts = 45  
         
+        # Instantiate continuous browser Action Context
+        actions = ActionChains(driver)
+        # Create an origin point directly inside the sidebar feed layout component
+        scroll_origin = ScrollOrigin.from_element(feed)
+
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
-            # Capture baseline tracking metrics from both potential scroll panels
-            current_scroll_top = driver.execute_script(
-                "return arguments[0].scrollTop || (arguments[0].parentElement ? arguments[0].parentElement.scrollTop : 0);", 
-                feed
-            )
-            last_height = driver.execute_script(
-                "return arguments[0].scrollHeight || (arguments[0].parentElement ? arguments[0].parentElement.scrollHeight : 0);", 
-                feed
-            )
+            prev_count = len(results)
             
-            # Progressive Human-Like Absolute Scrolling Strategy
-            # FIXED: We target both the feed element AND its parent container to ensure the layout engine catches the scroll context.
-            for step in range(4):
-                next_scroll = current_scroll_top + ((step + 1) * 800)
-                if next_scroll > last_height:
-                    next_scroll = last_height
+            # PHYSICAL MOUSE SCROLL INPUTS
+            # Emulates continuous wheel turns directly over the targeted container element
+            for _ in range(5):
+                actions.scroll_from_origin(scroll_origin, 0, 750).perform()
+                time.sleep(random.uniform(0.5, 0.8))
                 
-                driver.execute_script(
-                    "arguments[0].scrollTo(0, arguments[1]); "
-                    "if(arguments[0].parentElement) { arguments[0].parentElement.scrollTo(0, arguments[1]); }", 
-                    feed, next_scroll
-                )
-                time.sleep(random.uniform(0.4, 0.7))
-                
-            # Bring viewport explicitly down to absolute container floor baseline
-            driver.execute_script(
-                "arguments[0].scrollTo(0, arguments[0].scrollHeight); "
-                "if(arguments[0].parentElement) { arguments[0].parentElement.scrollTo(0, arguments[0].parentElement.scrollHeight); }", 
-                feed
-            )
+            # Wait time for elements to load asynchronously over the network
             time.sleep(random.uniform(2.5, 3.5)) 
-            
-            # Check if the container grew or remained unchanged
-            new_height = driver.execute_script(
-                "return arguments[0].scrollHeight || (arguments[0].parentElement ? arguments[0].parentElement.scrollHeight : 0);", 
-                feed
-            )
             
             # Extract and parse matching elements currently visible inside DOM layout
             cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
-            prev_count = len(results)
             
             for card in cards:
                 if len(results) >= limit:
@@ -218,26 +197,18 @@ def search_google_maps_competitors(
                     continue
 
             # Check if execution stalled
-            if len(results) == prev_count and new_height == last_height:
+            if len(results) == prev_count:
                 scroll_attempts += 1
                 logger.info(f"[SCRAPER] Container pending update (Stall cycle {scroll_attempts}/{max_scroll_attempts})")
                 
-                # FIXED NUDGE STRATEGY:
-                # Displace both containers upward slightly, then snap them down to break structural UI freezes.
-                driver.execute_script(
-                    "arguments[0].scrollBy(0, -300); "
-                    "if(arguments[0].parentElement) { arguments[0].parentElement.scrollBy(0, -300); }", 
-                    feed
-                )
-                time.sleep(0.5)
-                driver.execute_script(
-                    "arguments[0].scrollTo(0, arguments[0].scrollHeight); "
-                    "if(arguments[0].parentElement) { arguments[0].parentElement.scrollTo(0, arguments[0].parentElement.scrollHeight); }", 
-                    feed
-                )
-                time.sleep(1.5)
+                # PHYSICAL NUDGE STRATEGY:
+                # Perform a slight backward mouse wheel pull up, then push down hard to break layout deadlocks.
+                actions.scroll_from_origin(scroll_origin, 0, -400).perform()
+                time.sleep(0.6)
+                actions.scroll_from_origin(scroll_origin, 0, 1000).perform()
+                time.sleep(2.0)
 
-                # Native endpoint tracking by targeted element checking rather than massive DOM serialization
+                # Native endpoint tracking by targeted element checking
                 try:
                     end_banner = driver.find_element(By.CSS_SELECTOR, "span.HlvSq")
                     if end_banner and end_banner.is_displayed():
@@ -246,7 +217,7 @@ def search_google_maps_competitors(
                 except NoSuchElementException:
                     pass
             else:
-                # Reset instantly if items were scraped or structural growth occurred
+                # Reset instantly if tracking list progressed
                 scroll_attempts = 0
 
         logger.info(f"[SCRAPER] Done — found {len(results)} places")
