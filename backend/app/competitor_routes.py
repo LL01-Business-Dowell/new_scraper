@@ -255,6 +255,39 @@ def _analysis_worker(task_id: str, places: List[dict]):
         competitor_tasks[task_id]["error"] = str(e)
         competitor_tasks[task_id]["progress"] = 100
 
+@router.get("/dashboard")
+async def get_dashboard_data():
+    """
+    Returns all saved competitor searches from Datacube for the dashboard.
+    """
+    if not CRUD_API_KEY or not SAMANTA_DATABASE_ID:
+        raise HTTPException(status_code=503, detail="Datacube credentials not configured")
+    try:
+        resp = requests.get(
+            f"{CRUD_BASE_URL.rstrip('/')}/crud/",
+            params={
+                "database_id":     SAMANTA_DATABASE_ID,
+                "collection_name": SEARCH_COLLECTION,
+                "filters":         "{}",
+                "page":            1,
+                "page_size":       500,
+            },
+            headers={
+                "Content-Type":  "application/json",
+                "Authorization": f"Api-Key {CRUD_API_KEY}",
+            },
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            body = resp.json()
+            return {"searches": body.get("data", [])}
+        else:
+            logger.warning(f"[DASHBOARD] Datacube query failed {resp.status_code}: {resp.text[:200]}")
+            raise HTTPException(status_code=502, detail="Failed to fetch from Datacube")
+    except requests.RequestException as e:
+        logger.error(f"[DASHBOARD] Datacube error: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+    
 
 @router.get("/download-results/{task_id}")
 async def download_results(task_id: str, format: str = "json"):
