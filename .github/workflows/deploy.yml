@@ -49,6 +49,7 @@ jobs:
           ssh $DEPLOY_USER@$DEPLOY_HOST "cat > /home/SamantaScraper/.env" << EOF
           CRUD_API_KEY=${{ secrets.CRUD_API_KEY }}
           DATABASE_ID=${{ secrets.DATABASE_ID }}
+          SAMANTA_DATABASE_ID=${{ secrets.SAMANTA_DATABASE_ID }}
           GEMINI_KEY_1=${{ secrets.GEMINI_KEY_1 }}
           GEMINI_KEY_2=${{ secrets.GEMINI_KEY_2 }}
           GEMINI_KEY_3=${{ secrets.GEMINI_KEY_3 }}
