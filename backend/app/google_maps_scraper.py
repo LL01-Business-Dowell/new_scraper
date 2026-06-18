@@ -101,21 +101,22 @@ def search_google_maps_competitors(
         max_scroll_attempts = 35  
         
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
-            # Capture layout height prior to structural moving actions
+            # Capture snapshot configurations
+            current_scroll_top = driver.execute_script("return arguments[0].scrollTop;", feed)
             last_height = driver.execute_script("return arguments[0].scrollHeight", feed)
             
-            # FIX 1: Progressive Human-Like Scrolling Sequence
-            # Divides current height into 3 segments, executing scrolling steps incrementally.
-            # This triggers Google's scroll listeners far more reliably than an instantaneous jump.
-            for scroll_step in range(3):
-                driver.execute_script(
-                    f"arguments[0].scrollBy(0, {int(last_height / 3)});", feed
-                )
-                time.sleep(random.uniform(0.6, 1.0))
+            # FIXED PROGRESSIVE HUMAN-LIKE SCROLLING
+            # We scroll to absolute positions in controlled increments of 800px instead of dividing total height.
+            for step in range(4):
+                next_scroll = current_scroll_top + ((step + 1) * 800)
+                if next_scroll > last_height:
+                    next_scroll = last_height
+                driver.execute_script(f"arguments[0].scrollTo(0, {next_scroll});", feed)
+                time.sleep(random.uniform(0.4, 0.7))
                 
             # Bring viewport explicitly down to absolute container floor baseline
             driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
-            time.sleep(random.uniform(2.0, 3.0)) 
+            time.sleep(random.uniform(2.5, 3.5))  # Give AJAX calls a true breather to fetch results
             
             # Check if the container grew or remained unchanged
             new_height = driver.execute_script("return arguments[0].scrollHeight", feed)
@@ -194,14 +195,21 @@ def search_google_maps_competitors(
                 scroll_attempts += 1
                 logger.info(f"[SCRAPER] Container pending update (Stall cycle {scroll_attempts}/{max_scroll_attempts})")
                 
-                # FIX 2: Case-Insensitive Multi-String Boundary Termination Check
-                source_html = driver.page_source.lower()
-                if (
-                    "you've reached the end of the list" in source_html 
-                    or "no more results" in source_html
-                ):
-                    logger.info("[SCRAPER] Hard endpoint reached — Google Maps reports list end boundary.")
-                    break
+                # FIXED NUDGE STRATEGY:
+                # Scroll up slightly by 300px to wake up the virtual list dynamic tracking handler
+                driver.execute_script("arguments[0].scrollBy(0, -300);", feed)
+                time.sleep(0.5)
+                driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
+                time.sleep(1.5)
+
+                # Target selector check using element targeting instead of full page DOM serialization
+                try:
+                    end_banner = driver.find_element(By.CSS_SELECTOR, "span.HlvSq")
+                    if end_banner and end_banner.is_displayed():
+                        logger.info("[SCRAPER] Hard endpoint reached via Maps End Banner element.")
+                        break
+                except NoSuchElementException:
+                    pass
             else:
                 # Reset instantly if items were scraped or structural growth occurred
                 scroll_attempts = 0
