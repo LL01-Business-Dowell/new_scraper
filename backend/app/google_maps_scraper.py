@@ -191,6 +191,7 @@ def search_google_maps_competitors(
                         review_count = 0
 
                     address = ""
+                    location_info = ""
                     try:
                         detail_spans = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd > span")
                         span_texts = [s.text.strip() for s in detail_spans if s.text.strip()]
@@ -198,18 +199,29 @@ def search_google_maps_competitors(
                         
                         if len(clean_elements) > 1:
                             address = clean_elements[-1].lstrip("· ").strip()
+                            # Extract clean neighborhood/vicinity element safely for the frontend location badge
+                            location_info = clean_elements[-2].lstrip("· ").strip() if len(clean_elements) > 2 else clean_elements[0].lstrip("· ").strip()
                         elif len(clean_elements) == 1:
                             address = clean_elements[0]
+                            location_info = clean_elements[0]
                     except Exception as addr_err:
                         address = ""
+                        location_info = ""
+
+                    # Dynamically compute user establishment flag matching user input
+                    is_user_establishment = False
+                    if establishment_name and name.lower() == establishment_name.lower():
+                        is_user_establishment = True
 
                     results.append({
-                        "name":     name,
-                        "address":  address,
-                        "rating":   rating,
-                        "reviews":  review_count,
-                        "url":      url,
-                        "selected": True,
+                        "name":                  name,
+                        "address":               address,
+                        "location_info":         location_info,
+                        "is_user_establishment": is_user_establishment,
+                        "rating":                rating,
+                        "reviews":               review_count,
+                        "url":                   url,
+                        "selected":              True,
                     })
                     parsed_this_loop += 1
 

@@ -365,15 +365,36 @@ export default function CompetitorAnalysis({
                                     )}
                                     {place.name}
                                 </div>
-                                <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 2, display: "flex", gap: 10 }}>
-                                    {place.address && <span>{place.address}</span>}
+                                <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 4, display: "flex", flexWrap: "wrap", columnGap: 10, rowGap: 4, alignItems: "center" }}>
+                                    {/* Prioritize location_info, fallback to full address string */}
+                                    {(place.location_info || place.address) && (
+                                        <span style={{ color: "#d1d5db", fontWeight: 500 }}>
+                                            {place.location_info || place.address}
+                                        </span>
+                                    )}
+
+                                    {/* Render distance metric badge */}
+                                    {place.distance_km !== undefined && place.distance_km !== null && (
+                                        <span style={{ 
+                                            background: "rgba(147, 51, 234, 0.15)", 
+                                            color: "#c084fc", 
+                                            padding: "1px 6px", 
+                                            borderRadius: 4, 
+                                            fontSize: "0.7rem",
+                                            fontWeight: 600,
+                                            border: "1px solid rgba(147, 51, 234, 0.3)"
+                                        }}>
+                                            {place.distance_km} km away
+                                        </span>
+                                    )}
+
                                     {place.rating && (
                                         <span style={{ color: "#f59e0b", display: "flex", alignItems: "center", gap: 3 }}>
                                             <FaStar style={{ fontSize: 10 }} /> {place.rating}
                                         </span>
                                     )}
                                     {place.reviews > 0 && (
-                                        <span style={{ color: "#4b5563" }}>{place.reviews.toLocaleString()} reviews</span>
+                                        <span style={{ color: "#4b5563" }}>({place.reviews.toLocaleString()} reviews)</span>
                                     )}
                                 </div>
                             </div>
