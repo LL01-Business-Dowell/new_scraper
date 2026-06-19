@@ -83,6 +83,7 @@ def search_google_maps_competitors(
 ) -> List[Dict]:
     """
     Search Google Maps for businesses matching keyword near establishment or in city.
+    Dynamically maps radius_km to standard Google Maps viewport scale parameters.
     """
     driver = None
     results = []
@@ -91,17 +92,35 @@ def search_google_maps_competitors(
     try:
         driver = init_driver()
 
-        # ── FIXED: Query Selection Strategy ───────────────────────────────
+        # ── 1. Map radius_km to physical Google Maps viewport zoom level (z) ──
+        if radius_km <= 1.5:
+            zoom_level = 16  # Tight 1km focus
+        elif radius_km <= 3:
+            zoom_level = 15  # ~2-3km focus
+        elif radius_km <= 6:
+            zoom_level = 14  # Standard ~5km focus
+        elif radius_km <= 12:
+            zoom_level = 13  # ~10km focus
+        else:
+            zoom_level = 11  # Wide regional metropolitan layout
+
+        # ── 2. Construct search query text ──────────────────────────────────
         if establishment_name and establishment_name.strip():
             query = f"{keyword} near {establishment_name.strip()}, {city.strip()}"
-            logger.info(f"[SCRAPER] Using proximity-anchored query: '{query}'")
         else:
             query = f"{keyword} in {city.strip()}"
-            logger.info(f"[SCRAPER] Using broad default query: '{query}'")
-        # ──────────────────────────────────────────────────────────────────
 
-        encoded = urllib.parse.quote_plus(query)
-        search_url = f"https://www.google.com/maps/search/{encoded}"
+        encoded_query = urllib.parse.quote_plus(query)
+
+        # ── 3. Build Active Radius Target URL vs Text Fallback ─────────────
+        if origin_lat and origin_lng:
+            # Explicit coordinate mapping with zoom forces viewport bounding constraints
+            search_url = f"https://www.google.com/maps/search/{encoded_query}/@{origin_lat},{origin_lng},{zoom_level}z"
+            logger.info(f"[SCRAPER] Active Radius Control Mode ({radius_km}km -> Zoom {zoom_level}z). URL: {search_url}")
+        else:
+            # Standard text-based fallback when coordinates are omitted
+            search_url = f"https://www.google.com/maps/search/{encoded_query}"
+            logger.info(f"[SCRAPER] Coordinate-free Text Mode. URL: {search_url}")
 
         logger.info(f"[SCRAPER] Loading: {search_url}")
         driver.get(search_url)
@@ -199,7 +218,7 @@ def search_google_maps_competitors(
                     except (NoSuchElementException, ValueError):
                         review_count = 0
 
-                    # ── FIXED: Granular Location & Address Extraction ──────
+                    # ── Granular Location & Address Extraction ──────
                     address = ""
                     try:
                         info_rows = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd")
@@ -210,30 +229,26 @@ def search_google_maps_competitors(
                             if not row_text:
                                 continue
                             
-                            # Discard customer review quotes entirely
                             if row_text.startswith('"') and row_text.endswith('"'):
                                 continue
                                 
-                            # Split by mid-dots to check elements granularly
                             parts = [p.strip() for p in row_text.split("·") if p.strip()]
                             for p in parts:
                                 lower_p = p.lower()
                                 
-                                # Skip dynamic/operational items safely without dropping the whole row
                                 if any(w in lower_p for w in ["open", "closed", "closes", "opens", "delivery", "dine-in", "takeout"]):
                                     continue
                                 if any(w in lower_p for w in ["review", "rating", "★", "years in business"]):
                                     continue
-                                if re.search(r'^\d+(\.\d+)?$', p): # Skip plain numeric ratings
+                                if re.search(r'^\d+(\.\d+)?$', p):
                                     continue
-                                if "km away" in lower_p: # Skip active live distance text
+                                if "km away" in lower_p:
                                     continue
                                     
                                 if len(p) > 2 and p not in candidates:
                                     candidates.append(p)
                                     
                         if candidates:
-                            # Drop overly broad business type markers to preserve explicit locations
                             address_candidates = [
                                 c for c in candidates 
                                 if not any(cat in c.lower() for cat in ["restaurant", "cafe", "coffee shop", "bakery", "patisserie", "lounge", "bistro", "diner"])

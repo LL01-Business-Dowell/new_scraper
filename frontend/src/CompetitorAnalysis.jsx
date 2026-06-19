@@ -59,13 +59,33 @@ export default function CompetitorAnalysis({
             const data = resp.data;
             setProgress(data.progress);
             setStatusMessage(data.status_message);
+            
             if (data.status === "ready_for_approval") {
-                setPlaces(data.places || []);
+                // ── FIXED: Eliminate Map Header Pinned Duplicates ──────────
+                const uniquePlaces = [];
+                let foundUserEstablishment = false;
+
+                (data.places || []).forEach((p) => {
+                    const isUserEst = p.is_user_establishment || 
+                        (establishmentName && p.name.toLowerCase() === establishmentName.trim().toLowerCase());
+                    
+                    if (isUserEst) {
+                        if (foundUserEstablishment) {
+                            // Skip any secondary map header anchor instances of your business
+                            return;
+                        }
+                        foundUserEstablishment = true;
+                    }
+                    uniquePlaces.push(p);
+                });
+
+                setPlaces(uniquePlaces);
                 const checked = {};
-                (data.places || []).forEach((p, i) => { checked[i] = p.selected !== false; });
+                uniquePlaces.forEach((p, i) => { checked[i] = p.selected !== false; });
                 setCheckedPlaces(checked);
                 setSearchPhase("approving");
                 clearInterval(pollIntervalRef.current);
+                // ──────────────────────────────────────────────────────────
             } else if (data.status === "complete") {
                 setSwotResults(data.swot_results || []);
                 setCompetitiveAnalysis(data.competitive_analysis);
@@ -96,15 +116,15 @@ export default function CompetitorAnalysis({
     const startSearch = async (kw, ct, cntry, radius, estName) => {
         try {
             const resp = await axios.post(`${BASE}/api/competitors/search`, {
-            keyword: kw,
-            city: ct,
-            country: cntry,
-            establishment_name: estName,
-            radius_km: radius,
-            limit: 100,
-            origin_lat: originLat,
-            origin_lng: originLng,
-            location_hint: ct && cntry ? `${ct}, ${cntry}` : ct || cntry || "",
+                keyword: kw,
+                city: ct,
+                country: cntry,
+                establishment_name: estName,
+                radius_km: radius,
+                limit: 100,
+                origin_lat: originLat,
+                origin_lng: originLng,
+                location_hint: ct && cntry ? `${ct}, ${cntry}` : ct || cntry || "",
             });
             setSearchTaskId(resp.data.task_id);
             setSearchPhase("searching");
@@ -130,7 +150,7 @@ export default function CompetitorAnalysis({
             setSearchPhase("analyzing");
             setProgress(0);
             setStatusMessage("Running SWOT analysis...");
-            startPolling();   // ← restart polling for the analyze phase
+            startPolling();   
         } catch (err) {
             alert(`Analysis failed: ${err.message}`);
         }
@@ -142,7 +162,6 @@ export default function CompetitorAnalysis({
 
     const selectedCount = Object.values(checkedPlaces).filter(Boolean).length;
 
-    // ── Shared page shell ─────────────────────────────────────────────────────
     const Shell = ({ children }) => (
         <div className="app-container">
             <div className="animated-background">
@@ -160,7 +179,6 @@ export default function CompetitorAnalysis({
         </div>
     );
 
-    // ── Page header ───────────────────────────────────────────────────────────
     const PageHeader = ({ title, subtitle }) => (
         <div style={{ marginBottom: 24 }}>
             <button
@@ -187,7 +205,6 @@ export default function CompetitorAnalysis({
         </div>
     );
 
-    // ── Progress bar ──────────────────────────────────────────────────────────
     const ProgressBar = ({ value, color = "linear-gradient(to right, #9333ea, #4f46e5)" }) => (
         <div style={{ marginBottom: 20 }}>
             <p style={{ fontSize: "0.875rem", color: "#9ca3af", marginBottom: 8 }}>{statusMessage}</p>
@@ -198,7 +215,6 @@ export default function CompetitorAnalysis({
         </div>
     );
 
-    // ── RENDER: Input phase ───────────────────────────────────────────────────
     if (searchPhase === "input") {
         return (
             <Shell>
@@ -261,7 +277,6 @@ export default function CompetitorAnalysis({
         );
     }
 
-    // ── RENDER: Searching ─────────────────────────────────────────────────────
     if (searchPhase === "searching") {
         return (
             <Shell>
@@ -289,7 +304,6 @@ export default function CompetitorAnalysis({
         );
     }
 
-    // ── RENDER: Approving ─────────────────────────────────────────────────────
     if (searchPhase === "approving") {
         return (
             <Shell>
@@ -298,7 +312,6 @@ export default function CompetitorAnalysis({
                     subtitle={`${selectedCount} selected — uncheck any to exclude before running SWOT analysis`}
                 />
 
-                {/* Stats bar */}
                 <div style={{
                     display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
                     gap: 12, marginBottom: 20,
@@ -318,7 +331,6 @@ export default function CompetitorAnalysis({
                     ))}
                 </div>
 
-                {/* Places list */}
                 <div style={{
                     maxHeight: 420, overflowY: "auto",
                     border: "1px solid #374151", borderRadius: 12,
@@ -337,7 +349,6 @@ export default function CompetitorAnalysis({
                                 transition: "background 0.2s",
                             }}
                         >
-                            {/* Checkbox */}
                             <div style={{
                                 width: 20, height: 20, borderRadius: 4, flexShrink: 0,
                                 border: `2px solid ${checkedPlaces[idx] === false ? "#4b5563" : "#9333ea"}`,
@@ -351,13 +362,12 @@ export default function CompetitorAnalysis({
                                 )}
                             </div>
 
-                            {/* Place info */}
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{
                                     fontWeight: 600, fontSize: "0.9rem", color: "#f1f1f1",
                                     display: "flex", alignItems: "center", gap: 8,
                                 }}>
-                                    {place.is_user_establishment && (
+                                    {(place.is_user_establishment || (establishmentName && place.name.toLowerCase() === establishmentName.trim().toLowerCase())) && (
                                         <span style={{
                                             fontSize: "0.65rem", background: "linear-gradient(to right, #9333ea, #4f46e5)",
                                             color: "#fff", padding: "1px 6px", borderRadius: 4, fontWeight: 700,
@@ -366,14 +376,12 @@ export default function CompetitorAnalysis({
                                     {place.name}
                                 </div>
                                 <div style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 4, display: "flex", flexWrap: "wrap", columnGap: 10, rowGap: 4, alignItems: "center" }}>
-                                    {/* Prioritize location_info, fallback to full address string */}
                                     {(place.location_info || place.address) && (
                                         <span style={{ color: "#d1d5db", fontWeight: 500 }}>
                                             {place.location_info || place.address}
                                         </span>
                                     )}
 
-                                    {/* Render distance metric badge */}
                                     {place.distance_km !== undefined && place.distance_km !== null && (
                                         <span style={{ 
                                             background: "rgba(147, 51, 234, 0.15)", 
@@ -423,7 +431,6 @@ export default function CompetitorAnalysis({
         );
     }
 
-    // ── RENDER: Analyzing ─────────────────────────────────────────────────────
     if (searchPhase === "analyzing") {
         return (
             <Shell>
@@ -466,7 +473,6 @@ export default function CompetitorAnalysis({
         );
     }
 
-    // ── RENDER: Complete ──────────────────────────────────────────────────────
     if (searchPhase === "complete") {
         return <ResultsScreen
             swotResults={swotResults}
@@ -479,12 +485,10 @@ export default function CompetitorAnalysis({
     }
 }
 
-// ── Results screen (separate component to keep it clean) ──────────────────
 function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, keyword, city, onBack }) {
     const [expandedIdx, setExpandedIdx] = useState(null);
-    const [activeTab, setActiveTab] = useState("individual"); // "individual" | "combined"
+    const [activeTab, setActiveTab] = useState("individual"); 
 
-    // ── Download individual report as text file ───────────────────────────
     const downloadIndividual = (result) => {
         const isUser = result.name === establishmentName;
         const lines = [
@@ -525,7 +529,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
         URL.revokeObjectURL(url);
     };
 
-    // ── Download combined report ──────────────────────────────────────────
     const downloadCombined = () => {
         if (!competitiveAnalysis) return;
         const ca = competitiveAnalysis;
@@ -580,7 +583,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
         { key: "threats", label: "Threats", color: "#f59e0b", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.2)" },
     ];
 
-    // Sort: user's place first, then by rating desc
     const sorted = [...(swotResults || [])].sort((a, b) => {
         if (a.name === establishmentName) return -1;
         if (b.name === establishmentName) return 1;
@@ -596,7 +598,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
             <div className="content-container">
                 <div style={{ width: "100%", maxWidth: 1000, margin: "0 auto", padding: "2.5rem 1.5rem" }}>
 
-                    {/* Back */}
                     <button onClick={onBack} style={{
                         display: "flex", alignItems: "center", gap: 6,
                         background: "none", border: "none", color: "#a78bfa",
@@ -606,7 +607,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                         <FaArrowLeft style={{ fontSize: 12 }} /> Back to Search
                     </button>
 
-                    {/* Title */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
                         <h2 style={{
                             margin: 0, fontSize: "1.4rem", fontWeight: 700,
@@ -617,7 +617,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                         </h2>
                     </div>
 
-                    {/* Tab switcher */}
                     <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "#1f2937", borderRadius: 10, padding: 4 }}>
                         {[
                             { id: "individual", label: `Individual Reports (${sorted.length})` },
@@ -634,7 +633,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                         ))}
                     </div>
 
-                    {/* ── Individual reports tab ──────────────────────────────── */}
                     {activeTab === "individual" && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                             {sorted.map((result, idx) => {
@@ -651,7 +649,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                         overflow: "hidden",
                                         transition: "border-color 0.2s",
                                     }}>
-                                        {/* Row header — always visible, click to expand */}
                                         <div
                                             onClick={() => setExpandedIdx(isExpanded ? null : idx)}
                                             style={{
@@ -660,14 +657,12 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                                 cursor: "pointer",
                                             }}
                                         >
-                                            {/* Expand chevron */}
                                             <span style={{
                                                 fontSize: 12, color: "#6b7280", flexShrink: 0,
                                                 transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
                                                 transition: "transform 0.2s", display: "inline-block",
                                             }}>▶</span>
 
-                                            {/* Rank number */}
                                             <span style={{
                                                 width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
                                                 background: isUser ? "#f59e0b" : "#1f2937",
@@ -679,7 +674,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                                 {isUser ? "★" : idx + 1}
                                             </span>
 
-                                            {/* Name + badges */}
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                                                     {isUser && (
@@ -710,7 +704,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                                 </div>
                                             </div>
 
-                                            {/* Download button */}
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); downloadIndividual(result); }}
                                                 style={{
@@ -725,7 +718,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                             </button>
                                         </div>
 
-                                        {/* Expanded SWOT content */}
                                         {isExpanded && (
                                             <div style={{ padding: "0 18px 18px", borderTop: "1px solid #1f2937" }}>
                                                 <div style={{ paddingTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -760,10 +752,8 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                         </div>
                     )}
 
-                    {/* ── Combined analysis tab ───────────────────────────────── */}
                     {activeTab === "combined" && competitiveAnalysis && (
                         <div>
-                            {/* Download combined */}
                             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
                                 <button
                                     onClick={downloadCombined}
@@ -778,7 +768,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                 </button>
                             </div>
 
-                            {/* Stats tiles */}
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
                                 {[
                                     { label: "Total Analysed", value: competitiveAnalysis.total_analyzed, color: "#a78bfa" },
@@ -798,7 +787,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                 ))}
                             </div>
 
-                            {/* Insights */}
                             {competitiveAnalysis.market_insights?.length > 0 && (
                                 <div style={{
                                     background: "#1A1E2E", borderRadius: 12, padding: 18,
@@ -818,7 +806,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                 </div>
                             )}
 
-                            {/* Common themes side by side */}
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
                                 {[
                                     { label: "Common Strengths Across Market", data: competitiveAnalysis.common_strengths, color: "#10b981", bg: "rgba(16,185,129,0.06)", border: "rgba(16,185,129,0.2)" },
@@ -847,7 +834,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                                 ))}
                             </div>
 
-                            {/* Summary table of all places */}
                             <div style={{
                                 background: "#1A1E2E", borderRadius: 12,
                                 border: "1px solid #374151", overflow: "hidden",
@@ -903,7 +889,6 @@ function ResultsScreen({ swotResults, competitiveAnalysis, establishmentName, ke
                             </div>
                         </div>
                     )}
-
                 </div>
             </div>
         </div>
