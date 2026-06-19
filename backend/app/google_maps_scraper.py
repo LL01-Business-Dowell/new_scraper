@@ -82,7 +82,7 @@ def search_google_maps_competitors(
     progress_callback: Optional[Callable] = None,
 ) -> List[Dict]:
     """
-    Search Google Maps for businesses matching keyword in city with deep logging.
+    Search Google Maps for businesses matching keyword near establishment or in city.
     """
     driver = None
     results = []
@@ -91,7 +91,15 @@ def search_google_maps_competitors(
     try:
         driver = init_driver()
 
-        query = f"{keyword} in {city}"
+        # ── FIXED: Query Selection Strategy ───────────────────────────────
+        if establishment_name and establishment_name.strip():
+            query = f"{keyword} near {establishment_name.strip()}, {city.strip()}"
+            logger.info(f"[SCRAPER] Using proximity-anchored query: '{query}'")
+        else:
+            query = f"{keyword} in {city.strip()}"
+            logger.info(f"[SCRAPER] Using broad default query: '{query}'")
+        # ──────────────────────────────────────────────────────────────────
+
         encoded = urllib.parse.quote_plus(query)
         search_url = f"https://www.google.com/maps/search/{encoded}"
 
@@ -126,12 +134,10 @@ def search_google_maps_competitors(
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
             prev_count = len(results)
             
-            # Read browser dimensions before moving
             js_scroll_top = driver.execute_script("return arguments[0].scrollTop;", feed)
             js_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
             logger.info(f"[DEBUG] Pre-scroll metrics -> Top: {js_scroll_top}px, Full Height: {js_scroll_height}px")
 
-            # Wake up lazy loading by hovering over the last element card
             cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
             if cards:
                 try:
@@ -145,16 +151,14 @@ def search_google_maps_competitors(
                 actions.scroll_from_origin(scroll_origin, 0, 1500).perform()
                 time.sleep(random.uniform(0.2, 0.4))
                 
-            # Fallback JavaScript injection to force bottom scrolling
             driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
             time.sleep(random.uniform(1.5, 2.2)) 
             
-            # Post-scroll sizing evaluation
             post_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
             logger.info(f"[DEBUG] Post-scroll height tracking -> Old: {js_scroll_height}px, New: {post_scroll_height}px")
             
             cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
-            logger.info(f"[DEBUG] DOM Scan: Located {len(cards)} matching card elements ('div.Nv2PK') in current view frame.")
+            logger.info(f"[DEBUG] DOM Scan: Located {len(cards)} matching card elements in current view frame.")
             
             parsed_this_loop = 0
             duplicates_this_loop = 0
@@ -195,10 +199,9 @@ def search_google_maps_competitors(
                     except (NoSuchElementException, ValueError):
                         review_count = 0
 
-                    # ── Robust Address Extraction ─────────────────────────
+                    # ── FIXED: Granular Location & Address Extraction ──────
                     address = ""
                     try:
-                        # Find all information row blocks inside this business card
                         info_rows = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd")
                         candidates = []
                         
@@ -207,27 +210,33 @@ def search_google_maps_competitors(
                             if not row_text:
                                 continue
                             
-                            # Filter out rows that represent review stats or description quotes
-                            if "·" in row_text and any(keyword in row_text.lower() for keyword in ["review", "rating", "★", "years in business"]):
-                                continue
+                            # Discard customer review quotes entirely
                             if row_text.startswith('"') and row_text.endswith('"'):
                                 continue
                                 
-                            # Split segments separated by dots
+                            # Split by mid-dots to check elements granularly
                             parts = [p.strip() for p in row_text.split("·") if p.strip()]
                             for p in parts:
                                 lower_p = p.lower()
-                                # Eliminate store operational hours/status flags
-                                if any(word in lower_p for word in ["open", "closed", "closes", "opens", "delivery", "dine-in", "takeout"]):
+                                
+                                # Skip dynamic/operational items safely without dropping the whole row
+                                if any(w in lower_p for w in ["open", "closed", "closes", "opens", "delivery", "dine-in", "takeout"]):
                                     continue
+                                if any(w in lower_p for w in ["review", "rating", "★", "years in business"]):
+                                    continue
+                                if re.search(r'^\d+(\.\d+)?$', p): # Skip plain numeric ratings
+                                    continue
+                                if "km away" in lower_p: # Skip active live distance text
+                                    continue
+                                    
                                 if len(p) > 2 and p not in candidates:
                                     candidates.append(p)
                                     
                         if candidates:
-                            # Filter out simple business category keywords to isolate the genuine street location
+                            # Drop overly broad business type markers to preserve explicit locations
                             address_candidates = [
                                 c for c in candidates 
-                                if not any(cat in c.lower() for cat in ["cafe", "coffee shop", "restaurant", "bakery", "patisserie", "lounge"])
+                                if not any(cat in c.lower() for cat in ["restaurant", "cafe", "coffee shop", "bakery", "patisserie", "lounge", "bistro", "diner"])
                             ]
                             address = address_candidates[0] if address_candidates else candidates[0]
                     except Exception:
@@ -247,19 +256,17 @@ def search_google_maps_competitors(
                         progress_callback(len(results), limit, f"Found {len(results)} places...")
 
                 except StaleElementReferenceException:
-                    logger.debug(f"[DEBUG] Card item index {index} went stale during evaluation loop processing.")
                     continue
                 except Exception as e:
                     logger.warning(f"[SCRAPER] Card parse error: {e}")
                     continue
 
-            logger.info(f"[DEBUG] Frame Processed: Scraped {parsed_this_loop} new items, skipped {duplicates_this_loop} duplicates. Total results: {len(results)}.")
+            logger.info(f"[DEBUG] Frame Processed: Scraped {parsed_this_loop} new items. Total results: {len(results)}.")
 
             if len(results) == prev_count:
                 scroll_attempts += 1
-                logger.warning(f"[SCRAPER] Stall warning triggered! (Cycle {scroll_attempts}/{max_scroll_attempts}). Zero progress made.")
+                logger.warning(f"[SCRAPER] Stall warning (Cycle {scroll_attempts}/{max_scroll_attempts}).")
                 
-                logger.info("[DEBUG] Activating defensive recovery nudge sequence...")
                 driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollTop - 1000);", feed)
                 time.sleep(0.5)
                 driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
@@ -268,18 +275,18 @@ def search_google_maps_competitors(
                 try:
                     end_banner = driver.find_element(By.CSS_SELECTOR, "span.HlvSq")
                     if end_banner and end_banner.is_displayed():
-                        logger.info("[SCRAPER] Hard end element parsed ('You've reached the end of the list'). Stopping execution cleanly.")
+                        logger.info("[SCRAPER] Reached end of the list. Stopping.")
                         break
                 except NoSuchElementException:
                     pass
             else:
                 scroll_attempts = 0
+                
             try:
                 end_of_list = driver.find_elements(By.CSS_SELECTOR, "div.lXJj5c.Hk4XGb")
                 if end_of_list:
                     spinner = driver.find_elements(By.CSS_SELECTOR, "div.lXJj5c .OBAKjf")
                     if not spinner:
-                        logger.info("[SCRAPER] End of list spinner gone — stopping.")
                         break
             except Exception:
                 pass
@@ -311,10 +318,5 @@ def search_google_maps_competitors(
         p for p in results
         if p.get("within_radius") is True or p.get("within_radius") is None
     ]
-    
-    logger.info(
-        f"[SCRAPER] Distance filter: {len(results)} total → "
-        f"{len(filtered)} within {radius_km}km radius"
-    )
     
     return filtered
