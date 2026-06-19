@@ -118,18 +118,12 @@ def search_google_maps_competitors(
             return results
 
         scroll_attempts = 0
-        max_scroll_attempts = 25 
-        max_total_scrolls = 120 
+        max_scroll_attempts = 15
         
         actions = ActionChains(driver)
         scroll_origin = ScrollOrigin.from_element(feed)
 
-        total_scrolls = 0
-        max_stale = 25
-        max_total = 120
-
         while len(results) < limit and scroll_attempts < max_scroll_attempts:
-            total_scrolls += 1
             prev_count = len(results)
             
             # Read browser dimensions before moving
@@ -137,12 +131,23 @@ def search_google_maps_competitors(
             js_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
             logger.info(f"[DEBUG] Pre-scroll metrics -> Top: {js_scroll_top}px, Full Height: {js_scroll_height}px")
 
+            # Wake up lazy loading by hovering over the last element card
+            cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
+            if cards:
+                try:
+                    actions.move_to_element(cards[-1]).perform()
+                    time.sleep(0.2)
+                except Exception:
+                    pass
+
             logger.info("[DEBUG] Executing physical mouse wheel actions...")
-            for i in range(8):
-                actions.scroll_from_origin(scroll_origin, 0, 1200).perform()
-                time.sleep(random.uniform(0.3, 0.5))
+            for i in range(6):
+                actions.scroll_from_origin(scroll_origin, 0, 1500).perform()
+                time.sleep(random.uniform(0.2, 0.4))
                 
-            time.sleep(random.uniform(1.2, 1.8)) 
+            # Fallback JavaScript injection to force bottom scrolling
+            driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
+            time.sleep(random.uniform(1.5, 2.2)) 
             
             # Post-scroll sizing evaluation
             post_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
@@ -190,38 +195,51 @@ def search_google_maps_competitors(
                     except (NoSuchElementException, ValueError):
                         review_count = 0
 
+                    # ── Robust Address Extraction ─────────────────────────
                     address = ""
-                    location_info = ""
                     try:
-                        detail_spans = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd > span")
-                        span_texts = [s.text.strip() for s in detail_spans if s.text.strip()]
-                        clean_elements = [txt for txt in span_texts if txt and txt != "·" and len(txt) > 2]
+                        # Find all information row blocks inside this business card
+                        info_rows = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd")
+                        candidates = []
                         
-                        if len(clean_elements) > 1:
-                            address = clean_elements[-1].lstrip("· ").strip()
-                            # Extract clean neighborhood/vicinity element safely for the frontend location badge
-                            location_info = clean_elements[-2].lstrip("· ").strip() if len(clean_elements) > 2 else clean_elements[0].lstrip("· ").strip()
-                        elif len(clean_elements) == 1:
-                            address = clean_elements[0]
-                            location_info = clean_elements[0]
-                    except Exception as addr_err:
+                        for row in info_rows:
+                            row_text = row.text.strip()
+                            if not row_text:
+                                continue
+                            
+                            # Filter out rows that represent review stats or description quotes
+                            if "·" in row_text and any(keyword in row_text.lower() for keyword in ["review", "rating", "★", "years in business"]):
+                                continue
+                            if row_text.startswith('"') and row_text.endswith('"'):
+                                continue
+                                
+                            # Split segments separated by dots
+                            parts = [p.strip() for p in row_text.split("·") if p.strip()]
+                            for p in parts:
+                                lower_p = p.lower()
+                                # Eliminate store operational hours/status flags
+                                if any(word in lower_p for word in ["open", "closed", "closes", "opens", "delivery", "dine-in", "takeout"]):
+                                    continue
+                                if len(p) > 2 and p not in candidates:
+                                    candidates.append(p)
+                                    
+                        if candidates:
+                            # Filter out simple business category keywords to isolate the genuine street location
+                            address_candidates = [
+                                c for c in candidates 
+                                if not any(cat in c.lower() for cat in ["cafe", "coffee shop", "restaurant", "bakery", "patisserie", "lounge"])
+                            ]
+                            address = address_candidates[0] if address_candidates else candidates[0]
+                    except Exception:
                         address = ""
-                        location_info = ""
-
-                    # Dynamically compute user establishment flag matching user input
-                    is_user_establishment = False
-                    if establishment_name and name.lower() == establishment_name.lower():
-                        is_user_establishment = True
 
                     results.append({
-                        "name":                  name,
-                        "address":               address,
-                        "location_info":         location_info,
-                        "is_user_establishment": is_user_establishment,
-                        "rating":                rating,
-                        "reviews":               review_count,
-                        "url":                   url,
-                        "selected":              True,
+                        "name":     name,
+                        "address":  address,
+                        "rating":   rating,
+                        "reviews":  review_count,
+                        "url":      url,
+                        "selected": True,
                     })
                     parsed_this_loop += 1
 
@@ -242,9 +260,9 @@ def search_google_maps_competitors(
                 logger.warning(f"[SCRAPER] Stall warning triggered! (Cycle {scroll_attempts}/{max_scroll_attempts}). Zero progress made.")
                 
                 logger.info("[DEBUG] Activating defensive recovery nudge sequence...")
-                actions.scroll_from_origin(scroll_origin, 0, -2000).perform()
-                time.sleep(0.8)
-                actions.scroll_from_origin(scroll_origin, 0, 3000).perform()
+                driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollTop - 1000);", feed)
+                time.sleep(0.5)
+                driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
                 time.sleep(2.0)
 
                 try:
@@ -289,7 +307,6 @@ def search_google_maps_competitors(
             place["distance_km"]   = None
             place["within_radius"] = None
 
-    # return results
     filtered = [
         p for p in results
         if p.get("within_radius") is True or p.get("within_radius") is None
