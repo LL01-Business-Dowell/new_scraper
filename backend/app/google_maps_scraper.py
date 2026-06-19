@@ -4,7 +4,7 @@ google_maps_scraper.py
 Selenium scraper to find competitor businesses on Google Maps.
 CSS selectors verified against live Google Maps HTML (June 2026).
 """
-
+import math
 import time
 import random
 import re
@@ -29,6 +29,23 @@ from selenium.common.exceptions import (
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+def extract_coords_from_url(url: str):
+    """Extract lat/lng from a Google Maps place URL."""
+    match = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', url)
+    if match:
+        return float(match.group(1)), float(match.group(2))
+    return None, None
+
+
+def haversine_km(lat1, lng1, lat2, lng2) -> float:
+    """Straight-line distance between two coordinates in km."""
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (math.sin(dlat/2)**2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlng/2)**2)
+    return R * 2 * math.asin(math.sqrt(a))
 
 def init_driver():
     """Initialize headless Chromium with anti-bot measures."""
@@ -60,6 +77,8 @@ def search_google_maps_competitors(
     establishment_name: str,
     radius_km: float = 5,
     limit: int = 100,
+    origin_lat: float = None,
+    origin_lng: float = None,
     progress_callback: Optional[Callable] = None,
 ) -> List[Dict]:
     """
@@ -244,4 +263,29 @@ def search_google_maps_competitors(
         if driver:
             driver.quit()
 
-    return results
+    # ── Distance calculation ──────────────────────────────────────────────
+    for place in results:
+        lat, lng = extract_coords_from_url(place.get("url", ""))
+        place["lat"] = lat
+        place["lng"] = lng
+
+        if origin_lat and origin_lng and lat and lng:
+            dist = haversine_km(origin_lat, origin_lng, lat, lng)
+            place["distance_km"]    = round(dist, 2)
+            place["within_radius"]  = dist <= radius_km
+        else:
+            place["distance_km"]   = None
+            place["within_radius"] = None
+
+    # return results
+    filtered = [
+        p for p in results
+        if p.get("within_radius") is True or p.get("within_radius") is None
+    ]
+    
+    logger.info(
+        f"[SCRAPER] Distance filter: {len(results)} total → "
+        f"{len(filtered)} within {radius_km}km radius"
+    )
+    
+    return filtered

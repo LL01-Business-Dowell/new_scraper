@@ -74,6 +74,8 @@ class SearchRequest(BaseModel):
     location_hint: str = ""
     radius_km: float = 5.0
     limit: int = 100
+    origin_lat: float = None
+    origin_lng: float = None
 
 
 class ApproveListRequest(BaseModel):
@@ -117,12 +119,14 @@ async def search_competitors(request: SearchRequest, background_tasks: Backgroun
         radius_km=request.radius_km,
         limit=request.limit,
         establishment_name=request.establishment_name,
+        origin_lat=request.origin_lat,
+        origin_lng=request.origin_lng,
     )
     
     return {"task_id": task_id}
 
 
-def _search_worker(task_id: str, keyword: str, city: str, country: str, location_hint: str, radius_km: float, limit: int, establishment_name: str):
+def _search_worker(task_id: str, keyword: str, city: str, country: str, location_hint: str, radius_km: float, limit: int, origin_lat: float, origin_lng:float, establishment_name: str):
     """Background worker to search for competitors."""
     try:
         def progress_callback(current, total, status_text):
@@ -135,6 +139,8 @@ def _search_worker(task_id: str, keyword: str, city: str, country: str, location
             establishment_name=establishment_name,
             radius_km=radius_km,
             limit=limit,
+            origin_lat=origin_lat,
+            origin_lng=origin_lng,
             progress_callback=progress_callback,
         )
         

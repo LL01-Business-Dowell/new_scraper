@@ -112,6 +112,9 @@ const App = () => {
 
   const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState(false);
 
+  const [placeLat, setPlaceLat] = useState(null);
+  const [placeLng, setPlaceLng] = useState(null);
+
   const intervalRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -359,6 +362,8 @@ const App = () => {
         country={placeCountry}
         radiusKm={radiusKm}
         establishmentName={placeName}
+        originLat={placeLat}
+        originLng={placeLng}
       />
     );
   }
@@ -445,7 +450,8 @@ const App = () => {
                   onSelect={(place) => {
                     if (place) {
                       setPlaceName(place.name || "");
-
+                      setPlaceLat(parseFloat(place.lat) || null);
+                      setPlaceLng(parseFloat(place.lon) || null);
                       const parts = (place.display_name || "").split(",").map(s => s.trim());
                       const extractedCountry = parts[parts.length - 1] || "";
 
@@ -471,6 +477,8 @@ const App = () => {
                       setPlaceCountry(extractedCountry);
                     } else {
                       setPlaceName("");
+                      setPlaceLat(null);
+                      setPlaceLng(null);
                       setPlaceCity("");
                       setPlaceCountry("");
                     }

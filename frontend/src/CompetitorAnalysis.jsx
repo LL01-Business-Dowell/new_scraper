@@ -21,6 +21,8 @@ export default function CompetitorAnalysis({
     country: countryProp = "",
     radiusKm: radiusKmProp = 5,
     establishmentName: establishmentNameProp = "",
+    originLat: originLatProp = null,
+    originLng: originLngProp = null,
 }) {
     const hasProps = Boolean(keywordProp && establishmentNameProp);
     const [searchPhase, setSearchPhase] = useState(hasProps ? "searching" : "input");
@@ -38,6 +40,9 @@ export default function CompetitorAnalysis({
     const [competitiveAnalysis, setCompetitiveAnalysis] = useState(null);
     const [progress, setProgress] = useState(0);
     const [statusMessage, setStatusMessage] = useState("");
+
+    const [originLat, setOriginLat] = useState(originLatProp);
+    const [originLng, setOriginLng] = useState(originLngProp);
 
     const pollIntervalRef = useRef(null);
 
@@ -97,6 +102,8 @@ export default function CompetitorAnalysis({
             establishment_name: estName,
             radius_km: radius,
             limit: 100,
+            origin_lat: originLat,
+            origin_lng: originLng,
             location_hint: ct && cntry ? `${ct}, ${cntry}` : ct || cntry || "",
             });
             setSearchTaskId(resp.data.task_id);
