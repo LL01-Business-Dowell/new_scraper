@@ -3,6 +3,16 @@ google_maps_scraper.py
 ----------------------
 Selenium scraper to find competitor businesses on Google Maps.
 CSS selectors verified against live Google Maps HTML (June 2026).
+
+Quadrant search strategy
+-------------------------
+A single Google Maps search from one query (e.g. "Cafe in Ernakulam") tends
+to expand in only one direction from the city center, missing businesses on
+the opposite side of the radius circle. To fix this, the radius circle is
+split into 4 quadrants (NE, NW, SE, SW) around the origin coordinate, and a
+separate Maps search is run centered on each quadrant's midpoint using
+lat/lng-based URL search instead of a text query. Results are merged and
+deduplicated by URL afterwards.
 """
 import math
 import time
@@ -25,9 +35,9 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 
-# Set logging level to see debug details in the terminal
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
 
 def extract_coords_from_url(url: str):
     """Extract lat/lng from a Google Maps place URL."""
@@ -42,10 +52,35 @@ def haversine_km(lat1, lng1, lat2, lng2) -> float:
     R = 6371
     dlat = math.radians(lat2 - lat1)
     dlng = math.radians(lng2 - lng1)
-    a = (math.sin(dlat/2)**2 +
+    a = (math.sin(dlat / 2) ** 2 +
          math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlng/2)**2)
+         math.sin(dlng / 2) ** 2)
     return R * 2 * math.asin(math.sqrt(a))
+
+
+def get_quadrant_centers(origin_lat: float, origin_lng: float, radius_km: float):
+    """
+    Split the radius circle into 4 quadrants (NE, NW, SE, SW) and return
+    the center coordinate of each quadrant. Each quadrant center sits at
+    roughly half the radius distance, diagonally offset from the origin —
+    this gives Google Maps' own search algorithm (which expands outward
+    from whatever point it's centered on) four different starting points
+    so it covers the full circle instead of just one side of it.
+    """
+    # Half-radius offset in km, split evenly across lat/lng diagonal
+    offset_km = radius_km * 0.5
+    # 1 degree latitude ≈ 111 km
+    dlat = offset_km / 111.0
+    # 1 degree longitude ≈ 111 km * cos(latitude)
+    dlng = offset_km / (111.0 * math.cos(math.radians(origin_lat)) or 1)
+
+    return {
+        "NE": (origin_lat + dlat, origin_lng + dlng),
+        "NW": (origin_lat + dlat, origin_lng - dlng),
+        "SE": (origin_lat - dlat, origin_lng + dlng),
+        "SW": (origin_lat - dlat, origin_lng - dlng),
+    }
+
 
 def init_driver():
     """Initialize headless Chromium with anti-bot measures."""
@@ -71,6 +106,157 @@ def init_driver():
     return driver
 
 
+def _scrape_one_search(
+    driver,
+    search_url: str,
+    keyword: str,
+    limit: int,
+    seen_urls: set,
+    progress_callback: Optional[Callable] = None,
+    progress_offset: int = 0,
+    progress_total: int = 100,
+) -> List[Dict]:
+    """
+    Run a single Google Maps search (one quadrant) and scrape up to `limit`
+    NEW results (deduplicated against the shared seen_urls set across all
+    quadrant searches). Returns the list of places found in this pass.
+    """
+    results = []
+
+    logger.info(f"[SCRAPER] Loading: {search_url}")
+    driver.get(search_url)
+
+    try:
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.m6QErb[role='feed']"))
+        )
+    except TimeoutException:
+        logger.error("[SCRAPER] Results feed did not load within 20s for this quadrant")
+        return results
+
+    time.sleep(2)
+
+    try:
+        feed = driver.find_element(By.CSS_SELECTOR, "div.m6QErb[role='feed']")
+    except NoSuchElementException:
+        logger.error("[SCRAPER] Could not find feed container for this quadrant")
+        return results
+
+    scroll_attempts = 0
+    max_stale = 20
+    max_total = 60  # fewer scrolls per quadrant since 4 quadrants run total
+
+    actions = ActionChains(driver)
+    scroll_origin = ScrollOrigin.from_element(feed)
+    total_scrolls = 0
+
+    while len(results) < limit and scroll_attempts < max_stale and total_scrolls < max_total:
+        total_scrolls += 1
+        prev_count = len(results)
+
+        for i in range(8):
+            actions.scroll_from_origin(scroll_origin, 0, 1200).perform()
+            time.sleep(random.uniform(0.3, 0.5))
+
+        time.sleep(random.uniform(1.2, 1.8))
+
+        cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
+
+        for card in cards:
+            if len(results) >= limit:
+                break
+            try:
+                try:
+                    anchor = card.find_element(By.CSS_SELECTOR, "a.hfpxzc")
+                    url = anchor.get_attribute("href") or ""
+                except NoSuchElementException:
+                    url = ""
+
+                if url and url in seen_urls:
+                    continue
+                if url:
+                    seen_urls.add(url)
+
+                try:
+                    name = card.find_element(By.CSS_SELECTOR, "div.qBF1Pd").text.strip()
+                except NoSuchElementException:
+                    name = "Unknown"
+
+                if not name or name == "Unknown":
+                    continue
+
+                try:
+                    rating_text = card.find_element(By.CSS_SELECTOR, "span.MW4etd").text.strip()
+                    rating = float(rating_text) if rating_text else None
+                except (NoSuchElementException, ValueError):
+                    rating = None
+
+                try:
+                    review_text = card.find_element(By.CSS_SELECTOR, "span.UY7F9").text.strip()
+                    review_count = int(re.sub(r"[^\d]", "", review_text)) if review_text else 0
+                except (NoSuchElementException, ValueError):
+                    review_count = 0
+
+                address = ""
+                try:
+                    detail_spans = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd div.W4Efsd > span")
+                    span_texts = [s.text.strip() for s in detail_spans if s.text.strip()]
+                    clean_elements = [txt for txt in span_texts if txt and txt != "·" and len(txt) > 2]
+                    if len(clean_elements) > 1:
+                        address = clean_elements[-1].lstrip("· ").strip()
+                    elif len(clean_elements) == 1:
+                        address = clean_elements[0]
+                except Exception:
+                    address = ""
+
+                results.append({
+                    "name":     name,
+                    "address":  address,
+                    "rating":   rating,
+                    "reviews":  review_count,
+                    "url":      url,
+                    "selected": True,
+                })
+
+                if progress_callback:
+                    overall = progress_offset + int((len(results) / max(limit, 1)) * (progress_total / 4))
+                    progress_callback(overall, progress_total, f"Found {len(seen_urls)} places so far...")
+
+            except StaleElementReferenceException:
+                continue
+            except Exception as e:
+                logger.warning(f"[SCRAPER] Card parse error: {e}")
+                continue
+
+        if len(results) == prev_count:
+            scroll_attempts += 1
+            actions.scroll_from_origin(scroll_origin, 0, -2000).perform()
+            time.sleep(0.8)
+            actions.scroll_from_origin(scroll_origin, 0, 3000).perform()
+            time.sleep(2.0)
+
+            try:
+                end_banner = driver.find_element(By.CSS_SELECTOR, "span.HlvSq")
+                if end_banner and end_banner.is_displayed():
+                    break
+            except NoSuchElementException:
+                pass
+        else:
+            scroll_attempts = 0
+
+        try:
+            end_of_list = driver.find_elements(By.CSS_SELECTOR, "div.lXJj5c.Hk4XGb")
+            if end_of_list:
+                spinner = driver.find_elements(By.CSS_SELECTOR, "div.lXJj5c .OBAKjf")
+                if not spinner:
+                    break
+        except Exception:
+            pass
+
+    logger.info(f"[SCRAPER] Quadrant pass done — found {len(results)} new places")
+    return results
+
+
 def search_google_maps_competitors(
     keyword: str,
     city: str,
@@ -82,216 +268,77 @@ def search_google_maps_competitors(
     progress_callback: Optional[Callable] = None,
 ) -> List[Dict]:
     """
-    Search Google Maps for businesses matching keyword near establishment or in city.
+    Search Google Maps for businesses matching keyword within radius_km of
+    (origin_lat, origin_lng). Splits the search into 4 quadrant passes so
+    results cover the full circle instead of expanding in just one direction
+    from a single text-query search.
+
+    Falls back to a single city-text search if origin_lat/origin_lng are not
+    provided (keeps backward compatibility).
     """
     driver = None
-    results = []
+    all_results: List[Dict] = []
     seen_urls = set()
 
     try:
         driver = init_driver()
 
-        # ── FIXED: Query Selection Strategy ───────────────────────────────
-        if establishment_name and establishment_name.strip():
-            query = f"{keyword} near {establishment_name.strip()}, {city.strip()}"
-            logger.info(f"[SCRAPER] Using proximity-anchored query: '{query}'")
-        else:
-            query = f"{keyword} in {city.strip()}"
-            logger.info(f"[SCRAPER] Using broad default query: '{query}'")
-        # ──────────────────────────────────────────────────────────────────
+        if origin_lat is not None and origin_lng is not None:
+            # ── Quadrant search — 4 passes covering the full radius circle ──
+            quadrants = get_quadrant_centers(origin_lat, origin_lng, radius_km)
+            per_quadrant_limit = max(1, limit // 4) + 5  # small buffer for dedup losses
 
-        encoded = urllib.parse.quote_plus(query)
-        search_url = f"https://www.google.com/maps/search/{encoded}"
-
-        logger.info(f"[SCRAPER] Loading: {search_url}")
-        driver.get(search_url)
-
-        try:
-            WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, "div.m6QErb[role='feed']")
-                )
+            logger.info(
+                f"[SCRAPER] Quadrant search enabled — origin=({origin_lat},{origin_lng}) "
+                f"radius={radius_km}km, {len(quadrants)} quadrants, "
+                f"~{per_quadrant_limit} per quadrant"
             )
-            logger.info("[DEBUG] Found results feed container in DOM.")
-        except TimeoutException:
-            logger.error("[SCRAPER] Results feed did not load within 20s")
-            return results
 
-        time.sleep(2)
-
-        try:
-            feed = driver.find_element(By.CSS_SELECTOR, "div.m6QErb[role='feed']")
-        except NoSuchElementException:
-            logger.error("[SCRAPER] Could not find feed container")
-            return results
-
-        scroll_attempts = 0
-        max_scroll_attempts = 15
-        
-        actions = ActionChains(driver)
-        scroll_origin = ScrollOrigin.from_element(feed)
-
-        while len(results) < limit and scroll_attempts < max_scroll_attempts:
-            prev_count = len(results)
-            
-            js_scroll_top = driver.execute_script("return arguments[0].scrollTop;", feed)
-            js_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
-            logger.info(f"[DEBUG] Pre-scroll metrics -> Top: {js_scroll_top}px, Full Height: {js_scroll_height}px")
-
-            cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
-            if cards:
-                try:
-                    actions.move_to_element(cards[-1]).perform()
-                    time.sleep(0.2)
-                except Exception:
-                    pass
-
-            logger.info("[DEBUG] Executing physical mouse wheel actions...")
-            for i in range(6):
-                actions.scroll_from_origin(scroll_origin, 0, 1500).perform()
-                time.sleep(random.uniform(0.2, 0.4))
-                
-            driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
-            time.sleep(random.uniform(1.5, 2.2)) 
-            
-            post_scroll_height = driver.execute_script("return arguments[0].scrollHeight;", feed)
-            logger.info(f"[DEBUG] Post-scroll height tracking -> Old: {js_scroll_height}px, New: {post_scroll_height}px")
-            
-            cards = driver.find_elements(By.CSS_SELECTOR, "div.Nv2PK")
-            logger.info(f"[DEBUG] DOM Scan: Located {len(cards)} matching card elements in current view frame.")
-            
-            parsed_this_loop = 0
-            duplicates_this_loop = 0
-
-            for index, card in enumerate(cards):
-                if len(results) >= limit:
+            for i, (quad_name, (qlat, qlng)) in enumerate(quadrants.items()):
+                if len(all_results) >= limit:
                     break
-                try:
-                    try:
-                        anchor = card.find_element(By.CSS_SELECTOR, "a.hfpxzc")
-                        url = anchor.get_attribute("href") or ""
-                    except NoSuchElementException:
-                        url = ""
 
-                    if url and url in seen_urls:
-                        duplicates_this_loop += 1
-                        continue
-                    if url:
-                        seen_urls.add(url)
+                encoded_kw = urllib.parse.quote_plus(keyword)
+                # lat,lng in the URL centers the Maps search on that point —
+                # zoom 14 (z) roughly matches a few-km viewport
+                search_url = (
+                    f"https://www.google.com/maps/search/{encoded_kw}"
+                    f"/@{qlat},{qlng},14z"
+                )
 
-                    try:
-                        name = card.find_element(By.CSS_SELECTOR, "div.qBF1Pd").text.strip()
-                    except NoSuchElementException:
-                        name = "Unknown"
+                logger.info(f"[SCRAPER] Quadrant {quad_name} ({i+1}/{len(quadrants)})")
 
-                    if not name or name == "Unknown":
-                        continue
+                quadrant_results = _scrape_one_search(
+                    driver=driver,
+                    search_url=search_url,
+                    keyword=keyword,
+                    limit=per_quadrant_limit,
+                    seen_urls=seen_urls,
+                    progress_callback=progress_callback,
+                    progress_offset=i * 25,
+                    progress_total=100,
+                )
+                all_results.extend(quadrant_results)
 
-                    try:
-                        rating_text = card.find_element(By.CSS_SELECTOR, "span.MW4etd").text.strip()
-                        rating = float(rating_text) if rating_text else None
-                    except (NoSuchElementException, ValueError):
-                        rating = None
+        else:
+            # ── Fallback — single text-query search (old behavior) ──
+            logger.info("[SCRAPER] No origin coordinates provided — falling back to single search")
+            query = f"{keyword} in {city}"
+            encoded = urllib.parse.quote_plus(query)
+            search_url = f"https://www.google.com/maps/search/{encoded}"
 
-                    try:
-                        review_text = card.find_element(By.CSS_SELECTOR, "span.UY7F9").text.strip()
-                        review_count = int(re.sub(r"[^\d]", "", review_text)) if review_text else 0
-                    except (NoSuchElementException, ValueError):
-                        review_count = 0
+            all_results = _scrape_one_search(
+                driver=driver,
+                search_url=search_url,
+                keyword=keyword,
+                limit=limit,
+                seen_urls=seen_urls,
+                progress_callback=progress_callback,
+                progress_offset=0,
+                progress_total=100,
+            )
 
-                    # ── FIXED: Granular Location & Address Extraction ──────
-                    address = ""
-                    try:
-                        info_rows = card.find_elements(By.CSS_SELECTOR, "div.W4Efsd")
-                        candidates = []
-                        
-                        for row in info_rows:
-                            row_text = row.text.strip()
-                            if not row_text:
-                                continue
-                            
-                            # Discard customer review quotes entirely
-                            if row_text.startswith('"') and row_text.endswith('"'):
-                                continue
-                                
-                            # Split by mid-dots to check elements granularly
-                            parts = [p.strip() for p in row_text.split("·") if p.strip()]
-                            for p in parts:
-                                lower_p = p.lower()
-                                
-                                # Skip dynamic/operational items safely without dropping the whole row
-                                if any(w in lower_p for w in ["open", "closed", "closes", "opens", "delivery", "dine-in", "takeout"]):
-                                    continue
-                                if any(w in lower_p for w in ["review", "rating", "★", "years in business"]):
-                                    continue
-                                if re.search(r'^\d+(\.\d+)?$', p): # Skip plain numeric ratings
-                                    continue
-                                if "km away" in lower_p: # Skip active live distance text
-                                    continue
-                                    
-                                if len(p) > 2 and p not in candidates:
-                                    candidates.append(p)
-                                    
-                        if candidates:
-                            # Drop overly broad business type markers to preserve explicit locations
-                            address_candidates = [
-                                c for c in candidates 
-                                if not any(cat in c.lower() for cat in ["restaurant", "cafe", "coffee shop", "bakery", "patisserie", "lounge", "bistro", "diner"])
-                            ]
-                            address = address_candidates[0] if address_candidates else candidates[0]
-                    except Exception:
-                        address = ""
-
-                    results.append({
-                        "name":     name,
-                        "address":  address,
-                        "rating":   rating,
-                        "reviews":  review_count,
-                        "url":      url,
-                        "selected": True,
-                    })
-                    parsed_this_loop += 1
-
-                    if progress_callback:
-                        progress_callback(len(results), limit, f"Found {len(results)} places...")
-
-                except StaleElementReferenceException:
-                    continue
-                except Exception as e:
-                    logger.warning(f"[SCRAPER] Card parse error: {e}")
-                    continue
-
-            logger.info(f"[DEBUG] Frame Processed: Scraped {parsed_this_loop} new items. Total results: {len(results)}.")
-
-            if len(results) == prev_count:
-                scroll_attempts += 1
-                logger.warning(f"[SCRAPER] Stall warning (Cycle {scroll_attempts}/{max_scroll_attempts}).")
-                
-                driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollTop - 1000);", feed)
-                time.sleep(0.5)
-                driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", feed)
-                time.sleep(2.0)
-
-                try:
-                    end_banner = driver.find_element(By.CSS_SELECTOR, "span.HlvSq")
-                    if end_banner and end_banner.is_displayed():
-                        logger.info("[SCRAPER] Reached end of the list. Stopping.")
-                        break
-                except NoSuchElementException:
-                    pass
-            else:
-                scroll_attempts = 0
-                
-            try:
-                end_of_list = driver.find_elements(By.CSS_SELECTOR, "div.lXJj5c.Hk4XGb")
-                if end_of_list:
-                    spinner = driver.find_elements(By.CSS_SELECTOR, "div.lXJj5c .OBAKjf")
-                    if not spinner:
-                        break
-            except Exception:
-                pass
-
-        logger.info(f"[SCRAPER] Done — found {len(results)} places")
+        logger.info(f"[SCRAPER] All quadrants done — {len(all_results)} total places found")
 
     except Exception as e:
         logger.error(f"[SCRAPER] Fatal error: {e}")
@@ -301,22 +348,28 @@ def search_google_maps_competitors(
             driver.quit()
 
     # ── Distance calculation ──────────────────────────────────────────────
-    for place in results:
+    for place in all_results:
         lat, lng = extract_coords_from_url(place.get("url", ""))
         place["lat"] = lat
         place["lng"] = lng
 
         if origin_lat and origin_lng and lat and lng:
             dist = haversine_km(origin_lat, origin_lng, lat, lng)
-            place["distance_km"]    = round(dist, 2)
-            place["within_radius"]  = dist <= radius_km
+            place["distance_km"]   = round(dist, 2)
+            place["within_radius"] = dist <= radius_km
         else:
             place["distance_km"]   = None
             place["within_radius"] = None
 
+    # ── Filter to only places within radius (keep unknown-distance places) ──
     filtered = [
-        p for p in results
+        p for p in all_results
         if p.get("within_radius") is True or p.get("within_radius") is None
     ]
-    
-    return filtered
+
+    logger.info(
+        f"[SCRAPER] Distance filter: {len(all_results)} total → "
+        f"{len(filtered)} within {radius_km}km radius"
+    )
+
+    return filtered[:limit]

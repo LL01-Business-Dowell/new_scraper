@@ -737,10 +737,10 @@ function ApprovingPhase({ places, checkedPlaces, togglePlace, selectedCount, est
                                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#818cf8' }} />
                                     <span>Competitor</span>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {/* <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#38bdf8' }} />
                                     <span>Hovered</span>
-                                </div>
+                                </div> */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <div style={{ width: 20, height: 2, background: '#9333ea', borderTop: '2px dashed #9333ea' }} />
                                     <span>{radiusKm} km radius</span>
