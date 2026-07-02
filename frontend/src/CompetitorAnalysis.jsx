@@ -125,6 +125,7 @@ export default function CompetitorAnalysis({
 
         try {
             const resp = await axios.post(`${BASE}/api/competitors/scrape-and-analyze`, {
+                task_id: searchTaskId,
                 places: approvedPlaces,
                 establishment_name: establishmentName,
             });
