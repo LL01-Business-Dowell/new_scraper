@@ -46,6 +46,8 @@ export default function CompetitorAnalysis({
     const [originLat, setOriginLat] = useState(originLatProp);
     const [originLng, setOriginLng] = useState(originLngProp);
 
+    const [analysisTaskId, setAnalysisTaskId] = useState(null);
+
     useEffect(() => {
         if (hasProps) {
             startSearch(keywordProp, cityProp, countryProp, radiusKmProp, establishmentNameProp);
@@ -112,16 +114,51 @@ export default function CompetitorAnalysis({
     };
 
     const handleApproveAndAnalyze = async () => {
-        const approvedPlaces = places.map((place, i) => ({ ...place, selected: checkedPlaces[i] !== false }));
+        const approvedPlaces = places.map((place, i) => ({
+            ...place,
+            selected: checkedPlaces[i] !== false,
+        }));
+
+        setSearchPhase("analyzing");
+        setProgress(0);
+        setStatusMessage("Starting analysis...");
+
         try {
-            await axios.post(`${BASE}/api/competitors/approve-and-analyze`, {
-                task_id: searchTaskId, approved_places: approvedPlaces,
+            const resp = await axios.post(`${BASE}/api/competitors/scrape-and-analyze`, {
+                places: approvedPlaces,
+                establishment_name: establishmentName,
             });
-            setSearchPhase("analyzing");
-            setProgress(0);
-            setStatusMessage("Running SWOT analysis...");
+
+            const newTaskId = resp.data.task_id;
+            setAnalysisTaskId(newTaskId);
+
+            // Poll the analysis task_id directly here
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = setInterval(async () => {
+                try {
+                    const poll = await axios.get(`${BASE}/api/competitors/progress/${newTaskId}`);
+                    const data = poll.data;
+                    setProgress(data.progress || 0);
+                    setStatusMessage(data.status_message || "Running analysis...");
+
+                    if (data.status === "complete") {
+                        clearInterval(pollIntervalRef.current);
+                        setSwotResults(data.swot_results || []);
+                        setCompetitiveAnalysis(data.competitive_analysis);
+                        setSearchPhase("complete");
+                    } else if (data.status === "error") {
+                        clearInterval(pollIntervalRef.current);
+                        alert(`Error: ${data.error}`);
+                        setSearchPhase("approving");
+                    }
+                } catch (err) {
+                    console.error("Analysis poll error:", err.message);
+                }
+            }, 2000);
+
         } catch (err) {
-            alert(`Analysis failed: ${err.message}`);
+            alert(`Failed to start analysis: ${err.message}`);
+            setSearchPhase("approving");
         }
     };
 
@@ -254,7 +291,7 @@ export default function CompetitorAnalysis({
     if (searchPhase === "searching") {
         return (
             <Shell>
-                <PageHeader title="Searching Google Maps..." />
+                <PageHeader title="Searching ..." />
                 <ProgressBar value={progress} />
                 <div style={{
                     background: "#1f2937", borderRadius: 12, padding: 20,

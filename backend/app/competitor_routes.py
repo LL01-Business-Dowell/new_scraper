@@ -103,7 +103,7 @@ async def search_competitors(request: SearchRequest, background_tasks: Backgroun
     competitor_tasks[task_id] = {
         "status": "searching",
         "progress": 0,
-        "status_message": "Initializing Google Maps search...",
+        "status_message": "Initializing search...",
         "places": [],
         "error": None,
     }
