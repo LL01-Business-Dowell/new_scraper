@@ -161,7 +161,7 @@ def _search_worker(task_id: str, keyword: str, city: str, country: str, location
         competitor_tasks[task_id]["progress"] = 100
         competitor_tasks[task_id]["status_message"] = f"Found {len(places)} places. Please review and approve."
         
-        logger.info(f"[COMPETITOR SEARCH] task_id={task_id} completed. Found {len(places)} places.")
+        logger.info(f"[COMPETITOR SEARCH] task_id={task_id} completed. Found {len(places)} places - Filtered within {radius_km}km radius.")
 
         _save_competitor_search(
             task_id=task_id,
