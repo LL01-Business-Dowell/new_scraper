@@ -19,9 +19,11 @@ import CsvProcessor from "./CsvProcessor";
 import SessionPage from "./SessionPage";
 import PlacePicker from "./PlacePicker";
 import CompetitorAnalysis from "./CompetitorAnalysis";
+import ReviewAnalysis from "./ReviewAnalysis";
 import "./App.css";
 
 import Dashboard from "./Dashboard";
+import SentimentApp from "./SentimentApp";
 
 // Normalise base URL — strip trailing slash once
 const BASE = API_BASE_URL.replace(/\/+$/, "");
@@ -312,6 +314,14 @@ const App = () => {
 
   if (window.location.pathname === "/dashboard") {
     return <Dashboard />;
+  }
+
+  if (window.location.pathname === "/review-analysis") {
+    return <ReviewAnalysis />;
+  }
+
+  if (window.location.pathname === "/sentiment") {
+    return <SentimentApp />
   }
 
   // Navigate to CsvProcessor page for By CSV mode
