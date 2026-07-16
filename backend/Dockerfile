@@ -1,76 +1,95 @@
-# FROM python:3.11
+# # FROM python:3.11-slim
 
-# # Set the working directory
+# # WORKDIR /usr/src/app
+
+# # # Install Chromium + dependencies (ARM compatible)
+# # RUN apt-get update && apt-get install -y \
+# #     chromium \
+# #     chromium-driver \
+# #     wget \
+# #     curl \
+# #     unzip \
+# #     gnupg \
+# #     libx11-6 \
+# #     libxcb1 \
+# #     libxcomposite1 \
+# #     libxdamage1 \
+# #     libxext6 \
+# #     libxfixes3 \
+# #     libxkbcommon0 \
+# #     libxrandr2 \
+# #     xdg-utils \
+# #     libglib2.0-0 \
+# #     libnss3 \
+# #     libx11-xcb1 \
+# #     libxcursor1 \
+# #     libxi6 \
+# #     libxrender1 \
+# #     libdbus-glib-1-2 \
+# #     libgtk-3-0 \
+# #     fonts-liberation \
+# #     ca-certificates \
+# #     && rm -rf /var/lib/apt/lists/*
+
+# # # Tell Selenium where Chromium is
+# # ENV GOOGLE_CHROME_BIN=/usr/bin/chromium
+# # ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
+
+# # # Copy requirements
+# # COPY requirements.txt .
+
+# # # Install Python deps
+# # RUN pip install --no-cache-dir --upgrade pip \
+# #  && pip install --no-cache-dir -r requirements.txt
+
+# # # Copy app
+# # COPY . .
+
+# # EXPOSE 8000
+
+# # CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# FROM python:3.11-slim
+
 # WORKDIR /usr/src/app
 
-# # Install dependencies for Selenium & Chrome
-# RUN apt-get update --fix-missing && \
-#     apt-get install -y --no-install-recommends -f \
-#     wget curl unzip gnupg \
-#     libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 \
-#     libxkbcommon0 libxrandr2 xdg-utils libglib2.0-0 libnss3 \
-#     libx11-xcb1 libxcursor1 libxi6 libxrender1 libdbus-glib-1-2 libgtk-3-0 && \
-#     rm -rf /var/lib/apt/lists/*
+# # Install only the system dependencies actually needed:
+# #   curl/ca-certificates — for outbound HTTP calls (Gemini API, Datacube)
+# #   libgomp1            — required by some ML/numeric Python packages
+# RUN apt-get update && apt-get install -y \
+#     curl \
+#     ca-certificates \
+#     libgomp1 \
+#     && rm -rf /var/lib/apt/lists/*
 
-# # Install Google Chrome
-# RUN apt-get update --fix-missing && apt-get install -f -y && \
-#     wget -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
-#     apt-get install -y /tmp/chrome.deb && rm /tmp/chrome.deb
+# # Copy and install Python dependencies first (layer cache friendly)
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir --upgrade pip \
+#  && pip install --no-cache-dir -r requirements.txt
 
-# # Set Chrome binary path for Selenium
-# ENV GOOGLE_CHROME_BIN=/usr/bin/google-chrome
-
-# # Install ChromeDriver
-# RUN set -eux; \
-#     CHROME_DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE"); \
-#     echo "ChromeDriver LATEST_RELEASE Version: ${CHROME_DRIVER_VERSION}"; \
-#     wget -O /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/133.0.6943.53/linux64/chromedriver-linux64.zip"; \
-#     if [ ! -s /tmp/chromedriver.zip ]; then \
-#     echo "ERROR: ChromeDriver zip file download failed or resulted in empty file!"; \
-#     exit 1; \
-#     fi; \
-#     unzip /tmp/chromedriver.zip -d /usr/local/bin/ && \
-#     mv /usr/local/bin/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
-#     chmod +x /usr/local/bin/chromedriver && \
-#     rm -rf /usr/local/bin/chromedriver-linux64 && \
-#     rm /tmp/chromedriver.zip; \
-#     echo "ChromeDriver installation to /usr/local/bin/ completed successfully."
-
-# # Set Chromedriver path for Selenium
-# ENV CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
-# ENV PATH="/usr/local/bin:${PATH}"
-
-# # Copy requirements file
-# COPY requirements.txt /usr/src/app/requirements.txt
-
-# # Install Python dependencies
-# RUN pip install --no-cache-dir --upgrade pip && \
-#     pip install --no-cache-dir -r requirements.txt
-
-# # Ensure required Python packages are installed
-# RUN pip install --no-cache-dir uvicorn selenium
-
-# # Copy application files
+# # Copy application code
 # COPY . .
 
-# # Expose backend port
 # EXPOSE 8000
 
-# # Start the application
-# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# # Use shell form so $PORT env var works on platforms like Fly.io / Koyeb
+# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
+# backend/Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /usr/src/app
 
-# Install Chromium + dependencies (ARM compatible)
+# Install Chromium + chromedriver for Selenium scraping
+# plus curl/ca-certificates for outbound HTTP (Gemini API, Datacube)
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \
-    wget \
     curl \
-    unzip \
-    gnupg \
+    ca-certificates \
+    libgomp1 \
+    libglib2.0-0 \
+    libnss3 \
     libx11-6 \
     libxcb1 \
     libxcomposite1 \
@@ -79,31 +98,21 @@ RUN apt-get update && apt-get install -y \
     libxfixes3 \
     libxkbcommon0 \
     libxrandr2 \
-    xdg-utils \
-    libglib2.0-0 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcursor1 \
     libxi6 \
     libxrender1 \
-    libdbus-glib-1-2 \
-    libgtk-3-0 \
     fonts-liberation \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Tell Selenium where Chromium is
 ENV GOOGLE_CHROME_BIN=/usr/bin/chromium
 ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
-# Copy requirements
+# Copy and install Python dependencies
 COPY requirements.txt .
-
-# Install Python deps
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt
+ && pip install --no-cache-dir -r requirements.txt \
+ && python -m nltk.downloader vader_lexicon
 
-# Copy app
+# Copy application code
 COPY . .
 
 EXPOSE 8000

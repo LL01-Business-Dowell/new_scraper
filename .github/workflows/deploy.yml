@@ -8,67 +8,80 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    env:
+      DEPLOY_HOST: 67.211.219.87
+      DEPLOY_USER: root
+      DEPLOY_PATH: /home/SamantaScraper
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH key
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 82.29.161.195 >> ~/.ssh/known_hosts
+          ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
 
-      - name: Deploy to Server
-        env:
-          DEPLOY_PATH: /home/SamantaScraper
-          DEPLOY_HOST: 82.29.161.195
-          DEPLOY_USER: root
+      - name: Pull latest code
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST "bash -s" << 'ENDSSH'
-          # Set deployment path explicitly
-          DEPLOY_PATH=/home/SamantaScraper
-          echo "Starting deployment to $DEPLOY_PATH..."
-
-          # Verify deployment path exists or create it
-          if [ ! -d "$DEPLOY_PATH" ]; then
-            echo "Deployment directory $DEPLOY_PATH does not exist. Creating it..."
-            mkdir -p "$DEPLOY_PATH" || { echo "Failed to create directory $DEPLOY_PATH"; exit 1; }
-          fi
-
-          # Navigate to deployment directory
-          cd "$DEPLOY_PATH" || { echo "Failed to navigate to $DEPLOY_PATH"; exit 1; }
-
-          # Check for existing Git repo or initialize one
-          if [ ! -d ".git" ]; then
-            echo "Git repository not found. Cloning repository..."
-            git clone git@github.com:your-username/your-repo.git . || { echo "Failed to clone repository"; exit 1; }
-          fi
-
-          # Pull latest changes
-          echo "Pulling latest code..."
-          git fetch origin main
-          git reset --hard origin/main || { echo "Git pull failed"; exit 1; }
-
-          # Verify docker-compose file exists
-          if [ ! -f "docker-compose.yml" ]; then
-            echo "Error: docker-compose.yml not found"
-            exit 1
-          fi
-
-          # Build and deploy with Docker Compose
-          echo "Building and deploying with Docker Compose..."
-          docker-compose up -d --build || { echo "Docker Compose failed"; exit 1; }
-
-          # Clean up
-          echo "Cleaning up old Docker resources..."
-          docker system prune -f || { echo "Docker prune failed"; exit 1; }
-
-          echo "Deployment completed successfully!"
+            set -e
+            DEPLOY_PATH=/home/SamantaScraper
+            mkdir -p $DEPLOY_PATH
+            cd $DEPLOY_PATH
+            if [ ! -d ".git" ]; then
+              echo "=== Cloning repository ==="
+              git clone git@github.com:LL01-Business-Dowell/new_scraper.git .
+            fi
+            echo "=== Pulling latest code ==="
+            git fetch origin main
+            git reset --hard origin/main
+            echo "=== Code updated ==="
           ENDSSH
 
-      - name: Verify Deployment
+      - name: Write environment variables
+        # This step runs on the GitHub Actions runner, NOT inside a heredoc,
+        # so ${{ secrets.* }} expands correctly before being sent to the server.
         run: |
-          echo "Waiting for services to start..."
-          sleep 30  # Give services time to start
-          echo "Validation successful: Service is up and running."
+          ssh $DEPLOY_USER@$DEPLOY_HOST "cat > /home/SamantaScraper/.env" << EOF
+          CRUD_API_KEY=${{ secrets.CRUD_API_KEY }}
+          DATABASE_ID=${{ secrets.DATABASE_ID }}
+          SAMANTA_DATABASE_ID=${{ secrets.SAMANTA_DATABASE_ID }}
+          GEMINI_KEY_1=${{ secrets.GEMINI_KEY_1 }}
+          GEMINI_KEY_2=${{ secrets.GEMINI_KEY_2 }}
+          GEMINI_KEY_3=${{ secrets.GEMINI_KEY_3 }}
+          EOF
+
+      - name: Docker login on server
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST \
+            "echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin"
+
+      - name: Build and restart containers
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST "bash -s" << 'ENDSSH'
+            set -e
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+            cd /home/SamantaScraper
+            echo "=== Building updated services ==="
+            docker compose build
+            echo "=== Restarting containers ==="
+            docker compose up -d
+            echo "=== Cleaning dangling images ==="
+            docker image prune -f
+            echo "=== Running containers ==="
+            docker compose ps
+            echo "=== Deployment complete ==="
+          ENDSSH
+
+      - name: Verify deployment
+        run: |
+          echo "Waiting 20 seconds for startup..."
+          sleep 20
+          curl -f https://reviewanalysis.uxlivinglab.org/countries \
+            && echo "SUCCESS — backend is responding" \
+            || (echo "FAILED — check logs" && exit 1)

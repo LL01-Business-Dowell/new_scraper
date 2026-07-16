@@ -5,3 +5,10 @@ selenium-stealth
 pandas
 webdriver-manager
 python-multipart
+google-genai
+pypdf
+python-docx
+openpyxl
+nltk==3.8.1
+textblob==0.17.1
+python-dateutil

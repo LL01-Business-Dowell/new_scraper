@@ -8,7 +8,7 @@ from decouple import config
 
 database_id = config("DATABASE_ID")
 datacube_api_url = config("BASE_DATACUBE_URL")
-crud_url = datacube_api_url+"api/crud"
+crud_url = datacube_api_url+"/crud"
 api_key=config("API_KEY")
 
 headers = {
