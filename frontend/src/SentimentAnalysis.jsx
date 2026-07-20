@@ -46,6 +46,8 @@ function ApprovingPhase({ places, checkedPlaces, togglePlace, selectedCount, est
     const markersRef = React.useRef([]);
     const circleRef = React.useRef(null);
 
+    const handleApprove = onApprove;
+
     const mapCenter = React.useMemo(() => {
         if (originLat && originLng) return [originLat, originLng];
         const f = places.find(p => p.lat != null);
@@ -153,7 +155,7 @@ function ApprovingPhase({ places, checkedPlaces, togglePlace, selectedCount, est
                                 })}
                             </div>
                             <div style={{ display: "flex", gap: 8 }}>
-                                <button onClick={onApprove} className="submit-button" style={{ flex: 1, margin: 0 }}><FaChartBar className="button-icon" /> Analyse {selectedCount} Hotels</button>
+                                <button onClick={handleApprove} className="submit-button" style={{ flex: 1, margin: 0 }}><FaChartBar className="button-icon" /> Analyse {selectedCount} Hotels</button>
                                 <button onClick={onBack} className="reset-button" style={{ width: "auto", marginTop: 0, padding: "0.75rem 1.2rem" }}>Cancel</button>
                             </div>
                         </div>
@@ -192,10 +194,6 @@ function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl })
             </div>
         </div>
     );
-
-    const pos = combined.total_positive || 0;
-    const neu = combined.total_neutral || 0;
-    const neg = combined.total_negative || 0;
 
     return (
         <Shell>
@@ -446,7 +444,7 @@ export default function SentimentAnalysis({ baseUrl, onBack, city, country, esta
                     setPlaces(all);
                     const checked = {}; all.forEach((p, i) => { checked[i] = p.selected !== false; }); setCheckedPlaces(checked);
                     setPhase("approving");
-                } else if (data.status === "complete") {
+                } else if (data.status === "completed") {
                     clearInterval(pollRef.current);
                     setResults(data.results || []); setCombined(data.combined_report || {}); setPhase("complete");
                 } else if (data.status === "error") {
@@ -475,7 +473,7 @@ export default function SentimentAnalysis({ baseUrl, onBack, city, country, esta
                     const poll = await axios.get(`${BASE}/api/hotel-sentiment/progress/${resp.data.task_id}`);
                     const data = poll.data;
                     setProgress(data.progress || 0); setStatusMessage(data.status_message || "");
-                    if (data.status === "complete") { clearInterval(pollRef.current); setResults(data.results || []); setCombined(data.combined_report || {}); setPhase("complete"); }
+                    if (data.status === "completed") { clearInterval(pollRef.current); setResults(data.results || []); setCombined(data.combined_report || {}); setPhase("complete"); }
                     else if (data.status === "error") { clearInterval(pollRef.current); alert(`Error: ${data.error}`); setPhase("approving"); }
                 } catch (err) { console.error("Poll error:", err.message); }
             }, 2000);

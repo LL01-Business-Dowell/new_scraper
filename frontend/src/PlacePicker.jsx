@@ -165,7 +165,7 @@ export default function PlacePicker({
     useEffect(() => {
         if (!mapRef.current || !city) return;
         nominatimSearch(city, country, "").then(res => {
-            if (res.length && mapRef.current) {
+            if (Array.isArray(res) && res.length > 0 && mapRef.current) {
                 mapRef.current.flyTo(
                     [parseFloat(res[0].lat), parseFloat(res[0].lon)], 13, { duration: 1.2 }
                 );
@@ -184,8 +184,9 @@ export default function PlacePicker({
         debounceRef.current = setTimeout(async () => {
             setLoading(true);
             const data = await nominatimSearch(val, city, country);
-            setResults(data);
-            setShowDrop(data.length > 0);
+            const safeData = Array.isArray(data) ? data : [];
+            setResults(safeData);
+            setShowDrop(safeData.length > 0);
             setLoading(false);
         }, 450);
     }, [city, country]);
@@ -269,7 +270,7 @@ export default function PlacePicker({
                     type="text"
                     value={query}
                     onChange={handleQueryChange}
-                    onFocus={() => results.length > 0 && setShowDrop(true)}
+                    onFocus={() => (results || []).length > 0 && setShowDrop(true)}
                     placeholder={
                         city
                             ? `Search for a ${keyword || "place"} in ${city}...`
@@ -317,7 +318,7 @@ export default function PlacePicker({
                 )}
 
                 {/* Dropdown results */}
-                {showDrop && results.length > 0 && (
+                {showDrop && (results || []).length > 0 && (
                     <div style={{
                         position: "absolute",
                         top: "calc(100% + 4px)",
@@ -336,9 +337,9 @@ export default function PlacePicker({
                                 Searching...
                             </div>
                         )}
-                        {results.map((place, i) => {
-                            const parts = place.display_name.split(",");
-                            const mainName = parts[0].trim();
+                        {(results || []).map((place, i) => {
+                            const parts = (place?.display_name || "").split(",");
+                            const mainName = parts[0]?.trim() || "";
                             const subName = parts.slice(1, 4).join(",").trim();
                             return (
                                 <div

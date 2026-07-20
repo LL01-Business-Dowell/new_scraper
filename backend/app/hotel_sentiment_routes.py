@@ -17,11 +17,11 @@ import logging
 import threading
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/api/hotel-sentiment", tags=["Sentiment Analysis"])
 
 # In-memory task store — separate from competitor_tasks
 hotel_sentiment_tasks = {}
@@ -37,6 +37,7 @@ class HotelSearchRequest(BaseModel):
     limit: int = 100
     origin_lat: Optional[float] = None
     origin_lng: Optional[float] = None
+    days_back: int = 30
 
 
 class HotelAnalyzeRequest(BaseModel):
@@ -64,7 +65,7 @@ def _hotel_search_worker(
         logger.info(f"[HOTEL SENTIMENT] task_id={task_id} searching: '{keyword}'")
 
         def progress(current, total, message):
-            hotel_sentiment_tasks[task_id]["progress"] = int((current / max(total,1)) * 90)
+            hotel_sentiment_tasks[task_id]["progress"] = int((current / max(total, 1)) * 90)
             hotel_sentiment_tasks[task_id]["status_message"] = message
 
         places = search_google_maps_competitors(
@@ -110,12 +111,12 @@ def _hotel_search_worker(
 def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
     """
     For each selected place:
-      1. Scrape reviews (days_back days)
-      2. Run VADER sentiment analysis
+      1. Scrape reviews using Apify (ignoring local Selenium browser chunks)
+      2. Run internal VADER sentiment analysis over the returned payload
     Then generate combined sentiment report.
     """
-    from .review_scraper import scrape_place_reviews
-    from .single_review_scraper import _run_sentiment_analysis
+    from .hotel_apify_scraper import scrape_hotel_reviews_apify
+    from .hotel_review_scraper import _run_sentiment_analysis
 
     selected = [p for p in places if p.get("selected", True)]
     total    = len(selected)
@@ -128,23 +129,32 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
         name = place.get("name", f"Place {i+1}")
         url  = place.get("url", "")
 
-        hotel_sentiment_tasks[task_id]["status_message"] = f"Finding reviews for {name} ({i+1}/{total})..."
-        hotel_sentiment_tasks[task_id]["progress"]       = int((i / max(total,1)) * 85)
-
         sentiment = {}
         review_count = 0
         biz_details  = {}
 
         if url:
             try:
-                scraped      = scrape_place_reviews(url=url, max_reviews=50, days_back=days_back)
+                def progress_cb(current_step_pct, max_step_pct, msg):
+                    base_progress = (i / max(total, 1)) * 85
+                    step_contribution = (current_step_pct / max_step_pct) * (85 / max(total, 1))
+                    hotel_sentiment_tasks[task_id]["progress"] = min(85, int(base_progress + step_contribution))
+                    hotel_sentiment_tasks[task_id]["status_message"] = f"[{i+1}/{total}] {name}: {msg}"
+
+                scraped = scrape_hotel_reviews_apify(url=url, max_reviews=50, progress_callback=progress_cb)
+                
+                if scraped.get("error"):
+                    raise Exception(scraped["error"])
+
                 biz_details  = scraped.get("business_details", {})
                 reviews      = scraped.get("reviews", [])
                 review_count = len(reviews)
+                
                 sentiment    = _run_sentiment_analysis(reviews)
+                
                 logger.info(f"[HOTEL SENTIMENT] {name} — {review_count} reviews, score={sentiment.get('overall_score')}")
             except Exception as e:
-                logger.error(f"[HOTEL SENTIMENT] Scrape failed for {name}: {e}")
+                logger.error(f"[HOTEL SENTIMENT] Apify extraction pipeline failed for {name}: {e}")
                 errors.append({"name": name, "error": str(e)})
         else:
             logger.info(f"[HOTEL SENTIMENT] No URL for {name} — rating-only entry")
@@ -161,18 +171,17 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
             "sentiment":            sentiment,
         })
 
-    # Combined report
-    combined = _build_combined_sentiment_report(results)
-
+    # Compile report summaries and updates metrics explicitly
+    combined_report = _build_combined_sentiment_report(results)
+    
     hotel_sentiment_tasks[task_id].update({
-        "status":           "complete",
-        "progress":         100,
-        "status_message":   f"Done! Analysed {len(results)} hotels ({len(errors)} errors).",
-        "results":          results,
-        "combined_report":  combined,
-        "errors":           errors,
+        "status":          "completed",
+        "progress":        100,
+        "status_message":  "Sentiment metrics analysis completed successfully.",
+        "results":         results,
+        "combined_report": combined_report,
+        "errors":          errors
     })
-    logger.info(f"[HOTEL SENTIMENT] task_id={task_id} complete.")
 
 
 def _build_combined_sentiment_report(results: List[dict]) -> dict:
@@ -194,7 +203,6 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
 
     avg_rating = round(sum(r["rating"] for r in with_rating) / len(with_rating), 2) if with_rating else None
 
-    # Sentiment ranking — sorted best to worst
     ranked = sorted(
         with_sentiment,
         key=lambda r: r["sentiment"].get("overall_score", -99),
@@ -204,24 +212,20 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
     best  = ranked[0]  if ranked else None
     worst = ranked[-1] if len(ranked) > 1 else None
 
-    # Aggregate keyword themes across all places
     combined_themes = {}
     for r in results:
         for theme, count in r.get("sentiment", {}).get("keyword_themes", {}).items():
             combined_themes[theme] = combined_themes.get(theme, 0) + count
 
-    # Total positive/neutral/negative counts
     total_pos = sum(r["sentiment"].get("positive_count", 0) for r in with_sentiment)
     total_neu = sum(r["sentiment"].get("neutral_count",  0) for r in with_sentiment)
     total_neg = sum(r["sentiment"].get("negative_count", 0) for r in with_sentiment)
     total_all = total_pos + total_neu + total_neg or 1
 
-    # Sentiment distribution across places
     positive_places = sum(1 for r in with_sentiment if r["sentiment"].get("overall_score", 0) > 0.2)
     neutral_places  = sum(1 for r in with_sentiment if -0.2 <= r["sentiment"].get("overall_score", 0) <= 0.2)
     negative_places = sum(1 for r in with_sentiment if r["sentiment"].get("overall_score", 0) < -0.2)
 
-    # Insights
     insights = []
     if avg_score > 0.4:
         insights.append("Customer sentiment across luxury hotels in this market is strongly positive — reputation and word-of-mouth are major drivers of bookings.")
@@ -243,7 +247,7 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
         insights.append(f"'{top_theme}' is the most frequently mentioned topic across all hotel reviews — this is the primary decision factor for guests in this market.")
 
     total_scraped = sum(r.get("scraped_review_count", 0) for r in results)
-    insights.append(f"Analysis based on {total_scraped:,} reviews scraped across {len(results)} hotels over the selected period.")
+    insights.append(f"Analysis based on {total_scraped:,} reviews found across {len(results)} hotels over the selected period.")
 
     return {
         "total_analysed":       len(results),
@@ -277,7 +281,7 @@ async def hotel_search(request: HotelSearchRequest, background_tasks: Background
         "status": "searching", "progress": 0,
         "status_message": f"Searching for Luxury Hotels near {request.city}...",
         "places": [], "error": None, "city": request.city,
-        "days_back": request.days_back if hasattr(request, 'days_back') else 30,
+        "days_back": request.days_back,
     }
     background_tasks.add_task(
         _hotel_search_worker,
@@ -294,13 +298,16 @@ async def hotel_search(request: HotelSearchRequest, background_tasks: Background
 
 @router.get("/progress/{task_id}")
 async def hotel_progress(task_id: str):
+    """
+    Lightweight, fast non-blocking endpoint to handle frequent client requests cleanly.
+    """
     task = hotel_sentiment_tasks.get(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     return {
-        "status":          task["status"],
-        "progress":        task["progress"],
-        "status_message":  task["status_message"],
+        "status":          task.get("status"),
+        "progress":        task.get("progress", 0),
+        "status_message":  task.get("status_message", ""),
         "places":          task.get("places", []),
         "results":         task.get("results", []),
         "combined_report": task.get("combined_report", {}),
@@ -313,7 +320,7 @@ async def hotel_progress(task_id: str):
 async def hotel_analyse(request: HotelAnalyzeRequest, background_tasks: BackgroundTasks):
     task = hotel_sentiment_tasks.get(request.task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
     task["status"]         = "analysing"
     task["progress"]       = 0
@@ -334,13 +341,12 @@ async def download_sentiment_pdf(task_id: str):
     """Generate and stream a professional PDF sentiment report."""
     task = hotel_sentiment_tasks.get(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    if task["status"] != "complete":
-        raise HTTPException(status_code=400, detail="Analysis not complete yet")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    if task.get("status") != "completed":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analysis not complete yet")
     try:
         import io, datetime
         pdf_bytes = _generate_sentiment_pdf(task)
-        combined  = task.get("combined_report", {})
         city      = task.get("city", "")
         filename  = f"hotel-sentiment-{city.replace(' ','-')}-{datetime.date.today()}.pdf"
         from fastapi.responses import StreamingResponse
@@ -350,13 +356,13 @@ async def download_sentiment_pdf(task_id: str):
         )
     except Exception as e:
         logger.error(f"[HOTEL SENTIMENT] PDF generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"PDF generation failed: {e}")
 
 
 def _generate_sentiment_pdf(task: dict) -> bytes:
-    import io, datetime, math
+    import io, datetime
     from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import cm
     from reportlab.lib import colors
     from reportlab.platypus import (
@@ -513,8 +519,10 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
     for i, r in enumerate(results):
         s = r.get("sentiment", {})
         sc = s.get("overall_score")
-        sc_color = GREEN if sc and sc>0.2 else (RED if sc and sc<-0.2 else AMBER)
-        pos = s.get("positive_count",0); neu = s.get("neutral_count",0); neg = s.get("negative_count",0); total = pos+neu+neg or 1
+        pos = s.get("positive_count", 0)
+        neu = s.get("neutral_count", 0)
+        neg = s.get("negative_count", 0)
+        total = pos + neu + neg or 1
 
         header = Table([[
             Paragraph(f"{'★ ' if r.get('is_user_establishment') else ''}{r.get('name','')}", ParagraphStyle("HN",fontSize=10,leading=14,textColor=WHITE if not r.get('is_user_establishment') else AMBER,fontName="Helvetica-Bold")),
@@ -523,17 +531,15 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
         header.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),PURPLE_DARK),("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),("LEFTPADDING",(0,0),(-1,-1),12),("RIGHTPADDING",(0,0),(-1,-1),12),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
         story.append(header)
 
-        if r.get("scraped_review_count",0) == 0:
-            story.append(Table([[Paragraph("No reviews scraped for this period.",style_small)]],colWidths=[W],style=TableStyle([("BACKGROUND",(0,0),(-1,-1),SLATE_LITE),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),12)])))
+        if r.get("scraped_review_count", 0) == 0:
+            story.append(Table([[Paragraph("No reviews found for this period.",style_small)]],colWidths=[W],style=TableStyle([("BACKGROUND",(0,0),(-1,-1),SLATE_LITE),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),12)])))
         else:
             body_rows = [
-                [Paragraph(f"Reviews scraped: {r.get('scraped_review_count',0)}  ·  Positive: {pos} ({pos/total*100:.0f}%)  ·  Neutral: {neu} ({neu/total*100:.0f}%)  ·  Negative: {neg} ({neg/total*100:.0f}%)", style_small)],
+                [Paragraph(f"Reviews found: {r.get('scraped_review_count',0)}  ·  Positive: {pos} ({pos/total*100:.0f}%)  ·  Neutral: {neu} ({neu/total*100:.0f}%)  ·  Negative: {neg} ({neg/total*100:.0f}%)", style_small)],
             ]
-            # Top positive snippet
             if s.get("top_positive_phrases"):
                 p0 = s["top_positive_phrases"][0]
                 body_rows.append([Paragraph(f'<font color="#059669">✓ {p0.get("author","")} ({p0.get("date","")}):</font> "{p0.get("text","")}"', style_italic)])
-            # Top negative snippet
             if s.get("top_negative_phrases"):
                 n0 = s["top_negative_phrases"][0]
                 body_rows.append([Paragraph(f'<font color="#DC2626">✗ {n0.get("author","")} ({n0.get("date","")}):</font> "{n0.get("text","")}"', style_italic)])
@@ -548,7 +554,7 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
     story.append(Spacer(1, 0.4*cm))
     story.append(HRFlowable(width=W, thickness=0.5, color=colors.HexColor("#E2E8F0")))
     story.append(Spacer(1, 0.2*cm))
-    story.append(Paragraph(f"Generated by DoWell Samanta Scraper  ·  {datetime.date.today().strftime('%d %B %Y')}  ·  Data source: Google Maps Reviews  ·  Analysis period: last {days_back} days", style_caption))
+    story.append(Paragraph(f"Generated by DoWell Samanta  ·  {datetime.date.today().strftime('%d %B %Y')}  ·  Data source: Google Maps Reviews  ·  Analysis period: last {days_back} days", style_caption))
 
     doc.build(story)
     return buf.getvalue()

@@ -1,14 +1,26 @@
 services:
   backend:
+    build: ./backend
+    volumes:
+      - ./backend:/app
     ports:
       - "8000:8000"
+    environment:
+      - WATCHFILES_FORCE_POLLING=true
 
   frontend:
     build:
+      context: ./frontend
+      target: development # <-- Crucial: Tells Docker to use the dev stage instead of Nginx
       args:
         VITE_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Prevents local node_modules from wiping out the container's installs
     ports:
-      - "5173:80"
+      - "5173:5173" # Maps directly to Vite's dev server port
+    environment:
+      - CHOKIDAR_USEPOLLING=true
 
   nginx:
     profiles: ["production"]

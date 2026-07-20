@@ -24,6 +24,7 @@ import "./App.css";
 
 import Dashboard from "./Dashboard";
 import SentimentApp from "./SentimentApp";
+import FeedbackPage from "./FeedbackPage";
 
 // Normalise base URL — strip trailing slash once
 const BASE = API_BASE_URL.replace(/\/+$/, "");
@@ -322,6 +323,10 @@ const App = () => {
 
   if (window.location.pathname === "/sentiment") {
     return <SentimentApp />
+  }
+
+  if (window.location.pathname === "/feedback") {
+    return <FeedbackPage />;
   }
 
   // Navigate to CsvProcessor page for By CSV mode

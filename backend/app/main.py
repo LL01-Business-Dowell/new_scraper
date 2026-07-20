@@ -49,6 +49,7 @@ from .session_routes import router as session_router
 from .competitor_routes import router as competitor_router
 from .review_analysis_routes import router as review_analysis_router
 from .hotel_sentiment_routes import router as hotel_sentiment_router
+from .feedback_routes import router as feedback_router
 
 
 
@@ -89,7 +90,9 @@ app.include_router(csv_router)
 app.include_router(session_router)
 app.include_router(competitor_router)
 app.include_router(review_analysis_router, prefix="/api/review-analysis")
-app.include_router(hotel_sentiment_router, prefix="/api/hotel-sentiment")
+# app.include_router(hotel_sentiment_router, prefix="/api/hotel-sentiment")
+app.include_router(hotel_sentiment_router)
+app.include_router(feedback_router, prefix="/api/feedback")
 
 tasks = {}
 
@@ -383,4 +386,4 @@ def download_search_results(task_id: str):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
