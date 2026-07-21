@@ -73,17 +73,6 @@ def setup_selenium_driver():
         raise
 
 def perform_google_maps_search(driver, search_query: str, postal_code: str) -> List[Dict[str, Any]]:
-    """
-    Perform a search on Google Maps and extract results.
-    
-    Args:
-        driver: Selenium WebDriver
-        search_query: Query string to search
-        postal_code: Postal code for this search
-        
-    Returns:
-        List of dictionaries with business details
-    """
     results = []
     
     try:

@@ -1,7 +1,8 @@
 """
-gemini_routes.py  —  drop this file into backend/app/
-then in main.py add:  from .gemini_routes import router as gemini_router
-                      app.include_router(gemini_router)
+gemini_routes.py — Drop this file into backend/app/
+then in main.py add:
+    from .gemini_routes import router as gemini_router
+    app.include_router(gemini_router)
 """
 
 from fastapi import APIRouter, BackgroundTasks
@@ -13,21 +14,18 @@ import re
 import uuid
 import datetime
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ─── In-memory task store (shared with main.py tasks dict via import) ────────
-# We keep a local store here so this file is self-contained.
-# If you prefer, import `tasks` from main.py instead.
+# ─── In-memory task store ─────────────────────────────────────────────────────
 gemini_tasks: dict = {}
 
-# ─── Gemini client ────────────────────────────────────────────────────────────
-# Uses GEMINI_KEY_1 env var automatically — do NOT pass api_key= argument
+# ─── Gemini client setup ──────────────────────────────────────────────────────
 try:
     from google import genai
-    import os
     if not os.getenv("GEMINI_KEY_1"):
         raise Exception("GEMINI_KEY_1 environment variable not set")
     gemini_client = genai.Client()
@@ -41,24 +39,20 @@ except Exception as e:
 
 # ─── Pydantic models ──────────────────────────────────────────────────────────
 class GenerateFromPromptsRequest(BaseModel):
-    prompts: List[str]          # the 30 prompt strings from generate_prompts_task
+    prompts: List[str]            # Prompt strings generated from geographic coordinates
     keyword: str
     city: str
     country: str
-    results_per_call: int = 100  # how many businesses to request per Gemini call
-    batch_size: int = 5          # how many prompts to combine into one Gemini call
-                                 # 30 prompts / 5 = 6 Gemini calls  (well within 20/day)
+    results_per_call: int = 100  # Target count of results per API call
+    batch_size: int = 5          # Number of coordinate prompts to combine per API call
 
 
 # ─── Core Gemini function ─────────────────────────────────────────────────────
 def call_gemini_batch(prompts_batch: List[str], keyword: str, city: str, country: str, results_per_call: int) -> List[dict]:
     """
     Combine multiple coordinate-based prompts into ONE Gemini API call.
-    Asks for `results_per_call` businesses covering all coordinates in the batch.
+    Asks for `results_per_call` individual professionals covering coordinates in the batch.
     """
-
-    # Build a compact location list from the prompts
-    # Each prompt already contains lat/lon — we extract just the coordinate part
     location_hints = []
     for p in prompts_batch:
         # prompts look like: "find ... of 100 {keyword} in {lat} {lng}, {city}, {country} ..."
@@ -110,7 +104,7 @@ Critical rules:
         # Strip markdown code fences if present
         if "```" in text:
             parts = text.split("```")
-            # take the content inside the first code block
+            # Take the content inside the first code block
             text = parts[1] if len(parts) > 1 else parts[0]
             text = re.sub(r'^json\s*', '', text, flags=re.IGNORECASE).strip()
 
@@ -208,7 +202,7 @@ def run_gemini_task(task_id: str, prompts: List[str], keyword: str, city: str, c
     finally:
         task["running"] = False
         task["progress"] = 100
-        task["completed_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+        task["completed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         logger.info(f"[GEMINI {task_id}] Done. Total results: {len(all_results)}")
 
 
@@ -216,14 +210,14 @@ def _mock_results(keyword: str, city: str, country: str, count: int) -> List[dic
     """Returns fake data when Gemini API key is not configured — for UI testing."""
     return [
         {
-            "name":     f"{keyword} Business {i + 1}",
-            "address":  f"{100 + i} Main Street, {city}",
+            "name":     f"{keyword} Executive {i + 1}",
+            "title":    f"Director of {keyword.title()}",
+            "hospital": f"{city} General Hospital",
+            "address":  f"{100 + i} Medical Center Way, {city}",
             "phone":    f"+1-555-{str(i).zfill(3)}-0000",
-            "email":    f"contact{i}@example.com",
-            "website":  f"https://example{i}.com",
-            "linkedin": f"https://linkedin.com/company/example{i}",
-            "rating":   str(round(3.5 + (i % 3) * 0.5, 1)),
-            "reviews":  str(10 + i * 7),
+            "email":    f"executive{i}@examplehospital.org",
+            "website":  f"https://examplehospital{i}.org",
+            "linkedin": f"https://linkedin.com/in/executive{i}",
             "city":     city,
             "country":  country,
         }
@@ -249,7 +243,7 @@ async def generate_from_prompts(request: GenerateFromPromptsRequest, background_
         "results": [],
         "error": None,
         "batch_info": "Starting...",
-        "started_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         "keyword": request.keyword,
         "city": request.city,
         "country": request.country,

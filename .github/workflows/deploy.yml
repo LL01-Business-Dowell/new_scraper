@@ -83,6 +83,6 @@ jobs:
         run: |
           echo "Waiting 20 seconds for startup..."
           sleep 20
-          curl -f https://reviewanalysis.uxlivinglab.org/countries \
+          curl -f https://reviewanalysis.uxlivinglab.org/ \
             && echo "SUCCESS — backend is responding" \
             || (echo "FAILED — check logs" && exit 1)

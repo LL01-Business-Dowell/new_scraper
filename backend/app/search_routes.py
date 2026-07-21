@@ -22,18 +22,19 @@ Register in main.py:
     app.include_router(search_router)
 """
 
+import datetime
+import json
+import logging
+import os
+import re
+import traceback
+import uuid
+from typing import List, Optional
+
 from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List, Optional
-import uuid
-import datetime
-import logging
-import os
-import json
-import re
 import requests
-import traceback
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -145,29 +146,7 @@ KEYWORDS: List[str] = [
 def _extract_place_name_from_url(url: str) -> Optional[str]:
     """
     Fetch the Google Maps page for a place and extract the business name
-    from the HTML <title> tag.
-
-    Google Maps page titles follow the format:
-        "Business Name - Google Maps"
-    or occasionally:
-        "Business Name, City - Google Maps"
-
-    We strip the " - Google Maps" suffix and any trailing city qualifier
-    to return just the clean business name.
-
-    Returns None if the fetch fails, the URL is not a valid Maps URL,
-    or the title cannot be parsed. Callers should handle None gracefully
-    by falling back to a generic description like "your establishment".
-
-    Parameters
-    ----------
-    url : str  The Google Maps URL pasted by the user. Accepts both
-               short share links (maps.app.goo.gl) and full URLs
-               (google.com/maps/place/...).
-
-    Returns
-    -------
-    str | None  The extracted business name, or None on failure.
+    from the HTML <title> tag or final redirected URL.
     """
     if not url or not url.strip():
         return None
@@ -206,7 +185,7 @@ def _extract_place_name_from_url(url: str) -> Optional[str]:
 
         html = resp.text
         logger.info(
-            f"_extract_place_name: HTML snippet (first 500): " f"'{html[:500]}'"
+            f"_extract_place_name: HTML snippet (first 500): '{html[:500]}'"
         )
 
         # Strategy 1: parse <title> tag
@@ -264,18 +243,6 @@ def _extract_place_name_from_url(url: str) -> Optional[str]:
 
 # ---------------------------------------------------------------------------
 # Report type definitions
-# Each entry contains:
-#   label            : human-readable name shown in the frontend dropdown
-#   description      : one-line description shown in the UI
-#   requires_place   : bool — if True, the frontend shows the Maps URL input
-#                      and the backend enforces that place_url is provided
-#   prompt_template  : f-string. Available placeholders:
-#                        {keyword}, {city}, {country}, {radius_km}
-#                        {quadrant_name}, {coord_str}   — swot only
-#                        {place_name}                   — when place_url given
-#
-# To add a new report type: append a new dict here. The frontend
-# automatically shows it in the dropdown without any frontend code changes.
 # ---------------------------------------------------------------------------
 REPORT_TYPES: List[dict] = [
     {
@@ -332,8 +299,6 @@ REPORT_TYPES: List[dict] = [
             "to identify your business. No coordinate grid used — Gemini reasons "
             "about the full competitive landscape in the area."
         ),
-        # This template uses {place_name}, {keyword}, {city}, {country}, {radius_km}.
-        # {quadrant_name} and {coord_str} are NOT used — this type skips the inscriber.
         "prompt_template": (
             "You are a senior competitive intelligence analyst specialising in "
             "the food and beverage industry in {country}.\n\n"
@@ -400,13 +365,6 @@ REPORT_TYPES: List[dict] = [
             '({radius_km} km radius)"'
         ),
     },
-    # ── Add more report types below this line ────────────────────────────────
-    # To add a new type: copy the dict above and set a new unique "id".
-    # Set requires_place: True if the type needs a Google Maps URL.
-    # Available template placeholders:
-    #   Always: {keyword} {city} {country} {radius_km} {place_name}
-    #   SWOT only: {quadrant_name} {coord_str}
-    #   {place_section} and {comparison_section} are auto-injected for swot.
 ]
 
 # Build a lookup dict for fast access by id
@@ -416,22 +374,7 @@ _REPORT_TYPE_BY_ID = {rt["id"]: rt for rt in REPORT_TYPES}
 # ---------------------------------------------------------------------------
 # Request model
 # ---------------------------------------------------------------------------
-
-
 class SearchRequest(BaseModel):
-    """
-    Parameters sent from the frontend when the user clicks Start Search.
-
-    keyword     : chosen from the KEYWORDS list
-    report_type : id string matching one of the REPORT_TYPES entries
-    city        : selected city name
-    country     : selected country name
-    radius_km   : search radius in kilometres
-    place_name  : optional name of the user's own establishment typed directly.
-                  Required for competitive_swot, optional for swot.
-                  Gemini uses the name + city to identify and analyse the business.
-    """
-
     keyword: str
     report_type: str
     city: str
@@ -443,8 +386,6 @@ class SearchRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Helper: resolve city coordinates
 # ---------------------------------------------------------------------------
-
-
 def _get_city_coordinates(country: str, city: str) -> Optional[tuple]:
     """
     Look up (latitude, longitude) for a city from the local JSON data files.
@@ -484,15 +425,10 @@ def _get_city_coordinates(country: str, city: str) -> Optional[tuple]:
 # ---------------------------------------------------------------------------
 # Helper: bounding box offsets
 # ---------------------------------------------------------------------------
-
-
 def _calculate_bounds(radius_km: float) -> tuple:
     """
     Return the four corners of the bounding box as (lat, lon) offsets from
-    the origin (0, 0).  The inscriber adds these to city-center coordinates
-    to produce absolute tile positions.
-
-    t = degrees per km (approximate at mid-latitudes)
+    the origin (0, 0).
     """
     t = 0.008993216059187
     d = float(radius_km)
@@ -510,16 +446,10 @@ def _calculate_bounds(radius_km: float) -> tuple:
 # ---------------------------------------------------------------------------
 # Helper: fetch tile offsets from the inscriber
 # ---------------------------------------------------------------------------
-
-
 def _fetch_tiles(bounds: tuple) -> List[tuple]:
     """
     POST the bounding box to the inscriber service and return a flat list of
     (lat_offset, lon_offset) tuples.
-
-    The inscriber wraps its response as:
-        {"result": {"raw_coordinates": [[{"latitude": x, "longitude": y}]]}}
-    This function unwraps all known response shapes.
     """
     payload = {
         "top_left": list(bounds[0]),
@@ -535,17 +465,14 @@ def _fetch_tiles(bounds: tuple) -> List[tuple]:
         data = resp.json()
         logger.info(f"Inscriber HTTP status: {resp.status_code}")
 
-        # Unwrap {"result": {...}} envelope if present
         if isinstance(data, dict) and "result" in data:
             data = data["result"]
 
-        # Flat list format
         if isinstance(data, list):
             tiles = [(float(p[0]), float(p[1])) for p in data]
             logger.info(f"Inscriber returned {len(tiles)} tiles (list format)")
             return tiles
 
-        # Nested raw_coordinates dict format
         if isinstance(data, dict) and "raw_coordinates" in data:
             flat = []
             for block in data["raw_coordinates"]:
@@ -576,15 +503,9 @@ def _fetch_tiles(bounds: tuple) -> List[tuple]:
 # ---------------------------------------------------------------------------
 # Helper: build absolute coordinates from center + tile offsets
 # ---------------------------------------------------------------------------
-
-
 def _build_target_coords(center: tuple, tiles: List[tuple]) -> List[tuple]:
     """
-    Add each tile offset (from the inscriber) to the city center to produce
-    absolute (latitude, longitude) coordinates covering the search area.
-
-    Falls back to just the city center if the inscriber returned no tiles,
-    ensuring at least one coordinate is always available.
+    Add each tile offset to the city center to produce absolute coordinates.
     """
     if not tiles:
         logger.warning("No tiles received from inscriber — using city center only")
@@ -599,8 +520,6 @@ def _build_target_coords(center: tuple, tiles: List[tuple]) -> List[tuple]:
 # ---------------------------------------------------------------------------
 # Helper: split coordinates into geographic quadrants
 # ---------------------------------------------------------------------------
-
-
 def _split_into_quadrants(
     coords: List[tuple],
     center: tuple,
@@ -608,50 +527,6 @@ def _split_into_quadrants(
     """
     Assign each (lat, lon) coordinate to one of four geographic quadrants
     using dominant-axis comparison (Cartesian method).
-
-    Method
-    ------
-    For each point, compute its displacement from the center:
-        dx = lon - cx   (positive = East,  negative = West)
-        dy = lat - cy   (positive = North, negative = South)
-
-    Then compare the magnitudes of the two displacements:
-        if abs(dx) > abs(dy):
-            dominant axis is longitude → assign East or West
-        else:
-            dominant axis is latitude  → assign North or South
-
-    This is equivalent to asking: is the point closer to the vertical
-    center line or the horizontal center line?  The quadrant boundary is
-    the two diagonals of the bounding box, but expressed via axis dominance
-    rather than explicit diagonal equations.
-
-    Why this method
-    ---------------
-    The inscriber returns a staggered hexagonal grid that is taller than
-    it is wide (12 latitude rows × 5 longitude columns).  A pure diagonal
-    cut produces N=11, E=5, S=9, W=5.  The dominant-axis method produces
-    N=9, S=9, E=6, W=6 — significantly more balanced — because it uses the
-    mean center of the actual point cloud rather than the geographic city
-    center, absorbing the grid's vertical asymmetry.
-
-    Center used
-    -----------
-    The cx/cy center is computed as the mean of all point coordinates,
-    matching the original CartesianGrouping implementation exactly.
-    This differs slightly from the city-center lat/lon because the
-    staggered grid is not perfectly symmetric around that point.
-
-    Parameters
-    ----------
-    coords : list of (lat, lon) absolute coordinates (post offset addition)
-    center : (lat, lon) city center — kept for API compatibility but the
-             actual split center is recomputed from the point cloud mean
-
-    Returns
-    -------
-    dict with keys "North", "South", "East", "West", each mapping to a
-    list of (lat, lon) tuples.  All four keys are always present.
     """
     if not coords:
         return {"North": [], "South": [], "East": [], "West": []}
@@ -659,10 +534,7 @@ def _split_into_quadrants(
     lats = [p[0] for p in coords]
     lons = [p[1] for p in coords]
 
-    # Use the mean of the point cloud as the split center.
-    # This matches the CartesianGrouping implementation and produces
-    # a more balanced split than using the city center directly.
-    cy = sum(lats) / len(lats)  # mean latitude  (North/South boundary)
+    cy = sum(lats) / len(lats)  # mean latitude (North/South boundary)
     cx = sum(lons) / len(lons)  # mean longitude (East/West boundary)
 
     logger.info(
@@ -682,11 +554,8 @@ def _split_into_quadrants(
         dy = lat - cy  # North is positive, South is negative
 
         if abs(dx) > abs(dy):
-            # Point is closer to the E/W axis — longitude dominates
             quadrants["East" if dx > 0 else "West"].append((lat, lon))
         else:
-            # Point is closer to the N/S axis — latitude dominates
-            # Ties (dx == dy) go to North/South, matching the original code
             quadrants["North" if dy > 0 else "South"].append((lat, lon))
 
     for name, pts in quadrants.items():
@@ -698,8 +567,6 @@ def _split_into_quadrants(
 # ---------------------------------------------------------------------------
 # Helper: build the Gemini prompt for a quadrant
 # ---------------------------------------------------------------------------
-
-
 def _build_gemini_prompt(
     report_type_id: str,
     keyword: str,
@@ -712,39 +579,6 @@ def _build_gemini_prompt(
 ) -> str:
     """
     Build the full prompt sent to Gemini for one report batch.
-
-    For SWOT Analysis:
-      - Called once per quadrant with quadrant_name and coord_batch.
-      - If place_name is provided, injects a {place_section} describing
-        the user's specific cafe and a {comparison_section} requesting
-        a comparison paragraph at the end of each quadrant card.
-
-    For Competitive SWOT Analysis:
-      - Called once (no quadrant loop). quadrant_name and coord_batch
-        are not used. place_name is required.
-      - The template uses {place_name} directly.
-
-    All templates receive a strict JSON output contract appended at the
-    end regardless of what the template says, ensuring parseable output.
-
-    Parameters
-    ----------
-    report_type_id : str   Must match an id in REPORT_TYPES.
-    keyword        : str   E.g. "Cafes"
-    city           : str   E.g. "Delhi"
-    country        : str   E.g. "India"
-    radius_km      : float Search radius
-    quadrant_name  : str   "North" | "South" | "East" | "West" (swot only)
-    coord_batch    : list  List of (lat, lon) tuples (swot only)
-    place_name     : str|None  Business name extracted from the Maps URL
-
-    Returns
-    -------
-    str  The complete prompt ready to be sent to the Gemini API.
-
-    Raises
-    ------
-    ValueError  If report_type_id is not found in REPORT_TYPES.
     """
     rt = _REPORT_TYPE_BY_ID.get(report_type_id)
     if not rt:
@@ -754,12 +588,6 @@ def _build_gemini_prompt(
         ", ".join(f"({lat:.5f}, {lon:.5f})" for lat, lon in (coord_batch or []))
         or "(no coordinates)"
     )
-
-    # ── Build optional place_section and comparison_section for SWOT ─────────
-    # place_section: injected at the top of the SWOT prompt when a cafe name
-    #   is available, so Gemini knows to include a comparison in its analysis.
-    # comparison_section: appended at the bottom of the content format block,
-    #   instructing Gemini to add a "YOUR CAFE" section to each quadrant card.
 
     if place_name:
         place_section = (
@@ -780,7 +608,6 @@ def _build_gemini_prompt(
         place_section = ""
         comparison_section = ""
 
-    # ── Fill the template ─────────────────────────────────────────────────────
     user_part = rt["prompt_template"].format(
         keyword=keyword,
         city=city,
@@ -793,8 +620,6 @@ def _build_gemini_prompt(
         comparison_section=comparison_section,
     )
 
-    # ── JSON output contract — always appended, overrides template ────────────
-    # competitive_swot returns 1 result; swot returns 1 result per quadrant.
     json_instruction = (
         "\n\n"
         "JSON OUTPUT CONTRACT — THIS OVERRIDES ALL OTHER INSTRUCTIONS\n"
@@ -826,26 +651,9 @@ def _build_gemini_prompt(
 # ---------------------------------------------------------------------------
 # Helper: call Gemini and parse the response
 # ---------------------------------------------------------------------------
-
-
 def _call_gemini_and_parse(prompt_text: str, batch_number: int) -> dict:
     """
-    Send prompt_text to Gemini via the shared rotator, parse the JSON
-    response envelope, and return a standardised result dict.
-
-    Always returns a dict — never raises. Errors are stored in result["error"]
-    so the caller can decide how to handle partial failures.
-
-    Return schema
-    -------------
-    {
-      "batch_number": int,
-      "items":        list[dict],   # parsed results, fields vary by report type
-      "view_type":    str,          # "table" or "report"
-      "char_count":   int,
-      "status":       str,          # "done" | "parse_error" | "error" | "mock"
-      "error":        str | None,
-    }
+    Send prompt_text to Gemini via rotator and parse response JSON.
     """
     result: dict = {
         "batch_number": batch_number,
@@ -856,7 +664,6 @@ def _call_gemini_and_parse(prompt_text: str, batch_number: int) -> dict:
         "error": None,
     }
 
-    # Mock mode — returns placeholder data when no Gemini key is configured
     if not GEMINI_AVAILABLE:
         logger.warning(
             f"Gemini unavailable — returning mock data for batch {batch_number}"
@@ -867,7 +674,6 @@ def _call_gemini_and_parse(prompt_text: str, batch_number: int) -> dict:
         result["status"] = "mock"
         return result
 
-    # Call Gemini via the key + model rotator
     try:
         raw = gemini_rotator.call(prompt_text, temperature=0.0)
         result["char_count"] = len(raw)
@@ -878,22 +684,18 @@ def _call_gemini_and_parse(prompt_text: str, batch_number: int) -> dict:
         result["error"] = str(exc)
         return result
 
-    # Parse JSON from the response
     try:
         text = raw
 
-        # Strip markdown code fences if Gemini added them
         if "```" in text:
             parts = text.split("```")
             text = parts[1] if len(parts) > 1 else parts[0]
             text = re.sub(r"^json\s*", "", text, flags=re.IGNORECASE).strip()
 
-        # Extract outermost JSON object { … }
         start = text.find("{")
         end = text.rfind("}")
 
         if start == -1 or end == -1:
-            # Fallback: try plain array [ … ] for backward compatibility
             start = text.find("[")
             end = text.rfind("]")
             if start == -1 or end == -1:
@@ -905,15 +707,10 @@ def _call_gemini_and_parse(prompt_text: str, batch_number: int) -> dict:
             result["items"] = parsed_array if isinstance(parsed_array, list) else []
             result["view_type"] = "table"
             result["status"] = "done"
-            logger.info(
-                f"Batch {batch_number}: parsed {len(result['items'])} items "
-                "(plain array fallback)"
-            )
             return result
 
         envelope = json.loads(text[start : end + 1])
 
-        # Handle both {"view_type":…, "results":[…]} and plain list responses
         if isinstance(envelope, list):
             result["items"] = envelope
             result["view_type"] = "table"
@@ -922,7 +719,6 @@ def _call_gemini_and_parse(prompt_text: str, batch_number: int) -> dict:
             items = envelope.get("results", envelope.get("data", []))
             result["items"] = items if isinstance(items, list) else []
 
-        # Flatten any nested-object values to strings so React can render them
         flattened = []
         for item in result["items"]:
             flat_item = {}
@@ -954,8 +750,6 @@ def _call_gemini_and_parse(prompt_text: str, batch_number: int) -> dict:
 # ---------------------------------------------------------------------------
 # Background task: orchestrates the full search pipeline
 # ---------------------------------------------------------------------------
-
-
 def _build_cafe_swot_prompt(
     place_name: str,
     keyword: str,
@@ -965,32 +759,6 @@ def _build_cafe_swot_prompt(
     quadrants: dict,
     center: tuple,
 ) -> str:
-    """
-    Build a dedicated prompt that:
-      1. Identifies which geographic quadrant the user's cafe is in by
-         comparing its known location against the quadrant coordinate ranges.
-      2. Produces a focused SWOT analysis specifically for that cafe.
-
-    This is called as a 5th Gemini call (after the 4 quadrant calls) when
-    place_name is provided. The result is prepended to the results list so
-    the cafe's own SWOT card appears first in the frontend.
-
-    Parameters
-    ----------
-    place_name : str          Business name extracted from the Maps URL.
-    keyword    : str          E.g. "Cafes"
-    city       : str          E.g. "Delhi"
-    country    : str          E.g. "India"
-    radius_km  : float        Search radius
-    quadrants  : dict         name -> list of (lat, lon) from the split
-    center     : tuple        (lat, lon) city center
-
-    Returns
-    -------
-    str  Full prompt ready to send to Gemini.
-    """
-    # Build a human-readable summary of what coordinates are in each quadrant
-    # so Gemini can figure out which one contains the cafe
     quadrant_ranges = []
     for qname, pts in quadrants.items():
         if not pts:
@@ -1067,26 +835,9 @@ def _run_search_task(
     radius_km: float,
     place_name: Optional[str] = None,
 ):
-    """
-    Full search pipeline executed in a background thread.
-
-    For report_type == "swot":
-      Steps 1-5 run in full (coordinates → inscriber → quadrants → Gemini×4).
-      If place_name is provided, each quadrant prompt includes a comparison
-      section referencing the user's specific establishment.
-
-    For report_type == "competitive_swot":
-      Steps 1-4 are skipped entirely (no inscriber, no quadrants).
-      A single Gemini call analyses the user's cafe against ~100 competitors
-      in the selected radius, reasoning from Gemini's trained knowledge.
-      place_name is required for this report type.
-    """
     task = search_tasks[task_id]
 
     try:
-        # ════════════════════════════════════════════════════════════════════
-        # COMPETITIVE SWOT — single Gemini call, no inscriber
-        # ════════════════════════════════════════════════════════════════════
         if report_type == "competitive_swot":
             logger.info(f"[SEARCH {task_id}] Competitive SWOT — skipping inscriber")
             task["status_message"] = f"Analysing {place_name} vs competitors..."
@@ -1116,11 +867,7 @@ def _run_search_task(
                 f"[SEARCH {task_id}] Competitive SWOT done — "
                 f"{len(task['results'])} items, status={batch_result['status']}"
             )
-            return  # skip the quadrant pipeline below
-
-        # ════════════════════════════════════════════════════════════════════
-        # SWOT (and all other quadrant-based report types)
-        # ════════════════════════════════════════════════════════════════════
+            return
 
         # ── Step 1: city coordinates ──────────────────────────────────────────
         logger.info(f"[SEARCH {task_id}] Step 1: resolving city coordinates")
@@ -1155,7 +902,6 @@ def _run_search_task(
 
         all_coords = _build_target_coords(center, tiles)
 
-        # Deduplicate to the nearest 6 decimal places
         seen = set()
         unique_coords = []
         for lat, lon in all_coords:
@@ -1173,7 +919,6 @@ def _run_search_task(
 
         quadrants = _split_into_quadrants(unique_coords, center)
 
-        # Only process quadrants that have at least one coordinate
         active_quadrants = [
             (name, coords) for name, coords in quadrants.items() if coords
         ]
@@ -1207,7 +952,6 @@ def _run_search_task(
                 f"({batch_num}/{total_quadrants}) — {len(coord_batch)} coords"
             )
 
-            # Build prompt — pass place_name so the comparison section is injected
             try:
                 full_prompt = _build_gemini_prompt(
                     report_type_id=report_type,
@@ -1226,7 +970,6 @@ def _run_search_task(
 
             batch_result = _call_gemini_and_parse(full_prompt, batch_num)
 
-            # Deduplicate by content fingerprint across quadrants
             existing_fps = {
                 frozenset(str(v).lower().strip() for v in item.values() if v)
                 for item in all_items
@@ -1242,11 +985,9 @@ def _run_search_task(
             ]
             all_items.extend(new_items)
 
-            # Store view_type from the first successful quadrant
             if not task.get("view_type") and batch_result.get("view_type"):
                 task["view_type"] = batch_result["view_type"]
 
-            # Update task for live frontend polling
             task["results"] = all_items
             task["progress"] = round((batch_num / total_quadrants) * 100, 1)
 
@@ -1287,7 +1028,6 @@ def _run_search_task(
             cafe_result = _call_gemini_and_parse(cafe_prompt, total_quadrants + 1)
 
             if cafe_result.get("items"):
-                # Prepend cafe card so it appears first in the frontend
                 all_items = cafe_result["items"] + all_items
                 task["results"] = all_items
                 logger.info(
@@ -1319,17 +1059,8 @@ def _run_search_task(
 
 @router.get("/search-config")
 async def get_search_config():
-    """
-    Return the keyword list and report type options for the frontend dropdowns.
-    Called once on page load so the frontend never hardcodes these values.
-
-    Returns requires_place per report type so the frontend knows when to show
-    the Google Maps URL input field.
-    """
     report_type_options = []
     for rt in REPORT_TYPES:
-        # Generate a preview with placeholder values.
-        # competitive_swot doesn't use quadrant_name/coord_str — use empty strings.
         try:
             preview = rt["prompt_template"].format(
                 keyword="<keyword>",
@@ -1363,15 +1094,6 @@ async def get_search_config():
 
 @router.post("/search/")
 async def start_search(request: SearchRequest, background_tasks: BackgroundTasks):
-    """
-    Validate the request, initialise the task store entry, and launch the
-    pipeline in a background thread.
-
-    place_name is typed directly by the user — no URL fetching needed.
-    Gemini uses the name + city to identify the specific establishment.
-
-    Returns task_id immediately. Frontend polls GET /search-progress/{task_id}.
-    """
     if not request.keyword.strip():
         return JSONResponse(status_code=400, content={"error": "keyword is required"})
     if not request.city.strip() or not request.country.strip():
@@ -1387,7 +1109,6 @@ async def start_search(request: SearchRequest, background_tasks: BackgroundTasks
             },
         )
 
-    # competitive_swot requires a place name
     if (
         request.report_type == "competitive_swot"
         and not (request.place_name or "").strip()
@@ -1399,7 +1120,6 @@ async def start_search(request: SearchRequest, background_tasks: BackgroundTasks
             },
         )
 
-    # Use place_name directly — user typed it, no extraction needed
     place_name: Optional[str] = (request.place_name or "").strip() or None
     logger.info(
         f"[SEARCH] place_name='{place_name or '(none)'}' "
@@ -1409,13 +1129,13 @@ async def start_search(request: SearchRequest, background_tasks: BackgroundTasks
     task_id = str(uuid.uuid4())
 
     _save_search_input(
-        task_id     = task_id,
-        keyword     = request.keyword,
-        report_type = request.report_type,
-        city        = request.city,
-        country     = request.country,
-        radius_km   = request.radius_km,
-        place_name  = place_name,
+        task_id=task_id,
+        keyword=request.keyword,
+        report_type=request.report_type,
+        city=request.city,
+        country=request.country,
+        radius_km=request.radius_km,
+        place_name=place_name,
     )
 
     search_tasks[task_id] = {
@@ -1462,11 +1182,6 @@ async def start_search(request: SearchRequest, background_tasks: BackgroundTasks
 
 @router.get("/search-progress/{task_id}")
 async def get_search_progress(task_id: str):
-    """
-    Poll this endpoint while the search is running.
-    Returns live results as they accumulate so the frontend can
-    show progressive updates without waiting for all quadrants.
-    """
     task = search_tasks.get(task_id)
     if not task:
         return JSONResponse(status_code=404, content={"error": "Task not found"})
@@ -1491,11 +1206,6 @@ async def get_search_progress(task_id: str):
 
 @router.post("/cancel-search/{task_id}")
 async def cancel_search(task_id: str):
-    """
-    Cancel a running search task.
-    Sets running=False; the background thread checks this flag and stops
-    after completing the current quadrant.
-    """
     task = search_tasks.get(task_id)
     if not task:
         return JSONResponse(status_code=404, content={"error": "Task not found"})

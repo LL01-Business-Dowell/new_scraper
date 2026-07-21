@@ -7,13 +7,16 @@ Integrates google_maps_scraper.py and swot_analyzer.py
 
 import uuid
 import logging
-from typing import Optional, List
-from fastapi import APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel
-import requests
-
 import datetime
 import os
+import csv
+from io import StringIO
+from typing import Optional, List, Dict, Any
+
+import requests
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from .google_maps_scraper import search_google_maps_competitors
 from .swot_analyzer import analyze_batch_swot
@@ -23,12 +26,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/competitors", tags=["competitors"])
 
 # In-memory task store for competitor analysis
-competitor_tasks = {}
+competitor_tasks: Dict[str, Any] = {}
 
 CRUD_BASE_URL = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
 CRUD_API_KEY = os.getenv("CRUD_API_KEY", "")
 SAMANTA_DATABASE_ID = os.getenv("SAMANTA_DATABASE_ID", "")
 SEARCH_COLLECTION = "competitor_searches"
+
 
 def _save_competitor_search(task_id, keyword, city, country, radius_km, establishment_name, places_found):
     """Save competitor search input to Datacube v2. Never raises — failure never blocks the search."""
@@ -65,6 +69,7 @@ def _save_competitor_search(task_id, keyword, city, country, radius_km, establis
     except Exception as e:
         logger.error(f"[COMPETITOR] Datacube save error: {e}")
 
+
 class SearchRequest(BaseModel):
     """Request to search for competitors on Google Maps."""
     keyword: str
@@ -74,8 +79,8 @@ class SearchRequest(BaseModel):
     location_hint: str = ""
     radius_km: float = 5.0
     limit: int = 100
-    origin_lat: float = None
-    origin_lng: float = None
+    origin_lat: Optional[float] = None
+    origin_lng: Optional[float] = None
 
 
 class ApproveListRequest(BaseModel):
@@ -126,7 +131,18 @@ async def search_competitors(request: SearchRequest, background_tasks: Backgroun
     return {"task_id": task_id}
 
 
-def _search_worker(task_id: str, keyword: str, city: str, country: str, location_hint: str, radius_km: float, limit: int, origin_lat: float, origin_lng:float, establishment_name: str):
+def _search_worker(
+    task_id: str,
+    keyword: str,
+    city: str,
+    country: str,
+    location_hint: str,
+    radius_km: float,
+    limit: int,
+    establishment_name: str,
+    origin_lat: Optional[float] = None,
+    origin_lng: Optional[float] = None,
+):
     """Background worker to search for competitors."""
     try:
         def progress_callback(current, total, status_text):
@@ -261,6 +277,7 @@ def _analysis_worker(task_id: str, places: List[dict]):
         competitor_tasks[task_id]["error"] = str(e)
         competitor_tasks[task_id]["progress"] = 100
 
+
 @router.get("/dashboard")
 async def get_dashboard_data():
     """
@@ -293,7 +310,7 @@ async def get_dashboard_data():
     except requests.RequestException as e:
         logger.error(f"[DASHBOARD] Datacube error: {e}")
         raise HTTPException(status_code=502, detail=str(e))
-    
+
 
 @router.get("/download-results/{task_id}")
 async def download_results(task_id: str, format: str = "json"):
@@ -315,10 +332,6 @@ async def download_results(task_id: str, format: str = "json"):
         }
     
     elif format == "csv":
-        import csv
-        from io import StringIO
-        from fastapi.responses import StreamingResponse
-        
         output = StringIO()
         writer = csv.writer(output)
         

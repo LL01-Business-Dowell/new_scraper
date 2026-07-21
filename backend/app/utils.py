@@ -3,15 +3,6 @@ import io
 from typing import List, Dict, Any
 
 def parse_csv(file_content: bytes) -> List[str]:
-    """
-    Parse CSV file content and extract postal codes.
-    
-    Args:
-        file_content: Raw bytes content of the uploaded CSV file
-        
-    Returns:
-        List of postal codes from the CSV
-    """
     csv_text = file_content.decode('utf-8')
     reader = csv.DictReader(io.StringIO(csv_text))
     
@@ -23,15 +14,6 @@ def parse_csv(file_content: bytes) -> List[str]:
     return postal_codes
 
 def format_results_for_csv(results: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    """
-    Format search results for CSV export.
-    
-    Args:
-        results: List of result dictionaries
-        
-    Returns:
-        Formatted list of dictionaries for CSV export
-    """
     formatted_results = []
     
     for result in results:

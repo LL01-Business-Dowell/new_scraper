@@ -33,6 +33,20 @@ services:
       PYTHONUNBUFFERED: 1
     networks:
       - queue-net
+    
+  audio_analysis:
+    build:
+      context: ./audio_analysis
+    container_name: audio_analysis_container
+    ports:
+      - "8003:8003"
+    restart: unless-stopped
+    env_file:
+      - ./audio_analysis/aud.env
+    environment:
+      PYTHONUNBUFFERED: 1
+    networks:
+      - queue-net
 
   frontend:
     build:

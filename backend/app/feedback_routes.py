@@ -13,15 +13,9 @@ Flow:
 
 2. POST /api/feedback/submit
    - Receives confirmed transcript + room number + description + audio
-   - Calls dummy feedback API with WAV file
-   - Saves room number + description + transcript to Datacube
-   - Returns success/error
-
-Env vars used:
-  CRUD_BASE_URL       — Datacube base URL
-  CRUD_API_KEY        — Datacube API key
-  SAMANTA_DATABASE_ID — Database ID
-  FEEDBACK_API_URL    — Dummy feedback API endpoint (placeholder)
+   - Forwards WAV file to Django Audio Analytics API
+   - Saves room number + description + transcript + audio analysis to Datacube
+   - Returns success response along with emotion analysis metrics
 """
 
 import os
@@ -43,9 +37,11 @@ CRUD_BASE_URL       = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.o
 CRUD_API_KEY        = os.getenv("CRUD_API_KEY", "")
 DATABASE_ID         = os.getenv("SAMANTA_DATABASE_ID", "")
 FEEDBACK_COLLECTION = "guest_feedback"
-S3_UPLOAD_API    = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
-TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
-FEEDBACK_API_URL    = os.getenv("FEEDBACK_API_URL", "https://placeholder.example.com/api/feedback")
+S3_UPLOAD_API       = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
+TRANSCRIPTION_API  = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
+
+# Audio Analytics Service URL (Local default or environment variable for Production)
+AUDIO_ANALYSIS_API_URL = os.getenv("AUDIO_ANALYSIS_API_URL", "http://localhost:8003/analyze-audio/")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -94,24 +90,28 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
                 pass
 
 
-def _save_to_datacube(room_number: str, description: str, transcript: str, file_id: str):
+def _save_to_datacube(room_number: str, description: str, transcript: str, file_id: str, emotion_metrics: dict = None):
     """Save guest feedback metadata to Datacube. Non-fatal — never raises."""
     if not CRUD_API_KEY or not DATABASE_ID:
         logger.warning("[FEEDBACK] Datacube credentials not set — skipping save")
         return
     try:
+        doc_data = {
+            "room_number":  room_number,
+            "description":  description,
+            "transcript":   transcript,
+            "audio_file":   f"{file_id}.wav",
+            "submitted_at": datetime.datetime.utcnow().isoformat() + "Z",
+        }
+        if emotion_metrics:
+            doc_data["emotion_metrics"] = emotion_metrics
+
         resp = http_requests.post(
             f"{CRUD_BASE_URL.rstrip('/')}/crud/",
             json={
                 "database_id":     DATABASE_ID,
                 "collection_name": FEEDBACK_COLLECTION,
-                "documents": [{
-                    "room_number":  room_number,
-                    "description":  description,
-                    "transcript":   transcript,
-                    "audio_file":   f"{file_id}.wav",
-                    "submitted_at": datetime.datetime.utcnow().isoformat() + "Z",
-                }],
+                "documents": [doc_data],
             },
             headers={
                 "Content-Type":  "application/json",
@@ -210,8 +210,8 @@ async def submit_feedback(
 ):
     """
     Step 2: Guest has confirmed transcript. Submit feedback.
-    - Calls dummy feedback API with WAV
-    - Saves metadata to Datacube
+    - Sends WAV file to Django Audio Analytics Service
+    - Saves metadata and emotion metrics to Datacube
     """
     try:
         webm_bytes = await audio.read()
@@ -222,18 +222,21 @@ async def submit_feedback(
         wav_bytes, new_file_id = _convert_webm_to_wav(webm_bytes)
         final_file_id = file_id or new_file_id
 
-        # Call dummy feedback API
+        # Call Django Audio Analytics API (Field name 'audio_file' matches Django serializer)
+        emotion_data = None
         try:
             feedback_resp = http_requests.post(
-                FEEDBACK_API_URL,
-                files={"audio": (f"{final_file_id}.wav", wav_bytes, "audio/wav")},
-                timeout=30,
+                AUDIO_ANALYSIS_API_URL,
+                files={"audio_file": (f"{final_file_id}.wav", wav_bytes, "audio/wav")},
+                timeout=120,
             )
-            api_success = feedback_resp.status_code in (200, 201)
-            logger.info(f"[FEEDBACK] Feedback API response: {feedback_resp.status_code}")
+            if feedback_resp.status_code == 200:
+                res_json = feedback_resp.json()
+                if res_json.get("status") == "success":
+                    emotion_data = res_json.get("dashboard_metrics")
+            logger.info(f"[FEEDBACK] Audio Analytics API response: {feedback_resp.status_code}")
         except Exception as e:
-            logger.warning(f"[FEEDBACK] Feedback API error (non-fatal): {e}")
-            api_success = False
+            logger.warning(f"[FEEDBACK] Audio Analytics API error (non-fatal): {e}")
 
         # Save to Datacube (non-fatal)
         _save_to_datacube(
@@ -241,12 +244,14 @@ async def submit_feedback(
             description=description,
             transcript=transcript,
             file_id=final_file_id,
+            emotion_metrics=emotion_data
         )
 
         return JSONResponse({
             "success": True,
             "message": "Thank you for your feedback.",
             "file_id": final_file_id,
+            "dashboard_metrics": emotion_data
         })
 
     except HTTPException:

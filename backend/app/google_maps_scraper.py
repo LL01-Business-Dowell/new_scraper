@@ -2,7 +2,7 @@
 google_maps_scraper.py
 ----------------------
 Selenium scraper to find competitor businesses on Google Maps.
-CSS selectors verified against live Google Maps HTML (June 2026).
+CSS selectors verified against live Google Maps HTML.
 
 Quadrant search strategy
 -------------------------
@@ -14,6 +14,7 @@ separate Maps search is run centered on each quadrant's midpoint using
 lat/lng-based URL search instead of a text query. Results are merged and
 deduplicated by URL afterwards.
 """
+
 import math
 import time
 import random

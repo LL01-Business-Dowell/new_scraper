@@ -3,15 +3,6 @@
  * ----------------
  * Guest voice feedback form at /feedback.
  * Accessible via QR code scan — standalone page, no nav links.
- *
- * Flow:
- *   1. Guest enters room number + description
- *   2. Guest records voice message (live, any language)
- *   3. As soon as recording stops, it instantly calls transcription API inline.
- *   4. Transcript shown right here for confirmation/re-record.
- *   5. Guest confirms → submitted to backend → saved to Datacube
- *
- * Legal: Explicit consent notice shown before recording starts.
  */
 
 import React, { useState, useRef, useEffect } from "react";
@@ -20,13 +11,13 @@ import API_BASE_URL from "./config";
 
 const BASE = (API_BASE_URL || "").replace(/\/+$/, "");
 
-// ── Icons (inline SVG — no extra dependency) ─────────────────────────────────
+// ── Icons ────────────────────────────────────────────────────────────────────
 const MicIcon = () => (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
         <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
         <line x1="12" y1="19" x2="12" y2="23" />
-        <line x1="8" y1="23" x2="16" height="23" />
+        <line x1="8" y1="23" x2="16" y2="23" />
     </svg>
 );
 
@@ -43,13 +34,12 @@ const CheckIcon = () => (
 );
 
 const RefreshIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="23 4 23 10 17 10" />
         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
     </svg>
 );
 
-// ── Theme Switcher Icon Assets ────────────────────────────────────────────────
 const SunIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="5"></circle>
@@ -201,7 +191,7 @@ const styles = {
         transition: "color 0.3s ease",
     }),
     success: {
-        textAlign: "center", padding: "2rem 0",
+        textAlign: "center", padding: "1.5rem 0",
     },
     successIcon: {
         width: 64, height: 64, borderRadius: "50%",
@@ -214,11 +204,6 @@ const styles = {
         borderRadius: 8, padding: "10px 14px", marginBottom: 12,
         color: "#ef4444", fontSize: "0.82rem",
     },
-    divider: (isLight) => ({
-        borderColor: isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)",
-        margin: "1.25rem 0",
-        transition: "border-color 0.3s ease",
-    }),
     tag: {
         display: "inline-block", fontSize: "0.7rem", fontWeight: 600,
         padding: "3px 8px", borderRadius: 4,
@@ -256,7 +241,7 @@ const PulseStyle = () => (
   `}</style>
 );
 
-// ── Timer hook (With Auto-Stop Countdown Layout) ────────────────────────────────
+// ── Timer hook ────────────────────────────────────────────────────────────────
 function useTimer(running, maxSeconds, onLimitReached) {
     const [secondsLeft, setSecondsLeft] = useState(maxSeconds);
 
@@ -312,7 +297,6 @@ export default function FeedbackPage() {
 
     // Recording state
     const [phase, setPhase] = useState("form");
-    // phases: form | recording | transcribing | confirm | submitting | done
     const [recording, setRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState(null);
     const [audioUrl, setAudioUrl] = useState(null);
@@ -323,7 +307,6 @@ export default function FeedbackPage() {
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
     
-    // Configured for 120 second (2 minute) countdown layout
     const { formatted: timer, isNearLimit } = useTimer(recording, 120, () => {
         stopRecording();
     });
@@ -344,7 +327,6 @@ export default function FeedbackPage() {
                 setAudioUrl(URL.createObjectURL(blob));
                 stream.getTracks().forEach(t => t.stop());
                 
-                // Triggers transcription API immediately upon stop
                 await handleTranscribe(blob);
             };
             mediaRecorderRef.current = mr;
@@ -362,7 +344,7 @@ export default function FeedbackPage() {
         setRecording(false);
     };
 
-    // ── Instant automated transcription worker ─────────────────────────────────
+    // ── Automated transcription call ──────────────────────────────────────────
     const handleTranscribe = async (blobToUpload) => {
         if (!blobToUpload) return;
         setPhase("transcribing");
@@ -387,7 +369,7 @@ export default function FeedbackPage() {
         }
     };
 
-    // ── Submit feedback ───────────────────────────────────────────────────────
+    // ── Submit feedback via FastAPI ────────────────────────────────────────────
     const handleSubmit = async () => {
         setPhase("submitting");
         setErrorMsg("");
@@ -401,7 +383,7 @@ export default function FeedbackPage() {
 
             await axios.post(`${BASE}/api/feedback/submit`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
-                timeout: 60000,
+                timeout: 120000,
             });
 
             setPhase("done");
@@ -411,7 +393,20 @@ export default function FeedbackPage() {
         }
     };
 
-    // ── Re-record reset ───────────────────────────────────────────────────────
+    // ── Reset entire form for new submission ───────────────────────────────────
+    const handleResetAll = () => {
+        setRoomNumber("");
+        setDescription("");
+        setConsentGiven(false);
+        setAudioBlob(null);
+        setAudioUrl(null);
+        setTranscript("");
+        setFileId("");
+        setErrorMsg("");
+        setPhase("form");
+    };
+
+    // ── Re-record (Keep existing input details) ─────────────────────────────
     const handleReRecord = () => {
         setAudioBlob(null);
         setAudioUrl(null);
@@ -439,13 +434,26 @@ export default function FeedbackPage() {
                     <div style={styles.success}>
                         <div style={styles.successIcon}>✓</div>
                         <h2 style={{ ...styles.title(isLight), marginBottom: 8 }}>Thank You!</h2>
-                        <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.9rem", lineHeight: 1.6 }}>
-                            Your feedback has been received. We appreciate you taking the time
-                            to share your experience with us.
+                        <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.9rem", lineHeight: 1.6, marginBottom: 20 }}>
+                            Your feedback has been received. We appreciate you taking the time to share your experience with us!
                         </p>
-                        <p style={{ color: "#64748b", fontSize: "0.78rem", marginTop: 20 }}>
-                            Room {roomNumber} · {new Date().toLocaleDateString("en", { dateStyle: "long" })}
-                        </p>
+
+                        <div style={{
+                            background: isLight ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.04)",
+                            border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: 12,
+                            padding: "14px 16px",
+                            textAlign: "center",
+                            marginBottom: 20
+                        }}>
+                            <div style={{ fontSize: "0.85rem", color: isLight ? "#0f172a" : "#f1f5f9" }}>
+                                Room <strong>{roomNumber}</strong> · {new Date().toLocaleDateString("en-US", { dateStyle: "long" })}
+                            </div>
+                        </div>
+
+                        <button onClick={handleResetAll} style={styles.secondaryBtn(isLight)}>
+                            Submit Additional Feedback
+                        </button>
                     </div>
                 </div>
             </div>
@@ -476,74 +484,81 @@ export default function FeedbackPage() {
 
                 {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
 
-                {/* ── PHASE: INITIAL FORM ENTRY ────────────────────────────────── */}
+                {/* ── ALWAYS VISIBLE INITIAL FORM ENTRY ────────────────────────── */}
+                <div style={{ marginBottom: "1rem" }}>
+                    <label style={styles.label(isLight)}>Room Number *</label>
+                    <input
+                        type="text"
+                        value={roomNumber}
+                        onChange={e => setRoomNumber(e.target.value)}
+                        placeholder="e.g. 412"
+                        disabled={recording || phase === "submitting"}
+                        style={styles.input(isLight)}
+                    />
+                </div>
+
+                <div style={{ marginBottom: "1.25rem" }}>
+                    <label style={styles.label(isLight)}>Brief Description <span style={{ color: "#475569", fontWeight: 400 }}>(optional)</span></label>
+                    <textarea
+                        value={description}
+                        onChange={e => setDescription(e.target.value)}
+                        placeholder="e.g. Feedback about housekeeping, restaurant, or facilities..."
+                        disabled={recording || phase === "submitting"}
+                        style={styles.textarea(isLight)}
+                    />
+                </div>
+
+                <div style={styles.consentBox(isLight)}>
+                    <div style={styles.consentTitle(isLight)}>🔒 Privacy Notice — Voice Recording</div>
+                    <p style={styles.consentText(isLight)}>
+                        By proceeding, you consent to the recording of your voice for the
+                        purpose of collecting guest feedback. Your voice recording will be:
+                    </p>
+                    <ul style={{ ...styles.consentText(isLight), paddingLeft: 16, margin: "8px 0 0" }}>
+                        <li>Processed to generate a text transcription instantly</li>
+                        <li>Used solely to improve our services</li>
+                        <li>Stored securely and handled confidentially</li>
+                    </ul>
+                    <label 
+                        style={{
+                            ...styles.consentCheck,
+                            pointerEvents: (recording || phase === "submitting") ? "none" : "auto",
+                        }} 
+                        onClick={() => !(recording || phase === "submitting") && setConsentGiven(v => !v)}
+                    >
+                        <div style={{
+                            ...styles.checkbox,
+                            background: consentGiven ? "linear-gradient(to right, #6d28d9, #4338ca)" : "transparent",
+                            borderColor: consentGiven ? "#6d28d9" : "rgba(109,40,217,0.6)",
+                        }}>
+                            {consentGiven && <CheckIcon />}
+                        </div>
+                        <span style={{ fontSize: "0.8rem", color: isLight ? "#4c1d95" : "#c4b5fd", lineHeight: 1.5 }}>
+                            I understand and consent to the voice recording and processing.
+                        </span>
+                    </label>
+                </div>
+
+                {/* ── PHASE: INITIAL RECORDING BUTTON ────────────────────────────── */}
                 {phase === "form" && (
-                    <>
-                        <div style={{ marginBottom: "1rem" }}>
-                            <label style={styles.label(isLight)}>Room Number *</label>
-                            <input
-                                type="text"
-                                value={roomNumber}
-                                onChange={e => setRoomNumber(e.target.value)}
-                                placeholder="e.g. 412"
-                                style={styles.input(isLight)}
-                            />
+                    <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
+                        <p style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: 16 }}>
+                            Press the button below to start recording your feedback
+                        </p>
+                        <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                            <button
+                                onClick={startRecording}
+                                disabled={!canRecord}
+                                style={{
+                                    ...styles.micBtn(false),
+                                    opacity: canRecord ? 1 : 0.4,
+                                    cursor: canRecord ? "pointer" : "not-allowed",
+                                }}
+                            >
+                                <MicIcon />
+                            </button>
                         </div>
-
-                        <div style={{ marginBottom: "1.25rem" }}>
-                            <label style={styles.label(isLight)}>Brief Description <span style={{ color: "#475569", fontWeight: 400 }}>(optional)</span></label>
-                            <textarea
-                                value={description}
-                                onChange={e => setDescription(e.target.value)}
-                                placeholder="e.g. Feedback about housekeeping, restaurant, or facilities..."
-                                style={styles.textarea(isLight)}
-                            />
-                        </div>
-
-                        <div style={styles.consentBox(isLight)}>
-                            <div style={styles.consentTitle(isLight)}>🔒 Privacy Notice — Voice Recording</div>
-                            <p style={styles.consentText(isLight)}>
-                                By proceeding, you consent to the recording of your voice for the
-                                purpose of collecting guest feedback. Your voice recording will be:
-                            </p>
-                            <ul style={{ ...styles.consentText(isLight), paddingLeft: 16, margin: "8px 0 0" }}>
-                                <li>Processed to generate a text transcription instantly</li>
-                                <li>Used solely to improve our services</li>
-                                <li>Stored securely and handled confidentially</li>
-                            </ul>
-                            <label style={styles.consentCheck} onClick={() => setConsentGiven(v => !v)}>
-                                <div style={{
-                                    ...styles.checkbox,
-                                    background: consentGiven ? "linear-gradient(to right, #6d28d9, #4338ca)" : "transparent",
-                                    borderColor: consentGiven ? "#6d28d9" : "rgba(109,40,217,0.6)",
-                                }}>
-                                    {consentGiven && <CheckIcon />}
-                                </div>
-                                <span style={{ fontSize: "0.8rem", color: isLight ? "#4c1d95" : "#c4b5fd", lineHeight: 1.5 }}>
-                                    I understand and consent to the voice recording and processing.
-                                </span>
-                            </label>
-                        </div>
-
-                        <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
-                            <p style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: 16 }}>
-                                Press the button below to start recording your feedback
-                            </p>
-                            <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                                <button
-                                    onClick={startRecording}
-                                    disabled={!canRecord}
-                                    style={{
-                                        ...styles.micBtn(false),
-                                        opacity: canRecord ? 1 : 0.4,
-                                        cursor: canRecord ? "pointer" : "not-allowed",
-                                    }}
-                                >
-                                    <MicIcon />
-                                </button>
-                            </div>
-                        </div>
-                    </>
+                    </div>
                 )}
 
                 {/* ── PHASE: LIVE RECORDING ────────────────────────────────────── */}
@@ -580,9 +595,6 @@ export default function FeedbackPage() {
                         <style>{`@keyframes pulse-spin { to { transform: rotate(360deg); } }`}</style>
                         <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.88rem", fontWeight: 600 }}>
                             Processing and transcribing audio...
-                        </p>
-                        <p style={{ color: "#64748b", fontSize: "0.75rem", marginTop: 8 }}>
-                            Please hold on, pulling transcription layout inline...
                         </p>
                     </div>
                 )}

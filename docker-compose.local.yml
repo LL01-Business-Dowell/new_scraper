@@ -7,18 +7,30 @@ services:
       - "8000:8000"
     environment:
       - WATCHFILES_FORCE_POLLING=true
+    env_file:
+      - .env
+
+  # Audio Analytics (Django) service
+  audio_analysis:
+    build: ./audio_analysis
+    volumes:
+      - ./audio_analysis:/usr/src/app
+    ports:
+      - "8003:8003"
+    env_file:
+      - .env
 
   frontend:
     build:
       context: ./frontend
-      target: development # <-- Crucial: Tells Docker to use the dev stage instead of Nginx
+      target: development # Dev stage using Vite
       args:
         VITE_API_URL: http://localhost:8000
     volumes:
       - ./frontend:/app
-      - /app/node_modules # Prevents local node_modules from wiping out the container's installs
+      - /app/node_modules
     ports:
-      - "5173:5173" # Maps directly to Vite's dev server port
+      - "5173:5173"
     environment:
       - CHOKIDAR_USEPOLLING=true
 

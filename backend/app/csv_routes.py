@@ -22,19 +22,11 @@ Handles the CSV processing flow:
 Register in main.py:
     from .csv_routes import router as csv_router
     app.include_router(csv_router)
-
-Remove from main.py:
-    - _build_csv_prompt()
-    - _process_csv_task()
-    - /process-csv/ endpoint
-    - /process-csv-progress/ endpoint
-    - /download-processed-csv/ endpoint
-    - csv_tasks dict
 """
 
 from fastapi import APIRouter, File, Form, UploadFile, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
-from pydantic import BaseModel
+from typing import Optional
 import pandas as pd
 import json
 import re
@@ -44,7 +36,6 @@ import os
 import io
 import logging
 import traceback
-from threading import Thread
 
 from .gemini_rotator import gemini_rotator
 
@@ -54,13 +45,13 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # In-memory task store
 # Each entry:
-#   running       bool   — True while Gemini call / file write is in progress
+#   running       bool     — True while Gemini call / file write is in progress
 #   error         str|None
-#   file_path     str|None  — path to the output CSV on disk
+#   file_path     str|None — path to the output CSV on disk
 #   row_count     int
 #   columns       list[str] — column names for the preview table
 #   preview_rows  list[dict] — first PREVIEW_ROW_COUNT rows for the table
-#   started_at    float  — unix timestamp
+#   started_at    float    — unix timestamp
 #   original_task_id  str|None — points to the task this was refined from
 # ---------------------------------------------------------------------------
 csv_tasks: dict = {}
@@ -180,7 +171,7 @@ def _call_gemini_and_parse(csv_text: str, user_prompt: str, task_id: str) -> pd.
 
     # Build DataFrame and sanitise
     out_df = pd.DataFrame(rows)
-    out_df  = out_df.fillna("")   # replace None with empty string
+    out_df = out_df.fillna("")   # replace None with empty string
 
     return out_df
 
@@ -190,13 +181,13 @@ def _call_gemini_and_parse(csv_text: str, user_prompt: str, task_id: str) -> pd.
 # ---------------------------------------------------------------------------
 
 def _run_csv_task(
-    task_id:      str,
-    csv_bytes:    bytes,
-    user_prompt:  str,
-    source_task_id: str | None = None,
+    task_id:        str,
+    csv_bytes:      bytes,
+    user_prompt:    str,
+    source_task_id: Optional[str] = None,
 ) -> None:
     """
-    Background thread:
+    Background worker:
       1. Parse the input CSV (bytes)
       2. Call Gemini via the shared rotator
       3. Write the output CSV to /tmp
@@ -300,7 +291,7 @@ async def process_csv(
     )
 
     csv_tasks[task_id] = {
-        "running":          False,   # set True inside thread
+        "running":          False,   # set True inside background task
         "error":            None,
         "file_path":        None,
         "row_count":        0,
@@ -405,13 +396,13 @@ async def process_csv_progress(task_id: str):
     Poll endpoint for CSV processing and refinement tasks.
 
     Returns:
-      running       bool
-      error         str | null
-      ready         bool   — True once the output file is available
-      row_count     int
-      columns       list[str]
-      preview_rows  list[dict]  — first 50 rows for the preview table
-      runtime_seconds int
+      running          bool
+      error            str | null
+      ready            bool   — True once the output file is available
+      row_count        int
+      columns          list[str]
+      preview_rows     list[dict] — first 50 rows for the preview table
+      runtime_seconds  int
       original_task_id str | null
     """
     task = csv_tasks.get(task_id)

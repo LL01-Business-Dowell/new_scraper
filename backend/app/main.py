@@ -44,14 +44,10 @@ from .csv_routes import router as csv_router
 from .gemini_rotator import gemini_rotator
 from .session_routes import router as session_router
 
-# from .google_maps_scraper import search_google_maps_competitors
-# from .swot_analyzer import analyze_batch_swot
 from .competitor_routes import router as competitor_router
 from .review_analysis_routes import router as review_analysis_router
 from .hotel_sentiment_routes import router as hotel_sentiment_router
 from .feedback_routes import router as feedback_router
-
-
 
 
 # ─── Logging ────────────────────────────────────────────────────────────────
@@ -90,16 +86,10 @@ app.include_router(csv_router)
 app.include_router(session_router)
 app.include_router(competitor_router)
 app.include_router(review_analysis_router, prefix="/api/review-analysis")
-# app.include_router(hotel_sentiment_router, prefix="/api/hotel-sentiment")
 app.include_router(hotel_sentiment_router)
 app.include_router(feedback_router, prefix="/api/feedback")
 
 tasks = {}
-
-# ─── CSV processing task store ───────────────────────────────────────────────
-# Separate from the scraping task store to keep concerns isolated.
-# Keys   : str task_id
-# Values : dict with keys: running, error, file_path, row_count
 csv_tasks: dict[str, dict] = {}
 
 # ─── Configuration / external services ───────────────────────────────────────

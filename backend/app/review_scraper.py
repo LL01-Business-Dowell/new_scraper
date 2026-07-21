@@ -126,6 +126,7 @@ def parse_relative_date(text: str) -> datetime.datetime:
 # ── Business details ──────────────────────────────────────────────────────────
 
 def extract_business_details(driver) -> Dict:
+    """Extract name, address, rating, review count from Google Maps place page."""
     details = {
         "name": "Unknown", "address": "", "phone": "",
         "website": "", "rating": None, "total_reviews": 0,
@@ -377,50 +378,13 @@ def _scrape_reviews_with_driver(
         progress_callback(0, max_reviews, f"Loaded {place_name}")
  
     # Step 1 — navigate to reviews via clean URL (strip existing params first)
-    current_url = driver.current_url
-    base_url    = current_url.split("?")[0].split("#")[0]
-    reviews_url = f"{base_url}?hl=en&view=reviews&sort=1"
-    logger.info(f"[REVIEW SCRAPER] Navigating to reviews: {reviews_url}")
-    driver.get(reviews_url)
-    time.sleep(5)
+    _navigate_to_reviews(driver)
  
     # Step 2 — sort by newest
     _sort_by_newest(driver)
  
     # Step 3 — find scrollable feed
-    scrollable = None
-    for sel in [
-        "div.m6QErb.XiKgde",
-        'div.m6QErb[role="feed"]',
-        'div[role="feed"]',
-        "div.m6QErb.DxyBCb.kA9KIf",
-        "div.m6QErb.DxyBCb",
-        "div.m6QErb",
-    ]:
-        try:
-            el = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, sel))
-            )
-            if el.is_displayed():
-                logger.info(f"[REVIEW SCRAPER] Found feed: {sel}")
-                scrollable = el
-                break
-        except Exception:
-            continue
- 
-    if not scrollable:
-        try:
-            els = driver.find_elements(By.CSS_SELECTOR, "div.m6QErb")
-            for el in els:
-                if el.is_displayed():
-                    scrollable = el
-                    logger.info("[REVIEW SCRAPER] Found feed via fallback div.m6QErb")
-                    break
-        except Exception:
-            pass
- 
-    if not scrollable:
-        logger.warning(f"[REVIEW SCRAPER] No scrollable feed found for {place_name}")
+    scrollable = _find_scrollable_feed(driver)
  
     cutoff = datetime.datetime.now() - datetime.timedelta(days=days_back)
     reviews = []

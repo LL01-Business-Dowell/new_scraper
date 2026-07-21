@@ -19,7 +19,7 @@ Key rotation
 Model rotation
 --------------
 - Models are tried in order: gemini-2.5-flash -> gemini-2.5-flash-lite ->
-  gemini-1.5-flash.  All three are on the free tier.
+  gemini-1.5-flash.
 - On HTTP 503 (model overloaded) or all keys exhausted for the current
   model: the rotator marks the model as blocked, moves to the next model,
   resets the key iteration, and retries.
@@ -38,6 +38,7 @@ import time
 import threading
 import logging
 import requests
+from typing import List, Dict, Set, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +47,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Free-tier models tried in this exact order.
-# gemini-2.5-flash      : best quality, 20 RPD per key
-# gemini-2.5-flash-lite : slightly lower quality, 20 RPD, less overload
-# gemini-1.5-flash      : older but very stable, 1500 RPD per key
 MODEL_PRIORITY_ORDER = [
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
@@ -86,15 +84,15 @@ class GeminiKeyRotator:
         self._lock = threading.Lock()
 
         # API key strings loaded from GEMINI_KEY_N env vars
-        self._keys: list[str] = []
+        self._keys: List[str] = []
 
         # key_index -> unix timestamp when exhausted.
         # Auto-cleared after KEY_QUOTA_RESET_SECONDS.
-        self._exhausted_keys: dict[int, float] = {}
+        self._exhausted_keys: Dict[int, float] = {}
 
         # model_name -> unix timestamp when blocked.
         # Auto-cleared after MODEL_BLOCK_RESET_SECONDS.
-        self._blocked_models: dict[str, float] = {}
+        self._blocked_models: Dict[str, float] = {}
 
         # Current key index within self._keys
         self._key_index: int = 0
@@ -125,7 +123,7 @@ class GeminiKeyRotator:
 
     # ── State helpers (must be called with self._lock held) ──────────────────
 
-    def _available_keys(self) -> list[int]:
+    def _available_keys(self) -> List[int]:
         """
         Return key indices that are not currently exhausted.
         Side-effect: auto-clears keys whose 24-hour cooldown has elapsed.
@@ -140,7 +138,7 @@ class GeminiKeyRotator:
             logger.info(f"[GeminiRotator] Key slot {i + 1} auto-recovered after 24 h")
         return [i for i in range(len(self._keys)) if i not in self._exhausted_keys]
 
-    def _available_models(self) -> list[str]:
+    def _available_models(self) -> List[str]:
         """
         Return models that are not currently blocked.
         Side-effect: auto-clears models whose block period has elapsed.
@@ -155,7 +153,7 @@ class GeminiKeyRotator:
             logger.info(f"[GeminiRotator] Model '{m}' auto-recovered after 1 h")
         return [m for m in MODEL_PRIORITY_ORDER if m not in self._blocked_models]
 
-    def _pick_next_key(self, tried: set[int]) -> int | None:
+    def _pick_next_key(self, tried: Set[int]) -> Optional[int]:
         """
         Return the lowest available key index not already in tried.
         Returns None if all available keys have been tried.
@@ -200,7 +198,7 @@ class GeminiKeyRotator:
                 )
 
         # Track which models we have already attempted in this call
-        tried_models: set[str] = set()
+        tried_models: Set[str] = set()
 
         # Outer loop: try each model in priority order
         while True:
@@ -218,7 +216,7 @@ class GeminiKeyRotator:
 
             current_model = remaining_models[0]
             tried_models.add(current_model)
-            tried_keys_this_model: set[int] = set()
+            tried_keys_this_model: Set[int] = set()
 
             logger.info(f"[GeminiRotator] Attempting model: {current_model}")
 

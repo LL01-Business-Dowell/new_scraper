@@ -12,6 +12,8 @@ db.sqlite3
 .env
 venv/
 env/
+dev.env
+aud.env
 
 # IDE and Editor files
 .idea/

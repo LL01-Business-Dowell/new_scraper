@@ -20,16 +20,13 @@ import SessionPage from "./SessionPage";
 import PlacePicker from "./PlacePicker";
 import CompetitorAnalysis from "./CompetitorAnalysis";
 import ReviewAnalysis from "./ReviewAnalysis";
-import "./App.css";
-
 import Dashboard from "./Dashboard";
 import SentimentApp from "./SentimentApp";
 import FeedbackPage from "./FeedbackPage";
+import "./App.css";
 
 // Normalise base URL — strip trailing slash once
 const BASE = API_BASE_URL.replace(/\/+$/, "");
-
-
 
 // ---------------------------------------------------------------------------
 // Keyword options — hardcoded list grouped by domain.
@@ -39,36 +36,18 @@ const KEYWORD_OPTIONS = [
   // Healthcare / Medical
   { group: "Healthcare", value: "Hospital" },
   { group: "Healthcare", value: "Pharmacy" },
-  // // Business / Corporate
-  // { group: "Corporate", value: "Vice Presidents of Operations" },
-  // { group: "Corporate", value: "Chief Financial Officers" },
-  // { group: "Corporate", value: "Managing Directors" },
-  // { group: "Corporate", value: "Head of Business Development" },
   // Food & Beverage
   { group: "Food & Beverage", value: "Cafe" },
   { group: "Food & Beverage", value: "Restaurant" },
   { group: "Food & Beverage", value: "Bakery" },
-  // // Real Estate
-  // { group: "Real Estate", value: "Real Estate Agencies" },
-  // { group: "Real Estate", value: "Property Developers" },
 ];
 
 // ---------------------------------------------------------------------------
 // Report type options.
 // Each entry has a display label and a function that generates the full
 // prompt string given (keyword, city, country).
-// Add new report types here — the prompt preview updates automatically.
 // ---------------------------------------------------------------------------
 const REPORT_TYPES = [
-  // {
-  //   value: "swot",
-  //   label: "SWOT Analysis",
-  //   requiresPlace: true,   // shows the establishment name input field
-  //   buildPrompt: (keyword, city, country) =>
-  //     `SWOT Analysis for ${keyword} in ${city}, ${country} — ` +
-  //     `split across geographic quadrants (North, South, East, West). ` +
-  //     `If a specific establishment URL is provided, each quadrant card includes a comparison.`,
-  // },
   {
     value: "competitive_swot",
     label: "Competitive SWOT Analysis",
@@ -77,30 +56,27 @@ const REPORT_TYPES = [
       `Competitive SWOT Analysis — benchmarks your specific ${keyword} ` +
       `against approximately 100 competitors within the selected radius in ${city}, ${country}.`,
   },
-  // ── Add more report types below as needed ────────────────────────────────
-  // { value: "...", label: "...", requiresPlace: false, buildPrompt: () => `...` },
 ];
 
 const App = () => {
+  // ── Client-side Routing State ──────────────────────────────────────────────
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => setCurrentPath(window.location.pathname);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [searchType, setSearchType] = useState("location");
-  // Keyword and report type are now dropdowns — not free-form inputs
   const [keyword, setKeyword] = useState("");
   const [selectedReportType, setSelectedReportType] = useState("");
   const [radiusKm, setRadiusKm] = useState(5);
   const [placeName, setPlaceName] = useState("");  // set by PlacePicker map component
   const [placeCity, setPlaceCity] = useState("");
   const [placeCountry, setPlaceCountry] = useState("");
-  const [file, setFile] = useState(null);
-
-  // ── Dropdowns ──────────────────────────────────────────────────────────────
-  const [countries, setCountries] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState("");
-  const [cities, setCities] = useState([]);
   const [selectedCity, setSelectedCity] = useState("");
-  const [countrySearch, setCountrySearch] = useState("");
-  const [citySearch, setCitySearch] = useState("");
 
   // ── CSV scraping task state ────────────────────────────────────────────────
   const [taskId, setTaskId] = useState(null);
@@ -109,63 +85,17 @@ const App = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [searchComplete, setSearchComplete] = useState(false);
 
-  // ── Navigation: when set, renders SearchResults instead of this page ───────
+  // ── Navigation ─────────────────────────────────────────────────────────────
   const [searchPayload, setSearchPayload] = useState(null);
   const [showCsvProcessor, setShowCsvProcessor] = useState(false);
-
   const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState(false);
 
   const [placeLat, setPlaceLat] = useState(null);
   const [placeLng, setPlaceLng] = useState(null);
 
   const intervalRef = useRef(null);
-  const fileInputRef = useRef(null);
 
   axios.defaults.baseURL = BASE;
-
-  // ---------------------------------------------------------------------------
-  // Fetch countries on mount
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    axios
-      .get("/countries")
-      .then((r) => setCountries(r.data?.countries || []))
-      .catch((err) => {
-        console.error("Failed to load countries:", err.message);
-        setCountries([]);
-      });
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Load cities when country selection changes
-  // ---------------------------------------------------------------------------
-  const handleCountryChange = async (country) => {
-    setSelectedCountry(country);
-    setSelectedCity("");
-    setCities([]);
-    if (!country) return;
-    try {
-      const r = await axios.get(`/cities/${encodeURIComponent(country)}`);
-      setCities(r.data?.cities || []);
-    } catch (err) {
-      console.error("Failed to load cities:", err.message);
-      setCities([]);
-    }
-  };
-
-  // ---------------------------------------------------------------------------
-  // Close custom dropdowns on outside click
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    const handleOutside = (e) => {
-      if (!e.target.closest(".custom-select")) {
-        document.getElementById("countryDropdown")?.classList.remove("show");
-        document.getElementById("cityDropdown")?.classList.remove("show");
-      }
-    };
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Poll CSV scraping progress (By CSV mode only)
@@ -217,14 +147,13 @@ const App = () => {
       alert("Please select both a country and a city.");
       return;
     }
-    // Navigate to SearchResults — backend handles everything from here
-    // report_type drives the prompt on the backend; no user_prompt needed
-    // Validate that place URL is provided when required
+
     const rt = REPORT_TYPES.find(r => r.value === selectedReportType);
     if (rt?.requiresPlace && selectedReportType === "competitive_swot" && !placeName.trim()) {
       alert("Please enter your establishment name for Competitive SWOT Analysis.");
       return;
     }
+
     setSearchPayload({
       keyword,
       report_type: selectedReportType,
@@ -253,29 +182,6 @@ const App = () => {
   };
 
   // ---------------------------------------------------------------------------
-  // Download CSV scraping results
-  // ---------------------------------------------------------------------------
-  const handleDownload = async () => {
-    if (!taskId) return;
-    try {
-      const r = await axios.get(`/download/${taskId}`, { responseType: "blob" });
-      const url = window.URL.createObjectURL(
-        new Blob([r.data], { type: "text/csv" })
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `results_${taskId}.csv`;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Download failed:", err.message);
-      alert("Download failed. Please try again.");
-    }
-  };
-
-  // ---------------------------------------------------------------------------
   // Reset everything
   // ---------------------------------------------------------------------------
   const handleReset = () => {
@@ -286,7 +192,6 @@ const App = () => {
     setPlaceCountry("");
     setSelectedCountry("");
     setSelectedCity("");
-    setFile(null);
     setTaskId(null);
     setProgress(0);
     setResults([]);
@@ -297,13 +202,9 @@ const App = () => {
   };
 
   // ---------------------------------------------------------------------------
-  // Page switch — By Location goes to SearchResults
+  // Route Guards based on currentPath
   // ---------------------------------------------------------------------------
-  // ---------------------------------------------------------------------------
-  // Session route — /session/{sessionId} opens SessionPage in a new tab.
-  // We detect this from the URL path so no React Router is needed.
-  // ---------------------------------------------------------------------------
-  const sessionRouteMatch = window.location.pathname.match(/^\/session\/([\w-]+)$/);
+  const sessionRouteMatch = currentPath.match(/^\/session\/([\w-]+)$/);
   if (sessionRouteMatch) {
     return (
       <SessionPage
@@ -313,23 +214,22 @@ const App = () => {
     );
   }
 
-  if (window.location.pathname === "/dashboard") {
+  if (currentPath === "/dashboard") {
     return <Dashboard />;
   }
 
-  if (window.location.pathname === "/review-analysis") {
+  if (currentPath === "/review-analysis") {
     return <ReviewAnalysis />;
   }
 
-  if (window.location.pathname === "/sentiment") {
-    return <SentimentApp />
+  if (currentPath === "/sentiment") {
+    return <SentimentApp />;
   }
 
-  if (window.location.pathname === "/feedback") {
+  if (currentPath === "/feedback") {
     return <FeedbackPage />;
   }
 
-  // Navigate to CsvProcessor page for By CSV mode
   if (showCsvProcessor) {
     return (
       <CsvProcessor
@@ -338,20 +238,6 @@ const App = () => {
       />
     );
   }
-
-  // if (showCompetitorAnalysis) {
-  //   return (
-  //     <CompetitorAnalysis
-  //       baseUrl={BASE}
-  //       onBack={() => setShowCompetitorAnalysis(false)}
-  //       keyword={keyword}
-  //       city={placeCity}
-  //       country={placeCountry}
-  //       radiusKm={radiusKm}
-  //       establishmentName={placeName}
-  //     />
-  //   );
-  // }
 
   if (showCompetitorAnalysis) {
     return (
@@ -413,8 +299,6 @@ const App = () => {
 
             <form onSubmit={handleSubmit} className="scraper-form">
 
-
-
               {/* Keyword dropdown */}
               <div className="input-container">
                 <FaKeyboard className="input-icon" />
@@ -455,13 +339,12 @@ const App = () => {
                 </select>
               </div>
 
-              {/* Establishment map picker — always visible */}
+              {/* Establishment map picker */}
               <div style={{ width: "100%", marginBottom: 8 }}>
                 <PlacePicker
                   keyword={keyword}
                   city={selectedCity}
                   country={selectedCountry}
-                  // onSelect={(place) => setPlaceName(place ? place.name : "")}
                   onSelect={(place) => {
                     if (place) {
                       setPlaceName(place.name || "");
@@ -479,9 +362,6 @@ const App = () => {
                           !/^\d[\d\s-]*$/.test(p)          // drop pure postcodes
                         );
 
-                      // Pick the part closest to the end that isn't a very short abbreviation
-                      // — this tends to be the district/city rather than the suburb.
-                      // We reverse and skip 1 (state) to land on city/district level.
                       const reversed = [...candidates].reverse();
                       const extractedCity =
                         reversed[1] ||   // [0] = state/province, [1] = city/district
@@ -532,125 +412,6 @@ const App = () => {
                 </label>
               </div>
 
-              {/* Country dropdown — removed, location inferred from PlacePicker
-              <div className="input-container">
-                <FaMapMarkerAlt className="input-icon" />
-                <div className="custom-select">
-                  <div
-                    className="select-selected"
-                    onClick={() =>
-                      document.getElementById("countryDropdown").classList.toggle("show")
-                    }
-                  >
-                    {selectedCountry || "Select a Country to Analyse"}
-                  </div>
-                  <div id="countryDropdown" className="select-items">
-                    <div className="search-container">
-                      <input
-                        type="text"
-                        placeholder="Search country..."
-                        value={countrySearch}
-                        onChange={(e) => setCountrySearch(e.target.value)}
-                        className="dropdown-search"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    {countries
-                      .filter((c) => c.toLowerCase().includes(countrySearch.toLowerCase()))
-                      .map((country, i) => (
-                        <div
-                          key={i}
-                          className={`select-option ${selectedCountry === country ? "selected" : ""}`}
-                          onClick={() => {
-                            handleCountryChange(country);
-                            document.getElementById("countryDropdown").classList.remove("show");
-                          }}
-                        >
-                          {country}
-                        </div>
-                      ))}
-                  </div>
-                  <select
-                    value={selectedCountry}
-                    onChange={(e) => handleCountryChange(e.target.value)}
-                    required
-                    className="hidden-select"
-                  >
-                    <option value="" disabled>Select a Country to Analyse</option>
-                    {countries.map((c, i) => (
-                      <option key={i} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              */}
-
-              {/* City dropdown — shown after country is picked
-              {selectedCountry && (
-                <div className="input-container">
-                  <FaMapMarkerAlt className="input-icon" />
-                  <div className="custom-select">
-                    <div
-                      className="select-selected"
-                      onClick={() =>
-                        document.getElementById("cityDropdown").classList.toggle("show")
-                      }
-                    >
-                      {selectedCity || "Select a City to Analyse"}
-                    </div>
-                    <div id="cityDropdown" className="select-items">
-                      <div className="search-container">
-                        <input
-                          type="text"
-                          placeholder="Search city..."
-                          value={citySearch}
-                          onChange={(e) => setCitySearch(e.target.value)}
-                          className="dropdown-search"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      {cities
-                        .filter((c) => c.toLowerCase().includes(citySearch.toLowerCase()))
-                        .map((city, i) => (
-                          <div
-                            key={i}
-                            className={`select-option ${selectedCity === city ? "selected" : ""}`}
-                            onClick={() => {
-                              setSelectedCity(city);
-                              document.getElementById("cityDropdown").classList.remove("show");
-                            }}
-                          >
-                            {city}
-                          </div>
-                        ))}
-                    </div>
-                    <select
-                      value={selectedCity}
-                      onChange={(e) => setSelectedCity(e.target.value)}
-                      required
-                      className="hidden-select"
-                    >
-                      <option value="" disabled>Select a City to Analyse</option>
-                      {cities.map((c, i) => (
-                        <option key={i} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-                */}
-
-              {/* Submit
-              <button
-                type="submit"
-                disabled={isRunning}
-                className={`submit-button ${isRunning ? "disabled" : ""}`}
-              >
-                <FaSearch className="button-icon" />
-                {isRunning ? "Processing..." : "Analyse"}
-              </button>
-              */}
-
               {/* Competitor Analysis button */}
               <button
                 type="button"
@@ -661,31 +422,6 @@ const App = () => {
                 <FaSearch className="button-icon" />
                 Competitor Analysis
               </button>
-
-              {/* Progress bar for CSV scraping */}
-              {isRunning && false && (
-                <div className="progress-container">
-                  <div className="progress-bar-container">
-                    <div
-                      className="progress-bar"
-                      style={{ width: `${Math.min(progress, 100)}%` }}
-                    />
-                  </div>
-                  <div className="progress-info">
-                    <p className="progress-text">
-                      Found: {progress} businesses
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleCancel}
-                      disabled={!isRunning}
-                      className="cancel-button"
-                    >
-                      <FaTimes className="button-icon-small" /> Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {/* Reset */}
               {searchComplete && (

@@ -33,7 +33,9 @@ async function nominatimSearch(query, city, country) {
             `?q=${encodeURIComponent(q)}&format=json&limit=8&addressdetails=1`,
             { headers: { "Accept-Language": "en" } }
         );
-        return resp.ok ? await resp.json() : [];
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        return Array.isArray(data) ? data : [];
     } catch {
         return [];
     }
@@ -61,6 +63,9 @@ export default function PlacePicker({
     const debounceRef = useRef(null);
     const wrapperRef = useRef(null);
 
+    // Ensure results is strictly an array at all times
+    const safeResults = Array.isArray(results) ? results : [];
+
     // ── Load Leaflet from CDN ─────────────────────────────────────────────────
     useEffect(() => {
         if (!document.getElementById("leaflet-css")) {
@@ -74,12 +79,6 @@ export default function PlacePicker({
             setLeafletOk(true);
             return;
         }
-        // const s = document.createElement("script");
-        // s.id = "leaflet-js";
-        // s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-        // s.async = true;
-        // s.onload = () => setLeafletOk(true);
-        // document.head.appendChild(s);
         if (!document.getElementById("leaflet-js")) {
             const s = document.createElement("script");
             s.id = "leaflet-js";
@@ -96,16 +95,12 @@ export default function PlacePicker({
     }, []);
 
     // ── Init map once Leaflet is ready ────────────────────────────────────────
-    // The map container is always in the DOM (height:0 when hidden) so we only
-    // ever create the map instance once. On subsequent show/hide we just call
-    // invalidateSize() to fix Leaflet's tile rendering after the resize.
     useEffect(() => {
         if (!leafletOk || !mapDivRef.current || mapRef.current) return;
 
         const L = window.L;
-        // const map = L.map(mapDivRef.current, {
-        //     center: [20, 77], zoom: 5, zoomControl: true,
-        // });
+        if (!L) return;
+
         const map = L.map(mapDivRef.current, {
             center: [20, 77],
             zoom: 5,
@@ -113,7 +108,7 @@ export default function PlacePicker({
         });
 
         setTimeout(() => {
-            map.invalidateSize();
+            map?.invalidateSize?.();
         }, 100);
 
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -124,17 +119,11 @@ export default function PlacePicker({
     }, [leafletOk]);
 
     // ── When map becomes visible, fix tile rendering ──────────────────────────
-    // useEffect(() => {
-    //     if (!showMap || !mapRef.current) return;
-    //     // Small delay lets the CSS height transition complete before Leaflet
-    //     // recalculates the container size
-    //     setTimeout(() => mapRef.current?.invalidateSize(), 250);
-    // }, [showMap]);
     useEffect(() => {
         if (!showMap || !mapRef.current) return;
 
         const resize = () => {
-            mapRef.current.invalidateSize();
+            mapRef.current?.invalidateSize?.();
         };
 
         setTimeout(resize, 50);
@@ -144,7 +133,7 @@ export default function PlacePicker({
 
     useEffect(() => {
         const onResize = () => {
-            mapRef.current?.invalidateSize();
+            mapRef.current?.invalidateSize?.();
         };
 
         window.addEventListener("resize", onResize);
@@ -165,7 +154,7 @@ export default function PlacePicker({
     useEffect(() => {
         if (!mapRef.current || !city) return;
         nominatimSearch(city, country, "").then(res => {
-            if (Array.isArray(res) && res.length > 0 && mapRef.current) {
+            if (Array.isArray(res) && res.length > 0 && mapRef.current && res[0]?.lat && res[0]?.lon) {
                 mapRef.current.flyTo(
                     [parseFloat(res[0].lat), parseFloat(res[0].lon)], 13, { duration: 1.2 }
                 );
@@ -180,27 +169,29 @@ export default function PlacePicker({
         setShowDrop(false);
         setResults([]);
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        if (!val.trim() || val.trim().length < 2) return;
+        if (!val || !val.trim() || val.trim().length < 2) return;
         debounceRef.current = setTimeout(async () => {
             setLoading(true);
             const data = await nominatimSearch(val, city, country);
-            const safeData = Array.isArray(data) ? data : [];
-            setResults(safeData);
-            setShowDrop(safeData.length > 0);
+            const verifiedData = Array.isArray(data) ? data.filter(Boolean) : [];
+            setResults(verifiedData);
+            setShowDrop(verifiedData.length > 0);
             setLoading(false);
         }, 450);
     }, [city, country]);
 
     // ── Select a result ───────────────────────────────────────────────────────
     function handleSelect(place) {
+        if (!place) return;
         const lat = parseFloat(place.lat);
         const lon = parseFloat(place.lon);
-        const nameParts = place.display_name.split(",");
-        const cleanName = nameParts[0].trim();
+        const displayName = place.display_name || "";
+        const nameParts = displayName ? displayName.split(",") : [];
+        const cleanName = nameParts[0]?.trim() || "Selected Location";
         const L = window.L;
         const map = mapRef.current;
 
-        if (map && L) {
+        if (map && L && !isNaN(lat) && !isNaN(lon)) {
             if (markerRef.current) map.removeLayer(markerRef.current);
             map.flyTo([lat, lon], 17, { duration: 1.2 });
 
@@ -220,7 +211,7 @@ export default function PlacePicker({
                 .openPopup();
         }
 
-        onSelect?.({ name: cleanName, display_name: place.display_name, lat, lon });
+        onSelect?.({ name: cleanName, display_name: displayName, lat, lon });
         setQuery("");
         setShowDrop(false);
         setResults([]);
@@ -270,7 +261,7 @@ export default function PlacePicker({
                     type="text"
                     value={query}
                     onChange={handleQueryChange}
-                    onFocus={() => (results || []).length > 0 && setShowDrop(true)}
+                    onFocus={() => safeResults.length > 0 && setShowDrop(true)}
                     placeholder={
                         city
                             ? `Search for a ${keyword || "place"} in ${city}...`
@@ -279,27 +270,6 @@ export default function PlacePicker({
                     className="form-input"
                     style={{ flex: 1 }}
                 />
-
-                {/* View on Map toggle */}
-                {/* <button
-          type="button"
-          onClick={() => setShowMap(v => !v)}
-          style={{
-            background:   showMap ? "#0ea5e9" : "none",
-            border:       `1px solid ${showMap ? "#0ea5e9" : "#334155"}`,
-            borderRadius: 8,
-            color:        showMap ? "#fff" : "#94a3b8",
-            padding:      "0 14px",
-            fontSize:     "0.8rem",
-            fontWeight:   600,
-            cursor:       "pointer",
-            flexShrink:   0,
-            whiteSpace:   "nowrap",
-            transition:   "all 0.15s",
-          }}
-        >
-          {showMap ? "Hide Map" : "View on Map"}
-        </button> */}
 
                 {/* Clear button — only when something is selected */}
                 {selectedName && (
@@ -318,7 +288,7 @@ export default function PlacePicker({
                 )}
 
                 {/* Dropdown results */}
-                {showDrop && (results || []).length > 0 && (
+                {showDrop && safeResults.length > 0 && (
                     <div style={{
                         position: "absolute",
                         top: "calc(100% + 4px)",
@@ -337,9 +307,11 @@ export default function PlacePicker({
                                 Searching...
                             </div>
                         )}
-                        {(results || []).map((place, i) => {
-                            const parts = (place?.display_name || "").split(",");
-                            const mainName = parts[0]?.trim() || "";
+                        {safeResults.map((place, i) => {
+                            if (!place) return null;
+                            const displayName = place?.display_name || "";
+                            const parts = displayName ? displayName.split(",") : [];
+                            const mainName = parts[0]?.trim() || "Location";
                             const subName = parts.slice(1, 4).join(",").trim();
                             return (
                                 <div
@@ -357,9 +329,11 @@ export default function PlacePicker({
                                     <div style={{ fontWeight: 600, color: "#f1f5f9", marginBottom: 2 }}>
                                         {mainName}
                                     </div>
-                                    <div style={{ fontSize: "0.73rem", color: "#64748b" }}>
-                                        {subName}
-                                    </div>
+                                    {subName && (
+                                        <div style={{ fontSize: "0.73rem", color: "#64748b" }}>
+                                            {subName}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -396,8 +370,6 @@ export default function PlacePicker({
                     width: "100%",
                     position: "relative",
 
-                    // height: showMap ? 500 : 0,
-                    // minHeight: showMap ? 500 : 0,
                     height: showMap ? "clamp(320px, 55vh, 500px)" : 0,
                     minHeight: showMap ? "clamp(320px, 55vh, 500px)" : 0,
 
