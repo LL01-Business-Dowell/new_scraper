@@ -1,32 +1,22 @@
 """
 hotel_places_search.py
 ----------------------
-Google Places API (New) integration for hotel sentiment route.
-Replaces the Selenium-based google_maps_scraper.py for the hotel sentiment flow only.
-
-Uses:
-- POST https://places.googleapis.com/v1/places:searchNearby
-- Searches for "lodging" type within radius of origin coordinates
-- Returns up to 20 places per call (API max), paginates via nextPageToken
-  up to 100 results total
-- Returns place name, address, rating, review count, Google Maps URL, lat/lng
-
-Env vars required:
-- GOOGLE_PLACES_API_KEY
+Google Places API (New) — Nearby Search for luxury hotels.
+Uses POST https://places.googleapis.com/v1/places:searchNearby
 """
 
 import os
 import math
+import time
 import logging
 import requests
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
 PLACES_API_KEY  = os.getenv("GOOGLE_PLACES_API_KEY", "")
 NEARBY_ENDPOINT = "https://places.googleapis.com/v1/places:searchNearby"
 
-# Fields we want back from Places API — only request what we need to minimise cost
 FIELD_MASK = ",".join([
     "places.id",
     "places.displayName",
@@ -35,8 +25,7 @@ FIELD_MASK = ",".join([
     "places.userRatingCount",
     "places.location",
     "places.googleMapsUri",
-    "places.websiteUri",
-    "places.nationalPhoneNumber",
+    "nextPageToken",
 ])
 
 
@@ -57,28 +46,35 @@ def search_luxury_hotels(
     limit: int = 100,
     establishment_name: str = "",
 ) -> List[Dict]:
-    """
-    Search Google Places API for hotels near origin_lat/lng within radius_km.
-    Returns up to `limit` places formatted to match the existing place dict schema.
 
-    Each returned dict has:
-        name, address, rating, reviews, url, lat, lng,
-        distance_km, within_radius, selected
-    """
+    # ── Startup checks ────────────────────────────────────────────────────────
     if not PLACES_API_KEY:
-        logger.error("[HOTEL PLACES] GOOGLE_PLACES_API_KEY not set")
+        logger.error("[HOTEL PLACES] ❌ GOOGLE_PLACES_API_KEY is not set in environment")
         return []
 
-    radius_m = min(radius_km * 1000, 50000)  # API max is 50,000m
-    places   = []
-    seen_ids = set()
+    logger.info(
+        f"[HOTEL PLACES] Starting search — "
+        f"origin=({origin_lat}, {origin_lng}), "
+        f"radius={radius_km}km ({radius_km * 1000:.0f}m), "
+        f"limit={limit}, "
+        f"establishment='{establishment_name}'"
+    )
+    logger.info(f"[HOTEL PLACES] API key present: {'yes' if PLACES_API_KEY else 'no'} "
+                f"(first 8 chars: {PLACES_API_KEY[:8]}...)")
+    logger.info(f"[HOTEL PLACES] Endpoint: {NEARBY_ENDPOINT}")
+    logger.info(f"[HOTEL PLACES] Field mask: {FIELD_MASK}")
 
-    # Places API (New) max is 20 per call — paginate up to 5 pages = 100 results
-    max_pages    = math.ceil(limit / 20)
-    next_token   = None
-    page         = 0
+    radius_m   = min(radius_km * 1000, 50000)
+    places     = []
+    seen_ids   = set()
+    next_token = None
+    page       = 0
+    max_pages  = 5
 
     while page < max_pages and len(places) < limit:
+
+        logger.info(f"[HOTEL PLACES] ── Page {page + 1} ──────────────────────")
+
         body = {
             "includedTypes":      ["lodging"],
             "maxResultCount":     20,
@@ -96,28 +92,54 @@ def search_luxury_hotels(
 
         if next_token:
             body["pageToken"] = next_token
+            logger.info(f"[HOTEL PLACES] Using pageToken: {next_token[:30]}...")
 
         headers = {
-            "Content-Type":    "application/json",
-            "X-Goog-Api-Key":  PLACES_API_KEY,
-            "X-Goog-FieldMask": FIELD_MASK + ",nextPageToken",
+            "Content-Type":     "application/json",
+            "X-Goog-Api-Key":   PLACES_API_KEY,
+            "X-Goog-FieldMask": FIELD_MASK,
         }
 
+        logger.info(f"[HOTEL PLACES] Request body: {body}")
+
         try:
-            resp = requests.post(NEARBY_ENDPOINT, json=body, headers=headers, timeout=15)
+            resp = requests.post(
+                NEARBY_ENDPOINT,
+                json=body,
+                headers=headers,
+                timeout=15,
+            )
+
+            logger.info(f"[HOTEL PLACES] Response status: {resp.status_code}")
+
             if resp.status_code != 200:
-                logger.error(f"[HOTEL PLACES] API error {resp.status_code}: {resp.text[:300]}")
+                logger.error(
+                    f"[HOTEL PLACES] ❌ API error {resp.status_code}: {resp.text[:500]}"
+                )
                 break
 
-            data = resp.json()
-            raw_places  = data.get("places", [])
-            next_token  = data.get("nextPageToken")
+            data       = resp.json()
+            raw_places = data.get("places", [])
+            next_token = data.get("nextPageToken")
 
-            logger.info(f"[HOTEL PLACES] Page {page+1}: {len(raw_places)} places returned")
+            logger.info(f"[HOTEL PLACES] Response keys: {list(data.keys())}")
+            logger.info(f"[HOTEL PLACES] Places returned this page: {len(raw_places)}")
+            logger.info(f"[HOTEL PLACES] nextPageToken present: {bool(next_token)}")
+
+            if not raw_places:
+                logger.warning(
+                    f"[HOTEL PLACES] ⚠️  Zero places returned on page {page + 1}. "
+                    f"Full response: {resp.text[:500]}"
+                )
+
+            skipped_duplicate = 0
+            skipped_outside   = 0
 
             for p in raw_places:
                 place_id = p.get("id", "")
+
                 if place_id in seen_ids:
+                    skipped_duplicate += 1
                     continue
                 seen_ids.add(place_id)
 
@@ -130,16 +152,23 @@ def search_luxury_hotels(
                 lat     = loc.get("latitude")
                 lng     = loc.get("longitude")
 
-                # Distance filter
-                dist = None
+                dist   = None
                 within = None
                 if lat and lng:
                     dist   = round(haversine_km(origin_lat, origin_lng, lat, lng), 2)
                     within = dist <= radius_km
 
-                # Skip if outside radius and we have coordinates
                 if within is False:
+                    skipped_outside += 1
+                    logger.debug(
+                        f"[HOTEL PLACES] Skipping '{name}' — {dist}km > {radius_km}km radius"
+                    )
                     continue
+
+                logger.debug(
+                    f"[HOTEL PLACES] ✓ Added: '{name}' | "
+                    f"rating={rating} | reviews={reviews} | dist={dist}km"
+                )
 
                 places.append({
                     "name":            name,
@@ -154,20 +183,58 @@ def search_luxury_hotels(
                     "selected":        True,
                     "place_id":        place_id,
                     "is_user_establishment": (
+                        bool(establishment_name) and
                         establishment_name.strip().lower() == name.strip().lower()
                     ),
                 })
 
                 if len(places) >= limit:
+                    logger.info(f"[HOTEL PLACES] Reached limit of {limit} — stopping pagination")
                     break
 
+            logger.info(
+                f"[HOTEL PLACES] Page {page + 1} summary: "
+                f"added={len(raw_places) - skipped_duplicate - skipped_outside}, "
+                f"skipped_duplicate={skipped_duplicate}, "
+                f"skipped_outside_radius={skipped_outside}, "
+                f"running_total={len(places)}"
+            )
+
+        except requests.exceptions.Timeout:
+            logger.error(f"[HOTEL PLACES] ❌ Request timed out on page {page + 1}")
+            break
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"[HOTEL PLACES] ❌ Connection error on page {page + 1}: {e}")
+            break
         except Exception as e:
-            logger.error(f"[HOTEL PLACES] Request error: {e}")
+            logger.error(f"[HOTEL PLACES] ❌ Unexpected error on page {page + 1}: {e}")
             break
 
         page += 1
+
         if not next_token:
+            logger.info(
+                f"[HOTEL PLACES] No nextPageToken — all available results returned after {page} page(s)"
+            )
             break
 
-    logger.info(f"[HOTEL PLACES] Total places found: {len(places)}")
+        logger.info(f"[HOTEL PLACES] Waiting 0.5s before next page request...")
+        time.sleep(0.5)
+
+    logger.info(
+        f"[HOTEL PLACES] ✅ Search complete — "
+        f"{len(places)} hotels found within {radius_km}km "
+        f"after {page} page(s) | "
+        f"seen_ids total: {len(seen_ids)}"
+    )
+
+    if len(places) == 0:
+        logger.warning(
+            "[HOTEL PLACES] ⚠️  Zero hotels returned. Possible reasons:\n"
+            "  1. GOOGLE_PLACES_API_KEY is wrong or Places API (New) not enabled\n"
+            "  2. No lodging places within the radius\n"
+            "  3. Billing not enabled on the Google Cloud project\n"
+            "  4. API quota exceeded"
+        )
+
     return places

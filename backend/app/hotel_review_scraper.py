@@ -11,6 +11,7 @@ import random
 import hashlib
 import re
 import logging
+import traceback
 from typing import Dict, List, Optional, Callable
 
 from selenium import webdriver
@@ -27,13 +28,43 @@ try:
 except ImportError:
     HAS_DATEUTIL = False
 
-try:
-    from nltk.sentiment import SentimentIntensityAnalyzer
-    sia = SentimentIntensityAnalyzer()
-except Exception:
-    sia = None
-
 logger = logging.getLogger(__name__)
+
+# --- Hugging Face Transformer Initialization ---
+sentiment_pipeline = None
+
+def get_sentiment_pipeline():
+    """Lazy-loads and returns the Hugging Face sentiment analysis pipeline."""
+    global sentiment_pipeline
+    if sentiment_pipeline is not None:
+        return sentiment_pipeline
+
+    try:
+        from transformers import pipeline
+        import torch
+
+        # Detect CUDA GPU hardware availability if available
+        device = 0 if torch.cuda.is_available() else -1
+        logger.info(f"[HOTEL SCRAPER] Loading Hugging Face Sentiment Model on device: {device}...")
+
+        # RoBERTa-base sentiment classifier fine-tuned on user reviews
+        sentiment_pipeline = pipeline(
+            "sentiment-analysis",
+            model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+            return_all_scores=True,
+            device=device,
+            truncation=True,
+            max_length=512
+        )
+        logger.info("[HOTEL SCRAPER] Hugging Face Sentiment Pipeline successfully loaded.")
+    except Exception as e:
+        sentiment_pipeline = None
+        logger.error(f"[HOTEL SCRAPER] Failed to initialize Hugging Face Pipeline: {e}\n{traceback.format_exc()}")
+
+    return sentiment_pipeline
+
+# Eagerly attempt to initialize on module import
+get_sentiment_pipeline()
 
 
 # ── Driver ────────────────────────────────────────────────────────────────────
@@ -171,7 +202,6 @@ def _navigate_to_reviews(driver):
     logger.info("[HOTEL SCRAPER] Locating and navigating to the Reviews tab...")
     clicked = False
     try:
-        # Combine XPaths to find the Reviews tab instantly, prioritized by index
         combined_tab_xpath = ' | '.join([
             '//button[contains(@aria-label, "Reviews")]',
             '//button[@data-tab-index="1"]',
@@ -308,12 +338,43 @@ def _find_feed(driver):
     return None
 
 
+# ── Single text score helper ──────────────────────────────────────────────────
+
+def _predict_text_compound_score(text: str) -> float:
+    """
+    Evaluates text through the RoBERTa Transformer model and converts
+    class probabilities into a compound score between -1.0 and +1.0.
+    """
+    pipeline_instance = get_sentiment_pipeline()
+    if not pipeline_instance or not text or text == "[Rating Only]":
+        return 0.0
+
+    try:
+        # Run inference through Transformer model pipeline
+        raw_outputs = pipeline_instance(text[:512])[0]
+        
+        # Map label probabilities: [{'label': 'positive', 'score': 0.85}, ...]
+        scores = {p['label'].lower(): p['score'] for p in raw_outputs}
+        
+        pos = scores.get('positive', 0.0)
+        neg = scores.get('negative', 0.0)
+        
+        # Calculate compound polarity score on a [-1.0, 1.0] scale
+        compound = pos - neg
+        return round(compound, 3)
+    except Exception as e:
+        logger.debug(f"[HOTEL SCRAPER] Inference error for text snippet: {e}")
+        return 0.0
+
+
 # ── Sentiment analysis ────────────────────────────────────────────────────────
 
 def _run_sentiment_analysis(reviews: List[Dict]) -> Dict:
-    logger.info(f"[HOTEL SCRAPER] Commencing sentiment calculations on {len(reviews)} reviews...")
-    if not reviews or not sia:
-        logger.warning("[HOTEL SCRAPER] NLTK Sentiment analyzer not configured or review stack is empty.")
+    pipeline_instance = get_sentiment_pipeline()
+    logger.info(f"[HOTEL SCRAPER] Commencing Hugging Face Transformer analysis on {len(reviews)} reviews...")
+    
+    if not reviews or not pipeline_instance:
+        logger.warning("[HOTEL SCRAPER] Hugging Face Sentiment pipeline not loaded or review stack is empty.")
         return {
             "overall_score": 0, "overall_label": "Unknown",
             "positive_count": 0, "neutral_count": 0, "negative_count": 0,
@@ -324,12 +385,31 @@ def _run_sentiment_analysis(reviews: List[Dict]) -> Dict:
         }
 
     texts = [r["text"] for r in reviews if r.get("text") and r["text"] != "[Rating Only]"]
+    
+    # Run batch inference through Transformer pipeline for performance
+    try:
+        batch_inputs = [t[:512] for t in texts]
+        batch_results = pipeline_instance(batch_inputs) if batch_inputs else []
+    except Exception as e:
+        logger.error(f"[HOTEL SCRAPER] Batch inference failed, falling back to sequential evaluation: {e}")
+        batch_results = []
+
     scores = []
     positive_count = neutral_count = negative_count = 0
+    scored_reviews_map = {}
 
-    for text in texts:
-        score = sia.polarity_scores(text)["compound"]
+    for idx, text in enumerate(texts):
+        if idx < len(batch_results):
+            raw_scores = {p['label'].lower(): p['score'] for p in batch_results[idx]}
+            pos = raw_scores.get('positive', 0.0)
+            neg = raw_scores.get('negative', 0.0)
+            score = round(pos - neg, 3)
+        else:
+            score = _predict_text_compound_score(text)
+
         scores.append(score)
+        scored_reviews_map[text] = score
+
         if score > 0.2:    positive_count += 1
         elif score < -0.2: negative_count += 1
         else:              neutral_count  += 1
@@ -356,8 +436,11 @@ def _run_sentiment_analysis(reviews: List[Dict]) -> Dict:
         if mk not in monthly:
             monthly[mk] = {"count": 0, "total_score": 0, "ratings": []}
         monthly[mk]["count"] += 1
-        if review.get("text") and review["text"] != "[Rating Only]":
-            monthly[mk]["total_score"] += sia.polarity_scores(review["text"])["compound"]
+        
+        rev_text = review.get("text", "")
+        if rev_text and rev_text != "[Rating Only]":
+            monthly[mk]["total_score"] += scored_reviews_map.get(rev_text, 0.0)
+        
         if review.get("rating") is not None:
             monthly[mk]["ratings"].append(review["rating"])
 
@@ -381,9 +464,11 @@ def _run_sentiment_analysis(reviews: List[Dict]) -> Dict:
 
     scored = []
     for review in reviews:
-        if review.get("text") and review["text"] != "[Rating Only]":
-            sc = sia.polarity_scores(review["text"])["compound"]
-            scored.append((sc, review["text"][:120].strip(), review.get("author",""), review.get("date","")))
+        rev_text = review.get("text", "")
+        if rev_text and rev_text != "[Rating Only]":
+            sc = scored_reviews_map.get(rev_text, 0.0)
+            scored.append((sc, rev_text[:120].strip(), review.get("author",""), review.get("date","")))
+    
     scored.sort(key=lambda x: x[0], reverse=True)
     top_positive = [{"score":s,"text":t,"author":a,"date":d} for s,t,a,d in scored[:5]]
     top_negative = [{"score":s,"text":t,"author":a,"date":d} for s,t,a,d in scored[-5:] if s < 0]
@@ -509,7 +594,6 @@ def scrape_hotel_reviews(
                     break
                 try:
                     card_text = card.text.strip()
-                    # Filter structural noise elements, menus or header configurations
                     if not card_text or len(card_text) < 12 or "Sort" in card_text[:15]:
                         continue
 
@@ -517,11 +601,9 @@ def scrape_hotel_reviews(
                     if len(lines) < 2:
                         continue
 
-                    # Positional Structural Extraction Fallbacks
                     author = lines[0]
                     date_str = lines[1]
                     
-                    # Handle local guide or reviewer badge tracking shifting array placements
                     if "guide" in date_str.lower() or "review" in date_str.lower() and len(lines) > 2:
                         date_str = lines[2]
                         text_pool = lines[3:]
@@ -531,13 +613,11 @@ def scrape_hotel_reviews(
                     review_text = " ".join([t for t in text_pool if "helpful" not in t.lower() and "share" not in t.lower()])
                     review_text = review_text.strip() if review_text else "[Rating Only]"
 
-                    # Parse unique review identification tokens safely
                     rev_id = card.get_attribute("data-review-id") or f"{author}_{date_str}_{hashlib.md5(review_text.encode()).hexdigest()[:8]}"
 
                     if rev_id in processed_ids:
                         continue
 
-                    # Parsing structural child star items layout-agnostically
                     rating = 5
                     try:
                         aria = card.get_attribute("aria-label") or ""
@@ -549,7 +629,6 @@ def scrape_hotel_reviews(
                             if stars_elements:
                                 rating = len(stars_elements)
                             else:
-                                # Fallback to original CSS definitions inside custom grids
                                 for sel in [".fzvQIb", "span.kvMYJc"]:
                                     el = card.find_element(By.CSS_SELECTOR, sel)
                                     raw_val = el.text.strip()
@@ -600,7 +679,6 @@ def scrape_hotel_reviews(
             if len(reviews) >= max_reviews:
                 break
 
-            # Scroll handling
             if feed:
                 try:
                     prev = driver.execute_script("return arguments[0].scrollTop", feed)

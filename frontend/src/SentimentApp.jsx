@@ -1,23 +1,13 @@
 /**
  * SentimentApp.jsx
- * ----------------
- * Standalone page at /sentiment — direct URL access only.
- * Exact copy of App.jsx with one addition:
- *   "Sentiment Analysis" added as a report type option.
- * When selected, routes to SentimentAnalysis.jsx.
- * Everything else is identical to App.jsx.
  */
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import {
-  FaUpload, FaFileDownload, FaTimes, FaSync,
-  FaSearch, FaMapMarkerAlt, FaKeyboard,
-} from "react-icons/fa";
+import { FaSearch, FaSync, FaKeyboard } from "react-icons/fa";
 import API_BASE_URL from "./config";
 import SearchResults from "./SearchResults";
 import CsvProcessor from "./CsvProcessor";
-import SessionPage from "./SessionPage";
 import PlacePicker from "./PlacePicker";
 import CompetitorAnalysis from "./CompetitorAnalysis";
 import SentimentAnalysis from "./SentimentAnalysis";
@@ -39,38 +29,26 @@ const REPORT_TYPES = [
     value:         "swot",
     label:         "SWOT Analysis",
     requiresPlace: true,
-    buildPrompt:   (keyword, city, country) =>
-      `SWOT Analysis for ${keyword} in ${city}, ${country} — ` +
-      `split across geographic quadrants (North, South, East, West). ` +
-      `If a specific establishment URL is provided, each quadrant card includes a comparison.`,
   },
   {
     value:         "competitive_swot",
     label:         "Competitive SWOT Analysis",
     requiresPlace: true,
-    buildPrompt:   (keyword, city, country) =>
-      `Competitive SWOT Analysis — benchmarks your specific ${keyword} ` +
-      `against approximately 100 competitors within the selected radius in ${city}, ${country}.`,
   },
   {
     value:         "sentiment",
     label:         "Sentiment Analysis",
     requiresPlace: true,
-    buildPrompt:   (keyword, city, country) =>
-      `Sentiment Analysis for ${keyword} in ${city}, ${country}`,
   },
 ];
 
 const SentimentApp = () => {
-
-  // ── Route guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (window.location.pathname !== "/sentiment") {
       window.history.replaceState({}, "", "/sentiment");
     }
   }, []);
 
-  // ── Form state ─────────────────────────────────────────────────────────────
   const [keyword,              setKeyword]              = useState("");
   const [selectedReportType,   setSelectedReportType]   = useState(REPORT_TYPES[0].value);
   const [radiusKm,             setRadiusKm]             = useState(5);
@@ -79,25 +57,22 @@ const SentimentApp = () => {
   const [placeCountry,         setPlaceCountry]         = useState("");
   const [placeLat,             setPlaceLat]             = useState(null);
   const [placeLng,             setPlaceLng]             = useState(null);
-  const [file,                 setFile]                 = useState(null);
+  const [placeGoogleUri,       setPlaceGoogleUri]       = useState("");
+  const [placeId,              setPlaceId]              = useState("");
 
-  // ── Task state ─────────────────────────────────────────────────────────────
   const [taskId,               setTaskId]               = useState(null);
   const [progress,             setProgress]             = useState(0);
   const [results,              setResults]              = useState([]);
   const [isRunning,            setIsRunning]            = useState(false);
   const [searchComplete,       setSearchComplete]       = useState(false);
 
-  // ── Navigation ─────────────────────────────────────────────────────────────
   const [searchPayload,        setSearchPayload]        = useState(null);
   const [showCsvProcessor,     setShowCsvProcessor]     = useState(false);
   const [showCompetitorAnalysis, setShowCompetitorAnalysis] = useState(false);
   const [showSentimentAnalysis,  setShowSentimentAnalysis]  = useState(false);
 
   const intervalRef  = useRef(null);
-  const fileInputRef = useRef(null);
 
-  // ── Poll task progress ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!taskId || !isRunning) return;
     intervalRef.current = setInterval(async () => {
@@ -106,11 +81,7 @@ const SentimentApp = () => {
         const d = r.data;
         if (d.progress !== undefined) setProgress(d.progress);
         if (d.results?.length > 0)    setResults(d.results);
-        if (d.error) {
-          setIsRunning(false); setSearchComplete(true);
-          clearInterval(intervalRef.current);
-        }
-        if (!d.running) {
+        if (d.error || !d.running) {
           setIsRunning(false); setSearchComplete(true);
           clearInterval(intervalRef.current);
         }
@@ -123,110 +94,151 @@ const SentimentApp = () => {
     return () => clearInterval(intervalRef.current);
   }, [taskId, isRunning]);
 
-  // ── PlacePicker handler — captures lat/lng and city/country ───────────────
   const handlePlaceSelect = (place) => {
+    console.group("📍 Place Selection Callback");
+    console.log("Raw Place Received:", place);
+
     if (!place) {
+      console.warn("Place is null/empty. Resetting place state.");
       setPlaceName(""); setPlaceCity(""); setPlaceCountry("");
       setPlaceLat(null); setPlaceLng(null);
+      setPlaceGoogleUri(""); setPlaceId("");
+      console.groupEnd();
       return;
     }
+
     const addr = place.address || {};
-    setPlaceName(place.name || place.display_name?.split(",")[0]?.trim() || "");
-    setPlaceLat(parseFloat(place.lat) || null);
-    setPlaceLng(parseFloat(place.lon) || null);
-    setPlaceCity(
-      addr.city || addr.town || addr.village || addr.county ||
-      place.display_name?.split(",").slice(-3, -2)[0]?.trim() || ""
-    );
-    setPlaceCountry(
-      addr.country || place.display_name?.split(",").slice(-1)[0]?.trim() || ""
-    );
+    const nameVal = place.name || "";
+    const latVal = parseFloat(place.lat) || null;
+    const lngVal = parseFloat(place.lon) || null;
+    const uriVal = place.googleMapsUri || "";
+    const idVal = place.place_id || "";
+
+    const extractedCity =
+      addr.city ||
+      addr.town ||
+      addr.village ||
+      addr.county ||
+      addr.state ||
+      "Selected Area";
+
+    const extractedCountry = addr.country || "";
+
+    console.log("Extracted Values:", {
+      name: nameVal,
+      city: extractedCity,
+      country: extractedCountry,
+      lat: latVal,
+      lng: lngVal,
+      googleMapsUri: uriVal,
+      place_id: idVal,
+    });
+
+    setPlaceName(nameVal);
+    setPlaceLat(latVal);
+    setPlaceLng(lngVal);
+    setPlaceGoogleUri(uriVal);
+    setPlaceId(idVal);
+    setPlaceCity(extractedCity);
+    setPlaceCountry(extractedCountry);
+    console.groupEnd();
   };
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    console.group("🚀 Start Search Button Clicked");
+    console.log("Current Form State:", {
+      keyword,
+      selectedReportType,
+      radiusKm,
+      placeName,
+      placeCity,
+      placeCountry,
+      placeLat,
+      placeLng,
+      placeGoogleUri,
+      placeId,
+      origin_lat:  placeLat,
+      origin_lng:  placeLng,
+    });
+
     if (!keyword.trim()) {
+      console.warn("❌ Validation Failed: Keyword is missing.");
       alert("Please select a keyword.");
+      console.groupEnd();
       return;
     }
 
-    const rt = REPORT_TYPES.find(r => r.value === selectedReportType);
-
     if (selectedReportType === "sentiment") {
       if (!placeName.trim()) {
+        console.warn("❌ Validation Failed: Place Name missing for Sentiment Analysis.");
         alert("Please select your establishment for Sentiment Analysis.");
+        console.groupEnd();
         return;
       }
-      if (!placeCity) {
-        alert("Could not determine city from selected place. Please re-select your establishment.");
-        return;
-      }
+      console.log("✅ Validation Passed: Navigating to <SentimentAnalysis />");
       setShowSentimentAnalysis(true);
+      console.groupEnd();
       return;
     }
 
     if (selectedReportType === "competitive_swot") {
       if (!placeName.trim()) {
+        console.warn("❌ Validation Failed: Place Name missing for Competitive SWOT.");
         alert("Please select your establishment for Competitive SWOT Analysis.");
+        console.groupEnd();
         return;
       }
+      console.log("✅ Validation Passed: Navigating to <CompetitorAnalysis />");
       setShowCompetitorAnalysis(true);
+      console.groupEnd();
       return;
     }
 
-    setSearchPayload({
+    const payload = {
       keyword,
       report_type: selectedReportType,
       city:        placeCity,
       country:     placeCountry,
       radius_km:   radiusKm,
       place_name:  placeName.trim() || undefined,
-    });
+      google_maps_uri: placeGoogleUri,
+      place_id:    placeId,
+    };
+
+    console.log("✅ Validation Passed: Setting searchPayload and launching <SearchResults />:", payload);
+    setSearchPayload(payload);
+    console.groupEnd();
   };
 
-  // ── Reset ──────────────────────────────────────────────────────────────────
   const handleReset = () => {
+    console.log("🔄 Resetting form...");
     setKeyword(""); setSelectedReportType(REPORT_TYPES[0].value);
     setPlaceName(""); setPlaceCity(""); setPlaceCountry("");
     setPlaceLat(null); setPlaceLng(null);
-    setFile(null); setTaskId(null); setProgress(0);
-    setResults([]); setIsRunning(false); setSearchComplete(false);
+    setPlaceGoogleUri(""); setPlaceId("");
+    setTaskId(null); setProgress(0); setResults([]);
+    setIsRunning(false); setSearchComplete(false);
     setSearchPayload(null); setShowCsvProcessor(false);
     setShowCompetitorAnalysis(false); setShowSentimentAnalysis(false);
   };
 
-  const handleCancel = async () => {
-    if (!taskId) return;
-    try { await axios.post(`/cancel/${taskId}`); } catch {}
-    clearInterval(intervalRef.current);
-    setTaskId(null); setIsRunning(false); setProgress(0); setSearchComplete(true);
-  };
-
-  const handleDownload = async () => {
-    if (!taskId) return;
-    try {
-      const r = await axios.get(`/download/${taskId}`, { responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([r.data], { type: "text/csv" }));
-      const a = document.createElement("a");
-      a.href = url; a.download = `results_${taskId}.csv`; a.style.display = "none";
-      document.body.appendChild(a); a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) { alert("Download failed. Please try again."); }
-  };
-
-  // ── Routing ────────────────────────────────────────────────────────────────
   if (showSentimentAnalysis) {
     return (
       <SentimentAnalysis
         baseUrl={BASE}
-        onBack={() => setShowSentimentAnalysis(false)}
+        onBack={() => {
+          console.log("⬅️ Returning from Sentiment Analysis view.");
+          handleReset();
+        }}
         city={placeCity}
         country={placeCountry}
         establishmentName={placeName}
         originLat={placeLat}
         originLng={placeLng}
+        googleMapsUri={placeGoogleUri}
+        placeId={placeId}
         radiusKm={radiusKm}
         daysBack={30}
       />
@@ -237,7 +249,10 @@ const SentimentApp = () => {
     return (
       <CompetitorAnalysis
         baseUrl={BASE}
-        onBack={() => setShowCompetitorAnalysis(false)}
+        onBack={() => {
+          console.log("⬅️ Returning from Competitor Analysis view.");
+          handleReset();
+        }}
         keyword={keyword}
         city={placeCity}
         country={placeCountry}
@@ -245,20 +260,20 @@ const SentimentApp = () => {
         establishmentName={placeName}
         originLat={placeLat}
         originLng={placeLng}
+        googleMapsUri={placeGoogleUri}
         daysBack={30}
       />
     );
   }
 
   if (showCsvProcessor) {
-    return <CsvProcessor baseUrl={BASE} onBack={() => setShowCsvProcessor(false)} />;
+    return <CsvProcessor baseUrl={BASE} onBack={handleReset} />;
   }
 
   if (searchPayload) {
-    return <SearchResults searchPayload={searchPayload} baseUrl={BASE} onBack={() => setSearchPayload(null)} />;
+    return <SearchResults searchPayload={searchPayload} baseUrl={BASE} onBack={handleReset} />;
   }
 
-  // ── Form ──────────────────────────────────────────────────────────────────
   return (
     <div className="app-container">
       <div className="animated-background">
@@ -292,7 +307,6 @@ const SentimentApp = () => {
 
             <form onSubmit={handleSubmit} className="scraper-form">
 
-              {/* Keyword dropdown */}
               <div className="input-container">
                 <FaKeyboard className="input-icon" />
                 <select
@@ -313,7 +327,6 @@ const SentimentApp = () => {
                 </select>
               </div>
 
-              {/* Report Type dropdown */}
               <div className="input-container">
                 <FaSearch className="input-icon" />
                 <select
@@ -329,7 +342,6 @@ const SentimentApp = () => {
                 </select>
               </div>
 
-              {/* Establishment picker */}
               {REPORT_TYPES.find(r => r.value === selectedReportType)?.requiresPlace && (
                 <div style={{ width: "100%", marginBottom: 8 }}>
                   <PlacePicker
@@ -343,7 +355,6 @@ const SentimentApp = () => {
                 </div>
               )}
 
-              {/* Radius slider */}
               <div className="input-container">
                 <label className="slider-label" style={{ width: "100%" }}>
                   Search radius: {radiusKm} km
@@ -360,7 +371,6 @@ const SentimentApp = () => {
                 </label>
               </div>
 
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={isRunning}

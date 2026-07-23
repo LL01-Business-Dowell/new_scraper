@@ -181,7 +181,7 @@ def scrape_hotel_reviews_apify(
         return result
 
     if progress_callback:
-        progress_callback(5, 100, "Starting review scraper...")
+        progress_callback(5, 100, "Starting review finder...")
 
     # 1. Start run
     run_id = _start_run(url, max_reviews)
@@ -190,7 +190,7 @@ def scrape_hotel_reviews_apify(
         return result
 
     if progress_callback:
-        progress_callback(15, 100, "Scraping reviews (this takes 1-3 minutes)...")
+        progress_callback(15, 100, "Finding reviews (this takes 1-3 minutes)...")
 
     # 2. Poll until done
     succeeded = _poll_run(run_id, timeout_seconds=360)
@@ -199,7 +199,7 @@ def scrape_hotel_reviews_apify(
         return result
 
     if progress_callback:
-        progress_callback(80, 100, "Fetching scraped reviews...")
+        progress_callback(80, 100, "Fetching reviews...")
 
     # 3. Fetch dataset
     items = _fetch_dataset(run_id)

@@ -1,415 +1,414 @@
 /**
  * PlacePicker.jsx
- * ---------------
- * Inline place search component that lives inside the main form.
- *
- * Default state: shows a search input + "View on Map" button.
- * Expanded state: the map appears below the search bar inside the form.
- *
- * Stack — all free, no API keys:
- *   Leaflet 1.9.4    — map rendering (cdnjs)
- *   OpenStreetMap    — tile layer
- *   Nominatim API    — geocoding / place search
- *
- * Props:
- *   keyword      string   — biases search (e.g. "Cafes")
- *   city         string   — biases search and flies map to city
- *   country      string   — biases search
- *   onSelect     fn       — called with { name, display_name, lat, lon } | null
- *   selectedName string   — currently selected place name
- *   required     bool     — show required asterisk
  */
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import {
+  APIProvider,
+  Map,
+  AdvancedMarker,
+  Pin,
+  useMap,
+  useMapsLibrary,
+} from "@vis.gl/react-google-maps";
 
-// ── Nominatim search ─────────────────────────────────────────────────────────
-async function nominatimSearch(query, city, country) {
-    if (!query || query.trim().length < 2) return [];
-    const bias = [city, country].filter(Boolean).join(", ");
-    const q = bias ? `${query.trim()}, ${bias}` : query.trim();
-    try {
-        const resp = await fetch(
-            `https://nominatim.openstreetmap.org/search` +
-            `?q=${encodeURIComponent(q)}&format=json&limit=8&addressdetails=1`,
-            { headers: { "Accept-Language": "en" } }
-        );
-        if (!resp.ok) return [];
-        const data = await resp.json();
-        return Array.isArray(data) ? data : [];
-    } catch {
-        return [];
+const defaultCenter = {
+  lat: 20.5937,
+  lng: 78.9629,
+};
+
+const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+
+function AutocompleteInput({
+  city,
+  onSelect,
+  setSelectedLocation,
+  setMapCenter,
+  setQuery,
+  selectedName,
+}) {
+  const places = useMapsLibrary("places");
+  const containerRef = useRef(null);
+  const autocompleteRef = useRef(null);
+
+  useEffect(() => {
+    if (!places || !containerRef.current) return;
+
+    containerRef.current.innerHTML = "";
+
+    const autocomplete = new places.PlaceAutocompleteElement();
+    autocomplete.style.width = "100%";
+    autocomplete.style.display = "block";
+    autocompleteRef.current = autocomplete;
+
+    containerRef.current.appendChild(autocomplete);
+
+    const handleSelect = async (event) => {
+      try {
+        let place = event.place;
+        if (!place && event.placePrediction) {
+          place = event.placePrediction.toPlace();
+        }
+        if (!place) return;
+
+        await place.fetchFields({
+          fields: [
+            "id",
+            "displayName",
+            "formattedAddress",
+            "location",
+            "addressComponents",
+            "googleMapsURI",
+          ],
+        });
+
+        if (!place.location) {
+          alert("No location details available for this selection.");
+          return;
+        }
+
+        const lat = typeof place.location.lat === "function" ? place.location.lat() : place.location.lat;
+        const lng = typeof place.location.lng === "function" ? place.location.lng() : place.location.lng;
+        
+        const cleanName =
+          place.displayName ||
+          place.formattedAddress?.split(",")[0]?.trim() ||
+          "Selected Location";
+
+        let extractedCity = "";
+        let extractedCountry = "";
+
+        if (place.addressComponents) {
+          place.addressComponents.forEach((comp) => {
+            const types = comp.types || [];
+            if (types.includes("locality") || types.includes("postal_town")) {
+              extractedCity = comp.longText || comp.shortText;
+            } else if (!extractedCity && types.includes("administrative_area_level_2")) {
+              extractedCity = comp.longText || comp.shortText;
+            } else if (!extractedCity && types.includes("administrative_area_level_1")) {
+              extractedCity = comp.longText || comp.shortText;
+            }
+
+            if (types.includes("country")) {
+              extractedCountry = comp.longText || comp.shortText;
+            }
+          });
+        }
+
+        if (!extractedCity && place.formattedAddress) {
+          const parts = place.formattedAddress.split(",");
+          if (parts.length >= 2) {
+            extractedCity = parts[parts.length - 2].trim();
+          }
+        }
+
+        const locationData = { lat, lng };
+        setSelectedLocation(locationData);
+        setMapCenter(locationData);
+        setQuery(cleanName);
+
+        onSelect?.({
+          name: cleanName,
+          display_name: place.formattedAddress || cleanName,
+          lat: lat,
+          lon: lng,
+          googleMapsUri: place.googleMapsURI || `https://www.google.com/maps/place/?q=place_id:${place.id}`,
+          place_id: place.id,
+          address: {
+            city: extractedCity || city || "Selected Area",
+            country: extractedCountry,
+          },
+        });
+      } catch (err) {
+        console.error("Error fetching place details:", err);
+      }
+    };
+
+    autocomplete.addEventListener("gmp-select", handleSelect);
+
+    return () => {
+      autocomplete.removeEventListener("gmp-select", handleSelect);
+    };
+  }, [places, city, onSelect, setSelectedLocation, setMapCenter, setQuery]);
+
+  // Clears the underlying Google Autocomplete input element when form resets
+  useEffect(() => {
+    if (!selectedName && autocompleteRef.current) {
+      if ("value" in autocompleteRef.current) {
+        autocompleteRef.current.value = "";
+      }
     }
+  }, [selectedName]);
+
+  return <div ref={containerRef} style={{ width: "100%", display: "block" }} />;
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
-export default function PlacePicker({
-    keyword = "",
-    city = "",
-    country = "",
-    onSelect,
-    selectedName = "",
-    required = false,
+function MapCameraUpdater({ location }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (map && location) {
+      map.panTo(location);
+      map.setZoom(16);
+    }
+  }, [map, location]);
+
+  return null;
+}
+
+function MapContent({
+  defaultMapCenter,
+  selectedLocation,
+  selectedName,
+  setSelectedLocation,
+  setMapCenter,
+  setQuery,
+  onSelect,
+  city,
+  country,
+  handleClear,
 }) {
-    const [query, setQuery] = useState("");
-    const [results, setResults] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [showMap, setShowMap] = useState(true);
-    const [showDrop, setShowDrop] = useState(false);
-    const [leafletOk, setLeafletOk] = useState(false);
+  const geocodingLib = useMapsLibrary("geocoding");
 
-    const mapDivRef = useRef(null);
-    const mapRef = useRef(null);
-    const markerRef = useRef(null);
-    const debounceRef = useRef(null);
-    const wrapperRef = useRef(null);
+  const handleMapClick = async (e) => {
+    if (!e.detail?.latLng) return;
+    const lat = e.detail.latLng.lat;
+    const lng = e.detail.latLng.lng;
+    const locationData = { lat, lng };
 
-    // Ensure results is strictly an array at all times
-    const safeResults = Array.isArray(results) ? results : [];
+    setSelectedLocation(locationData);
+    setMapCenter(locationData);
 
-    // ── Load Leaflet from CDN ─────────────────────────────────────────────────
-    useEffect(() => {
-        if (!document.getElementById("leaflet-css")) {
-            const link = document.createElement("link");
-            link.id = "leaflet-css";
-            link.rel = "stylesheet";
-            link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
-            document.head.appendChild(link);
-        }
-        if (window.L) {
-            setLeafletOk(true);
-            return;
-        }
-        if (!document.getElementById("leaflet-js")) {
-            const s = document.createElement("script");
-            s.id = "leaflet-js";
-            s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-            s.async = true;
-            s.onload = () => setLeafletOk(true);
-            document.head.appendChild(s);
-        } else {
-            setLeafletOk(true);
-        }
-        return () => {
-            if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
-        };
-    }, []);
+    if (geocodingLib) {
+      const geocoder = new geocodingLib.Geocoder();
+      try {
+        const response = await geocoder.geocode({ location: locationData });
+        if (response.results?.[0]) {
+          const result = response.results[0];
+          const cleanName = result.formatted_address.split(",")[0] || "Pinned Location";
 
-    // ── Init map once Leaflet is ready ────────────────────────────────────────
-    useEffect(() => {
-        if (!leafletOk || !mapDivRef.current || mapRef.current) return;
+          let extractedCity = "";
+          let extractedCountry = "";
 
-        const L = window.L;
-        if (!L) return;
-
-        const map = L.map(mapDivRef.current, {
-            center: [20, 77],
-            zoom: 5,
-            zoomControl: true,
-        });
-
-        setTimeout(() => {
-            map?.invalidateSize?.();
-        }, 100);
-
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-            maxZoom: 19,
-        }).addTo(map);
-        mapRef.current = map;
-    }, [leafletOk]);
-
-    // ── When map becomes visible, fix tile rendering ──────────────────────────
-    useEffect(() => {
-        if (!showMap || !mapRef.current) return;
-
-        const resize = () => {
-            mapRef.current?.invalidateSize?.();
-        };
-
-        setTimeout(resize, 50);
-        setTimeout(resize, 150);
-        setTimeout(resize, 300);
-    }, [showMap, selectedName]);
-
-    useEffect(() => {
-        const onResize = () => {
-            mapRef.current?.invalidateSize?.();
-        };
-
-        window.addEventListener("resize", onResize);
-
-        return () => {
-            window.removeEventListener("resize", onResize);
-        };
-    }, []);
-
-    // ── Destroy map on unmount only ───────────────────────────────────────────
-    useEffect(() => {
-        return () => {
-            if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
-        };
-    }, []);
-
-    // ── Fly to city when city changes (map already open) ─────────────────────
-    useEffect(() => {
-        if (!mapRef.current || !city) return;
-        nominatimSearch(city, country, "").then(res => {
-            if (Array.isArray(res) && res.length > 0 && mapRef.current && res[0]?.lat && res[0]?.lon) {
-                mapRef.current.flyTo(
-                    [parseFloat(res[0].lat), parseFloat(res[0].lon)], 13, { duration: 1.2 }
-                );
+          result.address_components.forEach((comp) => {
+            if (comp.types.includes("locality") || comp.types.includes("postal_town")) {
+              extractedCity = comp.long_name;
+            } else if (!extractedCity && comp.types.includes("administrative_area_level_2")) {
+              extractedCity = comp.long_name;
             }
-        });
-    }, [city, country]);
+            if (comp.types.includes("country")) {
+              extractedCountry = comp.long_name;
+            }
+          });
 
-    // ── Debounced Nominatim search ────────────────────────────────────────────
-    const handleQueryChange = useCallback((e) => {
-        const val = e.target.value;
-        setQuery(val);
-        setShowDrop(false);
-        setResults([]);
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        if (!val || !val.trim() || val.trim().length < 2) return;
-        debounceRef.current = setTimeout(async () => {
-            setLoading(true);
-            const data = await nominatimSearch(val, city, country);
-            const verifiedData = Array.isArray(data) ? data.filter(Boolean) : [];
-            setResults(verifiedData);
-            setShowDrop(verifiedData.length > 0);
-            setLoading(false);
-        }, 450);
-    }, [city, country]);
-
-    // ── Select a result ───────────────────────────────────────────────────────
-    function handleSelect(place) {
-        if (!place) return;
-        const lat = parseFloat(place.lat);
-        const lon = parseFloat(place.lon);
-        const displayName = place.display_name || "";
-        const nameParts = displayName ? displayName.split(",") : [];
-        const cleanName = nameParts[0]?.trim() || "Selected Location";
-        const L = window.L;
-        const map = mapRef.current;
-
-        if (map && L && !isNaN(lat) && !isNaN(lon)) {
-            if (markerRef.current) map.removeLayer(markerRef.current);
-            map.flyTo([lat, lon], 17, { duration: 1.2 });
-
-            const icon = L.divIcon({
-                className: "",
-                html: `<div style="
-          width:28px;height:28px;
-          background:#f59e0b;border:3px solid #fff;
-          border-radius:50% 50% 50% 0;transform:rotate(-45deg);
-          box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>`,
-                iconSize: [28, 28], iconAnchor: [14, 28],
-            });
-
-            markerRef.current = L.marker([lat, lon], { icon })
-                .addTo(map)
-                .bindPopup(`<strong>${cleanName}</strong>`)
-                .openPopup();
+          setQuery(cleanName);
+          onSelect?.({
+            name: cleanName,
+            display_name: result.formatted_address,
+            lat,
+            lon: lng,
+            googleMapsUri: `https://www.google.com/maps/place/?q=${lat},${lng}`,
+            place_id: result.place_id,
+            address: {
+              city: extractedCity || city || "Pinned Area",
+              country: extractedCountry || country,
+            },
+          });
+          return;
         }
-
-        onSelect?.({ name: cleanName, display_name: displayName, lat, lon });
-        setQuery("");
-        setShowDrop(false);
-        setResults([]);
+      } catch (err) {
+        console.warn("Geocoding failed on click:", err);
+      }
     }
 
-    // ── Clear ─────────────────────────────────────────────────────────────────
-    function handleClear() {
-        if (markerRef.current && mapRef.current) {
-            mapRef.current.removeLayer(markerRef.current);
-            markerRef.current = null;
-        }
-        onSelect?.(null);
-        setQuery("");
-        setShowDrop(false);
-        setResults([]);
+    const fallbackName = `Pinned Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    setQuery(fallbackName);
+    onSelect?.({
+      name: fallbackName,
+      display_name: fallbackName,
+      lat,
+      lon: lng,
+      googleMapsUri: `https://www.google.com/maps/place/?q=${lat},${lng}`,
+      address: { city: city || "Pinned Area", country },
+    });
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 8,
+        borderRadius: 12,
+        overflow: "hidden",
+        border: "1px solid #334155",
+        width: "100%",
+        position: "relative",
+        height: "clamp(320px, 55vh, 500px)",
+        background: "#0f172a",
+      }}
+    >
+      <Map
+        style={{ width: "100%", height: "100%" }}
+        defaultCenter={defaultMapCenter}
+        defaultZoom={6}
+        mapId="DEMO_MAP_ID"
+        gestureHandling={"greedy"}
+        disableDefaultUI={false}
+        onClick={handleMapClick}
+      >
+        <MapCameraUpdater location={selectedLocation} />
+
+        {selectedLocation && (
+          <AdvancedMarker position={selectedLocation} title={selectedName}>
+            <Pin background={"#0ea5e9"} glyphColor={"#ffffff"} borderColor={"#0284c7"} />
+          </AdvancedMarker>
+        )}
+      </Map>
+
+      {selectedLocation && (
+        <button
+          type="button"
+          onClick={handleClear}
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            background: "rgba(15, 23, 42, 0.9)",
+            border: "1px solid #ef4444",
+            color: "#fca5a5",
+            borderRadius: 8,
+            padding: "8px 14px",
+            fontSize: "0.8rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.3)",
+            zIndex: 10,
+          }}
+        >
+          🗑️ Remove Pin
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function PlacePicker({
+  keyword = "",
+  city = "",
+  country = "",
+  onSelect,
+  selectedName = "",
+  required = false,
+}) {
+  const [mapCenter, setMapCenter] = useState(defaultCenter);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [query, setQuery] = useState(selectedName || "");
+
+  useEffect(() => {
+    if (selectedName) {
+      setQuery(selectedName);
+    } else {
+      setSelectedLocation(null);
+      setQuery("");
+      setMapCenter(defaultCenter);
     }
+  }, [selectedName]);
 
-    // ── Close dropdown on outside click ──────────────────────────────────────
-    useEffect(() => {
-        function onOutside(e) {
-            if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-                setShowDrop(false);
-            }
-        }
-        document.addEventListener("mousedown", onOutside);
-        return () => document.removeEventListener("mousedown", onOutside);
-    }, []);
+  const handleClear = () => {
+    setSelectedLocation(null);
+    setQuery("");
+    setMapCenter(defaultCenter);
+    onSelect?.(null);
+  };
 
-    // ── Render ────────────────────────────────────────────────────────────────
-    return (
-        <div ref={wrapperRef} style={{ width: "100%", marginBottom: 8 }}>
+  return (
+    <APIProvider apiKey={API_KEY}>
+      <div style={{ width: "100%", marginBottom: 8 }}>
+        <p
+          style={{
+            fontSize: "0.72rem",
+            fontWeight: 700,
+            color: "#475569",
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            margin: "0 0 8px 0",
+          }}
+        >
+          Your {keyword || "establishment"}
+          {required && <span style={{ color: "#ef4444", marginLeft: 4 }}>*required</span>}
+        </p>
 
-            {/* Label */}
-            <p style={{
-                fontSize: "0.72rem", fontWeight: 700, color: "#475569",
-                letterSpacing: "0.07em", textTransform: "uppercase",
-                margin: "0 0 8px 0",
-            }}>
-                Your {keyword || "establishment"}
-                {required && <span style={{ color: "#ef4444", marginLeft: 4 }}>*required</span>}
-                {!required && <span style={{ color: "#334155", marginLeft: 6, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}></span>}
-            </p>
+        <div style={{ display: "flex", gap: 8, width: "100%", alignItems: "center" }}>
+          <div style={{ flex: 1, minWidth: 0, width: "100%" }}>
+            <AutocompleteInput
+              city={city}
+              onSelect={onSelect}
+              setSelectedLocation={setSelectedLocation}
+              setMapCenter={setMapCenter}
+              setQuery={setQuery}
+              selectedName={selectedName}
+            />
+          </div>
 
-            {/* Search bar row */}
-            <div style={{ display: "flex", gap: 8, position: "relative" }}>
-                <input
-                    type="text"
-                    value={query}
-                    onChange={handleQueryChange}
-                    onFocus={() => safeResults.length > 0 && setShowDrop(true)}
-                    placeholder={
-                        city
-                            ? `Search for a ${keyword || "place"} in ${city}...`
-                            : `Search for your ${keyword || "establishment"}...`
-                    }
-                    className="form-input"
-                    style={{ flex: 1 }}
-                />
-
-                {/* Clear button — only when something is selected */}
-                {selectedName && (
-                    <button
-                        type="button"
-                        onClick={handleClear}
-                        style={{
-                            background: "none", border: "1px solid #334155",
-                            borderRadius: 8, color: "#94a3b8",
-                            padding: "0 12px", fontSize: "0.8rem", cursor: "pointer",
-                            flexShrink: 0,
-                        }}
-                    >
-                        ✕
-                    </button>
-                )}
-
-                {/* Dropdown results */}
-                {showDrop && safeResults.length > 0 && (
-                    <div style={{
-                        position: "absolute",
-                        top: "calc(100% + 4px)",
-                        left: 0,
-                        right: 0,
-                        background: "#1e293b",
-                        border: "1px solid #334155",
-                        borderRadius: 8,
-                        zIndex: 2000,
-                        maxHeight: 240,
-                        overflowY: "auto",
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
-                    }}>
-                        {loading && (
-                            <div style={{ padding: "10px 14px", color: "#475569", fontSize: "0.83rem" }}>
-                                Searching...
-                            </div>
-                        )}
-                        {safeResults.map((place, i) => {
-                            if (!place) return null;
-                            const displayName = place?.display_name || "";
-                            const parts = displayName ? displayName.split(",") : [];
-                            const mainName = parts[0]?.trim() || "Location";
-                            const subName = parts.slice(1, 4).join(",").trim();
-                            return (
-                                <div
-                                    key={i}
-                                    onMouseDown={() => handleSelect(place)}
-                                    style={{
-                                        padding: "10px 14px",
-                                        cursor: "pointer",
-                                        fontSize: "0.84rem",
-                                        borderBottom: "1px solid #334155",
-                                    }}
-                                    onMouseEnter={e => e.currentTarget.style.background = "#334155"}
-                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                                >
-                                    <div style={{ fontWeight: 600, color: "#f1f5f9", marginBottom: 2 }}>
-                                        {mainName}
-                                    </div>
-                                    {subName && (
-                                        <div style={{ fontSize: "0.73rem", color: "#64748b" }}>
-                                            {subName}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-
-            {/* Selected place badge */}
-            {selectedName && (
-                <div style={{
-                    marginTop: 8,
-                    background: "#0ea5e915",
-                    border: "1px solid #0ea5e944",
-                    borderRadius: 8,
-                    padding: "9px 14px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: "0.84rem",
-                }}>
-                    <span>📍</span>
-                    <span style={{ fontWeight: 700, color: "#7dd3fc" }}>{selectedName}</span>
-                    <span style={{ color: "#334155", fontSize: "0.73rem" }}>— selected</span>
-                </div>
-            )}
-
-            {/* Collapsible map — always mounted, shown/hidden via display */}
-            <div
-                style={{
-                    marginTop: 8,
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    border: showMap ? "1px solid #334155" : "none",
-                    width: "100%",
-                    position: "relative",
-
-                    height: showMap ? "clamp(320px, 55vh, 500px)" : 0,
-                    minHeight: showMap ? "clamp(320px, 55vh, 500px)" : 0,
-
-                    transition: "all 0.25s ease",
-                    background: "#0f172a",
-                }}
+          {selectedName && (
+            <button
+              type="button"
+              onClick={handleClear}
+              style={{
+                background: "none",
+                border: "1px solid #334155",
+                borderRadius: 8,
+                color: "#94a3b8",
+                padding: "0 12px",
+                height: "42px",
+                fontSize: "0.8rem",
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
             >
-                {!leafletOk && showMap && (
-                    <div
-                        style={{
-                            height: "100%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            background: "#1e293b",
-                            color: "#475569",
-                            fontSize: "0.84rem",
-                        }}
-                    >
-                        Loading map...
-                    </div>
-                )}
-
-                <div
-                    ref={mapDivRef}
-                    style={{
-                        width: "100%",
-                        height: "100%",
-                    }}
-                />
-            </div>
-
-            {/* Hint */}
-            {!selectedName && (
-                <p style={{ fontSize: "0.72rem", color: "#334155", marginTop: 6 }}>
-                    {showMap
-                        ? "Search above and click a result — a pin will drop on the map."
-                        : "Search for your establishment by name, then click a result to select it."}
-                </p>
-            )}
+              ✕
+            </button>
+          )}
         </div>
-    );
+
+        {selectedName && (
+          <div
+            style={{
+              marginTop: 8,
+              background: "#0ea5e915",
+              border: "1px solid #0ea5e944",
+              borderRadius: 8,
+              padding: "9px 14px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: "0.84rem",
+            }}
+          >
+            <span>📍</span>
+            <span style={{ fontWeight: 700, color: "#7dd3fc" }}>{selectedName}</span>
+            <span style={{ color: "#334155", fontSize: "0.73rem" }}>— selected</span>
+          </div>
+        )}
+
+        <MapContent
+          defaultMapCenter={mapCenter}
+          selectedLocation={selectedLocation}
+          selectedName={selectedName}
+          setSelectedLocation={setSelectedLocation}
+          setMapCenter={setMapCenter}
+          setQuery={setQuery}
+          onSelect={onSelect}
+          city={city}
+          country={country}
+          handleClear={handleClear}
+        />
+
+        {!selectedName && (
+          <p style={{ fontSize: "0.72rem", color: "#334155", marginTop: 6 }}>
+            Search above or click anywhere on the map to pin your establishment.
+          </p>
+        )}
+      </div>
+    </APIProvider>
+  );
 }

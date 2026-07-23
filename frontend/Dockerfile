@@ -10,9 +10,12 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Accept the API URL as an environment variable for local dev runtime
+# Accept API URL and Maps Key environment variables for local dev runtime
 ARG VITE_API_URL
+ARG VITE_GOOGLE_MAPS_API_KEY
+
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
 
 EXPOSE 5173
 
@@ -28,8 +31,12 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 
+# Pass build arguments so Vite bakes them into the static dist bundle
 ARG VITE_API_URL
+ARG VITE_GOOGLE_MAPS_API_KEY
+
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
 
 RUN npm run build
 

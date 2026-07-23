@@ -54,8 +54,11 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: https://reviewanalysis.uxlivinglab.org/api
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
     container_name: frontend_container
     restart: unless-stopped
+    env_file:
+      - .env
     depends_on:
       - backend
     networks:

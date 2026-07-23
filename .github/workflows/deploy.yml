@@ -54,6 +54,8 @@ jobs:
           GEMINI_KEY_2=${{ secrets.GEMINI_KEY_2 }}
           GEMINI_KEY_3=${{ secrets.GEMINI_KEY_3 }}
           APIFY_API_TOKEN=${{ secrets.APIFY_API_TOKEN }}
+          GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
           EOF
 
       - name: Docker login on server

@@ -3,27 +3,21 @@ hotel_sentiment_routes.py
 --------------------------
 FastAPI router for the Hotel Sentiment Analysis feature.
 Route prefix: /api/hotel-sentiment
-
-Key difference from competitor_routes.py:
-- Search keyword is HARDCODED to "Luxury Hotels near {city}"
-  regardless of what the frontend sends
-- Analysis produces VADER sentiment per place (not SWOT)
-- Combined report is sentiment-focused (not SWOT-focused)
-- No Datacube saving
 """
 
 import uuid
 import logging
-import threading
+import urllib.parse
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/hotel-sentiment", tags=["Sentiment Analysis"])
 
-# In-memory task store — separate from competitor_tasks
+# In-memory task store
 hotel_sentiment_tasks = {}
 
 
@@ -55,12 +49,11 @@ def _hotel_search_worker(
 ):
     """
     Searches Google Maps for 'Luxury Hotels near {city}'.
-    Keyword is hardcoded — frontend keyword is ignored entirely.
+    Constructs search URL for input establishment so Apify can scrape reviews.
     """
     try:
         from .google_maps_scraper import search_google_maps_competitors
 
-        # HARDCODED keyword — this is the core behaviour of this route
         keyword = f"Luxury Hotels near {city}"
         logger.info(f"[HOTEL SENTIMENT] task_id={task_id} searching: '{keyword}'")
 
@@ -79,14 +72,22 @@ def _hotel_search_worker(
             progress_callback=progress,
         )
 
-        # Prepend user's own establishment
+        # Standard search URL format that Apify Google Maps Reviews scraper handles reliably
+        query = f"{establishment_name}, {city}"
+        establishment_maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(query)}"
+
+        # Prepend user's own establishment at index 0
         establishment = {
-            "name": establishment_name,
-            "address": f"{city} area",
-            "rating": None,
-            "reviews": 0,
-            "url": "",
-            "selected": True,
+            "name":                  establishment_name,
+            "address":               f"{city} area",
+            "rating":                None,
+            "reviews":               0,
+            "url":                   establishment_maps_url,
+            "lat":                   origin_lat,
+            "lng":                   origin_lng,
+            "distance_km":           0.0,
+            "within_radius":         True,
+            "selected":              True,
             "is_user_establishment": True,
         }
         places.insert(0, establishment)
@@ -111,8 +112,8 @@ def _hotel_search_worker(
 def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
     """
     For each selected place:
-      1. Scrape reviews using Apify (ignoring local Selenium browser chunks)
-      2. Run internal VADER sentiment analysis over the returned payload
+      1. Scrape reviews using Apify
+      2. Run VADER sentiment analysis
     Then generate combined sentiment report.
     """
     from .hotel_apify_scraper import scrape_hotel_reviews_apify
@@ -129,7 +130,7 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
         name = place.get("name", f"Place {i+1}")
         url  = place.get("url", "")
 
-        sentiment = {}
+        sentiment    = {}
         review_count = 0
         biz_details  = {}
 
@@ -137,11 +138,11 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
             try:
                 def progress_cb(current_step_pct, max_step_pct, msg):
                     base_progress = (i / max(total, 1)) * 85
-                    step_contribution = (current_step_pct / max_step_pct) * (85 / max(total, 1))
+                    step_contribution = (current_step_pct / max(max_step_pct, 1)) * (85 / max(total, 1))
                     hotel_sentiment_tasks[task_id]["progress"] = min(85, int(base_progress + step_contribution))
                     hotel_sentiment_tasks[task_id]["status_message"] = f"[{i+1}/{total}] {name}: {msg}"
 
-                scraped = scrape_hotel_reviews_apify(url=url, max_reviews=50, progress_callback=progress_cb)
+                scraped = scrape_hotel_reviews_apify(url=url, max_reviews=100, progress_callback=progress_cb)
                 
                 if scraped.get("error"):
                     raise Exception(scraped["error"])
@@ -157,7 +158,7 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
                 logger.error(f"[HOTEL SENTIMENT] Apify extraction pipeline failed for {name}: {e}")
                 errors.append({"name": name, "error": str(e)})
         else:
-            logger.info(f"[HOTEL SENTIMENT] No URL for {name} — rating-only entry")
+            logger.info(f"[HOTEL SENTIMENT] No URL for {name} — skipping review scrape")
 
         results.append({
             "name":                 biz_details.get("name") or name,
@@ -171,13 +172,12 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
             "sentiment":            sentiment,
         })
 
-    # Compile report summaries and updates metrics explicitly
     combined_report = _build_combined_sentiment_report(results)
     
     hotel_sentiment_tasks[task_id].update({
         "status":          "completed",
         "progress":        100,
-        "status_message":  "Sentiment metrics analysis completed successfully.",
+        "status_message":  "Sentiment analysis completed successfully.",
         "results":         results,
         "combined_report": combined_report,
         "errors":          errors
@@ -189,28 +189,30 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
     with_sentiment = [r for r in results if r.get("sentiment", {}).get("overall_score") is not None]
     with_rating    = [r for r in results if r.get("rating")]
 
-    if not with_sentiment:
+    if not results:
         return {}
 
-    scores   = [r["sentiment"]["overall_score"] for r in with_sentiment]
-    avg_score = round(sum(scores) / len(scores), 3)
+    scores = [r["sentiment"]["overall_score"] for r in with_sentiment]
+    avg_score = round(sum(scores) / len(scores), 3) if scores else None
 
-    if avg_score > 0.5:   market_label = "Very Positive"
-    elif avg_score > 0.2: market_label = "Positive"
-    elif avg_score > -0.2:market_label = "Mixed / Neutral"
-    elif avg_score > -0.5:market_label = "Negative"
-    else:                 market_label = "Very Negative"
+    if avg_score is None:   market_label = "No Data"
+    elif avg_score > 0.5:  market_label = "Very Positive"
+    elif avg_score > 0.2:  market_label = "Positive"
+    elif avg_score > -0.2: market_label = "Mixed / Neutral"
+    elif avg_score > -0.5: market_label = "Negative"
+    else:                  market_label = "Very Negative"
 
     avg_rating = round(sum(r["rating"] for r in with_rating) / len(with_rating), 2) if with_rating else None
 
+    # Sort all results so items without sentiment scores appear at the end rather than being excluded
     ranked = sorted(
-        with_sentiment,
-        key=lambda r: r["sentiment"].get("overall_score", -99),
+        results,
+        key=lambda r: r.get("sentiment", {}).get("overall_score") if r.get("sentiment", {}).get("overall_score") is not None else -999,
         reverse=True,
     )
 
-    best  = ranked[0]  if ranked else None
-    worst = ranked[-1] if len(ranked) > 1 else None
+    best  = ranked[0]  if with_sentiment else None
+    worst = ranked[-1] if len(with_sentiment) > 1 else None
 
     combined_themes = {}
     for r in results:
@@ -227,14 +229,15 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
     negative_places = sum(1 for r in with_sentiment if r["sentiment"].get("overall_score", 0) < -0.2)
 
     insights = []
-    if avg_score > 0.4:
-        insights.append("Customer sentiment across luxury hotels in this market is strongly positive — reputation and word-of-mouth are major drivers of bookings.")
-    elif avg_score > 0.1:
-        insights.append("Sentiment leans positive but inconsistently — there is a clear opportunity to differentiate through consistently excellent guest experience.")
-    elif avg_score > -0.1:
-        insights.append("Mixed sentiment indicates guests have varied experiences. Service consistency appears to be the primary challenge across the market.")
-    else:
-        insights.append("Negative sentiment dominates — a significant service quality gap exists in this luxury hotel market that a well-run property can exploit.")
+    if avg_score is not None:
+        if avg_score > 0.4:
+            insights.append("Customer sentiment across luxury hotels in this market is strongly positive — reputation and word-of-mouth are major drivers of bookings.")
+        elif avg_score > 0.1:
+            insights.append("Sentiment leans positive but inconsistently — there is a clear opportunity to differentiate through consistently excellent guest experience.")
+        elif avg_score > -0.1:
+            insights.append("Mixed sentiment indicates guests have varied experiences. Service consistency appears to be the primary challenge across the market.")
+        else:
+            insights.append("Negative sentiment dominates — a significant service quality gap exists in this luxury hotel market that a well-run property can exploit.")
 
     if best:
         insights.append(f"{best['name']} leads the market in customer sentiment (score: {best['sentiment']['overall_score']:+.3f}), setting the benchmark that other properties are judged against.")
@@ -255,15 +258,23 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
         "avg_sentiment_score":  avg_score,
         "market_label":         market_label,
         "avg_rating":           avg_rating,
-        "sentiment_ranking":    [{"name": r["name"], "score": r["sentiment"].get("overall_score"), "label": r["sentiment"].get("overall_label"), "rating": r.get("rating")} for r in ranked],
+        "sentiment_ranking":    [
+            {
+                "name": r["name"],
+                "score": r.get("sentiment", {}).get("overall_score"),
+                "label": r.get("sentiment", {}).get("overall_label"),
+                "rating": r.get("rating"),
+                "isUser": r.get("is_user_establishment", False)
+            } for r in ranked
+        ],
         "best_sentiment":       {"name": best["name"], "score": best["sentiment"].get("overall_score")} if best else None,
         "worst_sentiment":      {"name": worst["name"], "score": worst["sentiment"].get("overall_score")} if worst else None,
         "total_positive":       total_pos,
         "total_neutral":        total_neu,
         "total_negative":       total_neg,
-        "positive_pct":         round(total_pos / total_all * 100, 1),
-        "neutral_pct":          round(total_neu / total_all * 100, 1),
-        "negative_pct":         round(total_neg / total_all * 100, 1),
+        "positive_pct":         round(total_pos / total_all * 100, 1) if with_sentiment else 0,
+        "neutral_pct":          round(total_neu / total_all * 100, 1) if with_sentiment else 0,
+        "negative_pct":         round(total_neg / total_all * 100, 1) if with_sentiment else 0,
         "positive_places":      positive_places,
         "neutral_places":       neutral_places,
         "negative_places":      negative_places,
@@ -298,9 +309,6 @@ async def hotel_search(request: HotelSearchRequest, background_tasks: Background
 
 @router.get("/progress/{task_id}")
 async def hotel_progress(task_id: str):
-    """
-    Lightweight, fast non-blocking endpoint to handle frequent client requests cleanly.
-    """
     task = hotel_sentiment_tasks.get(task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -338,18 +346,17 @@ async def hotel_analyse(request: HotelAnalyzeRequest, background_tasks: Backgrou
 
 @router.get("/report/pdf/{task_id}")
 async def download_sentiment_pdf(task_id: str):
-    """Generate and stream a professional PDF sentiment report."""
+    """Generate and stream a PDF sentiment report."""
     task = hotel_sentiment_tasks.get(task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     if task.get("status") != "completed":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analysis not complete yet")
     try:
-        import io, datetime
+        import datetime
         pdf_bytes = _generate_sentiment_pdf(task)
-        city      = task.get("city", "")
+        city      = task.get("city", "hotel")
         filename  = f"hotel-sentiment-{city.replace(' ','-')}-{datetime.date.today()}.pdf"
-        from fastapi.responses import StreamingResponse
         return StreamingResponse(
             io.BytesIO(pdf_bytes), media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
@@ -369,13 +376,12 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
         SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
         HRFlowable, PageBreak, KeepTogether,
     )
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
-    results  = task.get("results", [])
-    combined = task.get("combined_report", {})
+    results   = task.get("results", [])
+    combined  = task.get("combined_report", {})
     days_back = task.get("days_back", 30)
 
-    # ── Colours ──────────────────────────────────────────────────────────────
     PURPLE      = colors.HexColor("#7C3AED")
     PURPLE_DARK = colors.HexColor("#4C1D95")
     PURPLE_LITE = colors.HexColor("#EDE9FE")
@@ -415,7 +421,7 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
 
     story = []
 
-    # ── Cover ─────────────────────────────────────────────────────────────────
+    # Cover Page
     cover = Table([
         [Paragraph("Luxury Hotel Sentiment Analysis", style_cover_h1)],
         [Paragraph(combined.get("market_label",""), style_cover_sub)],
@@ -427,7 +433,7 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
     story.append(cover)
     story.append(Spacer(1, 0.5*cm))
 
-    # ── KPI tiles ─────────────────────────────────────────────────────────────
+    # KPI tiles
     kpi_data = [
         [Paragraph(str(combined.get("total_analysed",0)), style_num_big),
          Paragraph(f"{score:+.3f}", ParagraphStyle("SN",fontSize=28,leading=32,textColor=score_color,fontName="Helvetica-Bold",alignment=TA_CENTER)),
@@ -441,7 +447,7 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
     story.append(kpi)
     story.append(Spacer(1, 0.4*cm))
 
-    # ── Sentiment breakdown ───────────────────────────────────────────────────
+    # Sentiment Breakdown
     story.append(Paragraph("Sentiment Breakdown", style_section))
     story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
     story.append(Spacer(1, 0.2*cm))
@@ -459,7 +465,7 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
     story.append(st)
     story.append(Spacer(1, 0.4*cm))
 
-    # ── Sentiment ranking ─────────────────────────────────────────────────────
+    # Sentiment Ranking
     ranking = combined.get("sentiment_ranking", [])
     if ranking:
         story.append(Paragraph("Sentiment Ranking", style_section))
@@ -469,18 +475,19 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
         for i, r in enumerate(ranking):
             sc = r.get("score")
             sc_color = "#059669" if sc and sc>0.2 else ("#DC2626" if sc and sc<-0.2 else "#B45309")
+            hotel_name_markup = f"<b>[YOU] {r.get('name')}</b>" if r.get("isUser") else r.get("name","")
             rank_rows.append([
                 str(i+1),
-                Paragraph(r.get("name",""),style_body),
-                Paragraph(f'<font color="{sc_color}">{r.get("label","")}</font>',style_body),
-                Paragraph(f'<font color="{sc_color}">{f"{sc:+.3f}" if sc is not None else "—"}</font>',style_body_bold),
+                Paragraph(hotel_name_markup, style_body),
+                Paragraph(f'<font color="{sc_color}">{r.get("label","")}</font>', style_body),
+                Paragraph(f'<font color="{sc_color}">{f"{sc:+.3f}" if sc is not None else "—"}</font>', style_body_bold),
                 f"★ {r['rating']}" if r.get("rating") else "—",
             ])
         rt = Table(rank_rows, colWidths=[W*0.06,W*0.38,W*0.25,W*0.15,W*0.16])
         rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),PURPLE_DARK),("TEXTCOLOR",(0,0),(-1,0),WHITE),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),("ALIGN",(0,0),(0,-1),"CENTER"),("ALIGN",(3,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,SLATE_LITE]),("INNERGRID",(0,0),(-1,-1),0.3,colors.HexColor("#E2E8F0")),("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#CBD5E1")),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),("LEFTPADDING",(0,0),(-1,-1),8)]))
         story.append(rt)
 
-    # ── Topic frequency ───────────────────────────────────────────────────────
+    # Topic Frequency
     themes = combined.get("combined_themes", {})
     if themes:
         story.append(PageBreak())
@@ -495,7 +502,7 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
         tt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),PURPLE_DARK),("TEXTCOLOR",(0,0),(-1,0),WHITE),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),("ALIGN",(1,0),(1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,SLATE_LITE]),("INNERGRID",(0,0),(-1,-1),0.3,colors.HexColor("#E2E8F0")),("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#CBD5E1")),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),("LEFTPADDING",(0,0),(-1,-1),8)]))
         story.append(tt)
 
-    # ── Market insights ───────────────────────────────────────────────────────
+    # Market Insights
     insights = combined.get("insights", [])
     if insights:
         story.append(Spacer(1, 0.4*cm))
@@ -510,7 +517,7 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
                 Spacer(1, 0.15*cm),
             ]))
 
-    # ── Individual hotel summaries ────────────────────────────────────────────
+    # Individual Hotel Summaries
     story.append(PageBreak())
     story.append(Paragraph("Individual Hotel Sentiment", style_section))
     story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
@@ -550,7 +557,7 @@ def _generate_sentiment_pdf(task: dict) -> bytes:
 
         story.append(Spacer(1, 0.3*cm))
 
-    # ── Footer ────────────────────────────────────────────────────────────────
+    # Footer
     story.append(Spacer(1, 0.4*cm))
     story.append(HRFlowable(width=W, thickness=0.5, color=colors.HexColor("#E2E8F0")))
     story.append(Spacer(1, 0.2*cm))
