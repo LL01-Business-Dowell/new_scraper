@@ -60,22 +60,6 @@ const MoonIcon = () => (
     </svg>
 );
 
-const ChevronDownIcon = ({ open }) => (
-    <svg 
-        width="16" 
-        height="16" 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        stroke="currentColor" 
-        strokeWidth="2.5" 
-        strokeLinecap="round" 
-        strokeLinejoin="round"
-        style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
-    >
-        <polyline points="6 9 12 15 18 9" />
-    </svg>
-);
-
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = {
     page: (isLight) => ({
@@ -198,29 +182,15 @@ const styles = {
     transcriptBox: (isLight) => ({
         background: isLight ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.04)",
         border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 10, padding: "14px 16px", marginTop: 8,
+        borderRadius: 10, padding: "14px 16px", marginTop: 12, textAlign: "left",
         transition: "background 0.3s ease, border 0.3s ease",
     }),
     transcriptText: (isLight) => ({
         fontSize: "0.9rem", color: isLight ? "#1e293b" : "#e2e8f0", lineHeight: 1.7, margin: 0,
-        fontStyle: "italic",
-        transition: "color 0.3s ease",
-    }),
-    transcriptToggleBtn: (isLight) => ({
-        background: "none",
-        border: "none",
-        color: isLight ? "#6d28d9" : "#a78bfa",
-        fontSize: "0.85rem",
-        fontWeight: 600,
-        cursor: "pointer",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 0",
-        marginBottom: 8,
+        fontStyle: "italic", transition: "color 0.3s ease",
     }),
     success: {
-        textAlign: "center", padding: "1.5rem 0",
+        textAlign: "center", padding: "1rem 0",
     },
     successIcon: {
         width: 64, height: 64, borderRadius: "50%",
@@ -234,18 +204,11 @@ const styles = {
         color: "#ef4444", fontSize: "0.82rem",
     },
     themeToggle: (isLight) => ({
-        position: "absolute",
-        top: "1.25rem",
-        right: "1.25rem",
-        background: "none",
-        border: "none",
-        color: isLight ? "#64748b" : "#94a3b8",
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "6px",
-        borderRadius: "50%",
+        position: "absolute", top: "1.25rem", right: "1.25rem",
+        background: "none", border: "none",
+        color: isLight ? "#64748b" : "#94a3b8", cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "6px", borderRadius: "50%",
         transition: "color 0.2s ease, background-color 0.2s ease",
     }),
 };
@@ -311,16 +274,19 @@ export default function FeedbackPage() {
     const [roomNumber, setRoomNumber] = useState("");
     const [description, setDescription] = useState("");
     const [consentGiven, setConsentGiven] = useState(false);
-    const [showTranscript, setShowTranscript] = useState(false);
 
     // Initial phase set to "privacy"
     const [phase, setPhase] = useState("privacy");
     const [recording, setRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState(null);
     const [audioUrl, setAudioUrl] = useState(null);
-    const [transcript, setTranscript] = useState("");
-    const [fileId, setFileId] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
+
+    // Thank you page transcription states
+    const [loadingTranscript, setLoadingTranscript] = useState(false);
+    const [transcriptText, setTranscriptText] = useState("");
+    const [transcribeChoiceMade, setTranscribeChoiceMade] = useState(false);
+    const [tabClosed, setTabClosed] = useState(false);
 
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
@@ -344,13 +310,12 @@ export default function FeedbackPage() {
             const mr = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
             chunksRef.current = [];
             mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-            mr.onstop = async () => {
+            mr.onstop = () => {
                 const blob = new Blob(chunksRef.current, { type: "audio/webm" });
                 setAudioBlob(blob);
                 setAudioUrl(URL.createObjectURL(blob));
                 stream.getTracks().forEach(t => t.stop());
-
-                await handleTranscribe(blob);
+                setPhase("recorded"); // Just let them hear the audio, don't transcribe yet
             };
             mediaRecorderRef.current = mr;
             mr.start(250);
@@ -367,36 +332,10 @@ export default function FeedbackPage() {
         setRecording(false);
     };
 
-    // ── Automated transcription call ──────────────────────────────────────────
-    const handleTranscribe = async (blobToUpload) => {
-        if (!blobToUpload) return;
-        setPhase("transcribing");
-        setErrorMsg("");
-        try {
-            const form = new FormData();
-            form.append("audio", blobToUpload, "recording.webm");
-            form.append("room_number", roomNumber);
-            form.append("description", description);
-
-            const resp = await axios.post(`${BASE}/api/feedback/transcribe`, form, {
-                headers: { "Content-Type": "multipart/form-data" },
-                timeout: 180000,
-            });
-
-            setTranscript(resp.data.transcript || "");
-            setFileId(resp.data.file_id || "");
-            setPhase("confirm");
-        } catch (err) {
-            setErrorMsg("Transcription failed automatically. Please try re-recording.");
-            setPhase("form");
-        }
-    };
-
     // ── Submit feedback via FastAPI ────────────────────────────────────────────
     const handleSubmit = async () => {
         if (!isRoomNumberValid) {
             setErrorMsg("Please enter your room number.");
-            setPhase("confirm");
             return;
         }
 
@@ -407,10 +346,9 @@ export default function FeedbackPage() {
             form.append("audio", audioBlob, "recording.webm");
             form.append("room_number", roomNumber);
             form.append("description", description);
-            form.append("transcript", transcript);
-            form.append("file_id", fileId);
 
-            await axios.post(`${BASE}/api/feedback/submit`, form, {
+            // Forward current URL query params (contains ?id=...)
+            await axios.post(`${BASE}/api/feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
                 timeout: 120000,
             });
@@ -418,35 +356,50 @@ export default function FeedbackPage() {
             setPhase("done");
         } catch (err) {
             setErrorMsg("Submission failed. Please try again.");
-            setPhase("confirm");
+            setPhase("recorded");
         }
     };
 
-    // ── Reset form for new submission ─────────────────────────────────────────
-    const handleResetAll = () => {
-        setRoomNumber("");
-        setDescription("");
-        setAudioBlob(null);
-        setAudioUrl(null);
-        setTranscript("");
-        setFileId("");
-        setErrorMsg("");
-        setShowTranscript(false);
-        setPhase("form");
-    };
-
-    // ── Re-record (Keep existing input details) ─────────────────────────────
+    // ── Re-record audio ────────────────────────────────────────────────────────
     const handleReRecord = () => {
         setAudioBlob(null);
         setAudioUrl(null);
-        setTranscript("");
-        setFileId("");
         setErrorMsg("");
-        setShowTranscript(false);
         setPhase("form");
     };
 
-    // ── Done screen ───────────────────────────────────────────────────────────
+    // ── Thank You Page: Request Transcript ────────────────────────────────────
+    const handleRequestTranscript = async () => {
+        setTranscribeChoiceMade(true);
+        setLoadingTranscript(true);
+        setErrorMsg("");
+
+        try {
+            const form = new FormData();
+            form.append("audio", audioBlob, "recording.webm");
+            form.append("room_number", roomNumber);
+            form.append("description", description);
+
+            const resp = await axios.post(`${BASE}/api/feedback/transcribe`, form, {
+                headers: { "Content-Type": "multipart/form-data" },
+                timeout: 180000,
+            });
+
+            setTranscriptText(resp.data.transcript || "No readable audio transcript available.");
+        } catch (err) {
+            setErrorMsg("Could not fetch transcript at this time.");
+        } finally {
+            setLoadingTranscript(false);
+        }
+    };
+
+    // ── Thank You Page: Close Tab ─────────────────────────────────────────────
+    const handleCloseTab = () => {
+        window.close();
+        setTabClosed(true);
+    };
+
+    // ── Done screen (Thank You) ───────────────────────────────────────────────
     if (phase === "done") {
         return (
             <div style={styles.page(isLight)}>
@@ -471,19 +424,64 @@ export default function FeedbackPage() {
                         <div style={{
                             background: isLight ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.04)",
                             border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
-                            borderRadius: 12,
-                            padding: "14px 16px",
-                            textAlign: "center",
-                            marginBottom: 20
+                            borderRadius: 12, padding: "14px 16px", textAlign: "center", marginBottom: 20
                         }}>
                             <div style={{ fontSize: "0.85rem", color: isLight ? "#0f172a" : "#f1f5f9" }}>
                                 Room <strong>{roomNumber}</strong> · {new Date().toLocaleDateString("en-US", { dateStyle: "long" })}
                             </div>
                         </div>
 
-                        <button onClick={handleResetAll} style={styles.secondaryBtn(isLight)}>
-                            Submit Additional Feedback
-                        </button>
+                        {/* Interactive Transcript Option on Thank You Page */}
+                        {!transcribeChoiceMade ? (
+                            <div style={{ marginTop: 24, paddingTop: 16, borderTop: isLight ? "1px solid #e2e8f0" : "1px solid rgba(255,255,255,0.1)" }}>
+                                <p style={{ fontSize: "0.88rem", fontWeight: 600, color: isLight ? "#0f172a" : "#f1f5f9", marginBottom: 14 }}>
+                                    Would you like to view the transcript of your voice feedback?
+                                </p>
+                                <div style={{ display: "flex", gap: 12 }}>
+                                    <button 
+                                        onClick={handleRequestTranscript} 
+                                        style={styles.primaryBtn}
+                                    >
+                                        Yes, View Transcript
+                                    </button>
+                                    <button 
+                                        onClick={handleCloseTab} 
+                                        style={styles.secondaryBtn(isLight)}
+                                    >
+                                        No, Close
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ marginTop: 16 }}>
+                                {loadingTranscript && (
+                                    <p style={{ fontSize: "0.85rem", color: isLight ? "#475569" : "#94a3b8" }}>
+                                        Fetching audio transcript...
+                                    </p>
+                                )}
+
+                                {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
+
+                                {!loadingTranscript && transcriptText && (
+                                    <div style={styles.transcriptBox(isLight)}>
+                                        <label style={styles.label(isLight)}>Your Audio Transcript</label>
+                                        <p style={styles.transcriptText(isLight)}>"{transcriptText}"</p>
+                                    </div>
+                                )}
+
+                                <div style={{ marginTop: 16 }}>
+                                    <button onClick={handleCloseTab} style={styles.secondaryBtn(isLight)}>
+                                        Close Page
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {tabClosed && (
+                            <p style={{ fontSize: "0.8rem", color: "#ef4444", marginTop: 12 }}>
+                                Tab close requested. If the tab stays open, you may safely close it manually.
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -524,7 +522,7 @@ export default function FeedbackPage() {
                                 purpose of collecting guest feedback. Your voice recording will be:
                             </p>
                             <ul style={{ ...styles.consentText(isLight), paddingLeft: 16, margin: "8px 0 0" }}>
-                                <li>Processed to generate a text transcription instantly</li>
+                                <li>Processed to collect guest feedback securely</li>
                                 <li>Used solely to improve our services</li>
                                 <li>Stored securely and handled confidentially</li>
                             </ul>
@@ -559,10 +557,10 @@ export default function FeedbackPage() {
                     </div>
                 )}
 
-                {/* ── MAIN FORM (RECORDING PRIORITY) ────────────────────────────── */}
+                {/* ── MAIN FORM (RECORDING & PLAYBACK) ────────────────────────────── */}
                 {phase !== "privacy" && (
                     <>
-                        {/* 1. AUDIO RECORDING CONTAINER (FIRST PRIORITY) */}
+                        {/* 1. AUDIO RECORDING CONTAINER */}
                         {phase === "form" && (
                             <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
                                 <label style={{ ...styles.label(isLight), textAlign: "center", marginBottom: 10 }}>
@@ -605,7 +603,18 @@ export default function FeedbackPage() {
                             </div>
                         )}
 
-                        {/* 2. DESCRIPTION TEXT BOX (SECOND PRIORITY) */}
+                        {/* RECORDED AUDIO LISTEN BACK STATE */}
+                        {phase === "recorded" && audioUrl && (
+                            <div style={{ marginBottom: "1.5rem", textAlign: "center" }}>
+                                <label style={{ ...styles.label(isLight), marginBottom: 8 }}>Listen Back To Recording</label>
+                                <audio src={audioUrl} controls style={{ width: "100%", borderRadius: 8, marginBottom: 12 }} />
+                                <button onClick={handleReRecord} style={styles.secondaryBtn(isLight)}>
+                                    <RefreshIcon /> Re-record Audio
+                                </button>
+                            </div>
+                        )}
+
+                        {/* 2. DESCRIPTION TEXT BOX */}
                         <div style={{ marginBottom: "1.25rem" }}>
                             <label style={styles.label(isLight)}>
                                 Brief Description <span style={{ color: "#475569", fontWeight: 400 }}>(optional)</span>
@@ -619,7 +628,7 @@ export default function FeedbackPage() {
                             />
                         </div>
 
-                        {/* 3. ROOM NUMBER TEXT BOX (THIRD PRIORITY & REQUIRED) */}
+                        {/* 3. ROOM NUMBER TEXT BOX */}
                         <div style={{ marginBottom: "1.25rem" }}>
                             <label style={styles.label(isLight)}>Room Number *</label>
                             <input
@@ -632,75 +641,20 @@ export default function FeedbackPage() {
                                 required
                             />
                         </div>
-                    </>
-                )}
 
-                {/* ── PHASE: AUTOMATIC LOADING TRANSCRIBE ──────────────────────── */}
-                {phase === "transcribing" && (
-                    <div style={{ textAlign: "center", padding: "2rem 0" }}>
-                        <div style={{
-                            width: 48, height: 48, borderRadius: "50%", margin: "0 auto 20px",
-                            background: "conic-gradient(#6d28d9, #4338ca, #6d28d9 30%, rgba(255,255,255,0.1) 30%)",
-                            animation: "pulse-spin 1.2s linear infinite",
-                        }} />
-                        <style>{`@keyframes pulse-spin { to { transform: rotate(360deg); } }`}</style>
-                        <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.88rem", fontWeight: 600 }}>
-                            Processing and transcribing audio...
-                        </p>
-                    </div>
-                )}
-
-                {/* ── PHASE: INLINE CONFIRMATION AND REVIEW ─────────────────────── */}
-                {phase === "confirm" && (
-                    <>
-                        {/* Audio Playback */}
-                        {audioUrl && (
-                            <div style={{ marginBottom: "1.25rem" }}>
-                                <label style={styles.label(isLight)}>Listen Back</label>
-                                <audio src={audioUrl} controls style={{ width: "100%", borderRadius: 8 }} />
-                            </div>
-                        )}
-
-                        {/* Optional View Transcript Toggle */}
-                        <div style={{ marginBottom: "1.25rem" }}>
-                            <button
-                                type="button"
-                                onClick={() => setShowTranscript(prev => !prev)}
-                                style={styles.transcriptToggleBtn(isLight)}
-                            >
-                                <ChevronDownIcon open={showTranscript} />
-                                <span>{showTranscript ? "Hide Transcript" : "View Transcript"}</span>
+                        {/* SUBMIT BUTTON */}
+                        {phase === "recorded" && (
+                            <button onClick={handleSubmit} style={styles.primaryBtn}>
+                                ✓ Submit Feedback
                             </button>
-
-                            {showTranscript && (
-                                transcript ? (
-                                    <div style={styles.transcriptBox(isLight)}>
-                                        <p style={styles.transcriptText(isLight)}>"{transcript}"</p>
-                                    </div>
-                                ) : (
-                                    <div style={{ ...styles.transcriptBox(isLight), borderColor: "rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.05)" }}>
-                                        <p style={{ ...styles.transcriptText(isLight), color: "#f59e0b", fontStyle: "normal" }}>
-                                            Could not extract text. You can submit your voice file raw or try re-recording.
-                                        </p>
-                                    </div>
-                                )
-                            )}
-                        </div>
-
-                        <button onClick={handleSubmit} style={styles.primaryBtn}>
-                            ✓ Confirm & Submit Feedback
-                        </button>
-                        <div style={{ height: 10 }} />
-                        <button onClick={handleReRecord} style={styles.secondaryBtn(isLight)}>
-                            <RefreshIcon /> Delete & Re-record
-                        </button>
+                        )}
                     </>
                 )}
 
                 {/* ── PHASE: SUBMITTING BLOCKER ────────────────────────────────── */}
                 {phase === "submitting" && (
                     <div style={{ textAlign: "center", padding: "2rem 0" }}>
-                        <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.88rem" }}> Finalizing submission...</p>
+                        <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.88rem" }}>Finalizing submission...</p>
                     </div>
                 )}
 

@@ -527,7 +527,7 @@ def scrape_hotel_reviews(
         _sort_by_newest(driver)
 
         if progress_callback:
-            progress_callback(10, 100, "Scraping reviews...")
+            progress_callback(10, 100, "Finding reviews...")
 
         feed = _find_feed(driver)
         if not feed:

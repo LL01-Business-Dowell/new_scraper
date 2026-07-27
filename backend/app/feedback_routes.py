@@ -12,10 +12,13 @@ Flow:
    - Returns transcript to frontend for guest confirmation
 
 2. POST /api/feedback/submit
-   - Receives confirmed transcript + room number + description + audio
+   - Reads the 'id' query parameter directly from URL (e.g. ?id=198239)
+   - Analyzes transcript (sentiment, categorization, summary, urgency)
    - Forwards WAV file to Django Audio Analytics API
-   - Saves room number + description + transcript + audio analysis to Datacube
-   - Returns success response along with emotion analysis metrics
+   - Saves all data (room number, description, raw transcript, text analysis, audio analysis, QR ID) to Datacube
+   - Datacube Target Database: MASTER_DATABASE_ID = 695ce92eff84eaf663c457c2
+   - Collection Name: Last 4 digits of QR ID parameter (e.g., ?id=198239 -> collection 8239)
+   - Returns success response
 """
 
 import os
@@ -26,7 +29,7 @@ import tempfile
 import subprocess
 import requests as http_requests
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
@@ -35,16 +38,26 @@ router = APIRouter()
 # ── Config ────────────────────────────────────────────────────────────────────
 CRUD_BASE_URL       = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
 CRUD_API_KEY        = os.getenv("CRUD_API_KEY", "")
-DATABASE_ID         = os.getenv("SAMANTA_DATABASE_ID", "")
-FEEDBACK_COLLECTION = "guest_feedback"
+MASTER_DATABASE_ID         = "695ce92eff84eaf663c457c2"  # Master Database ID
 S3_UPLOAD_API       = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API  = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 
-# Audio Analytics Service URL (Local default or environment variable for Production)
-AUDIO_ANALYSIS_API_URL = os.getenv("AUDIO_ANALYSIS_API_URL", "http://localhost:8003/analyze-audio/")
+# Audio Analytics Service URL
+AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/analyze-audio/"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_collection_name(id_param: str) -> str:
+    """
+    Extract last 4 digits of the ID parameter.
+    Defaults to '0000' if missing or less than 4 digits.
+    """
+    clean_id = "".join(filter(str.isdigit, str(id_param or "")))
+    if len(clean_id) >= 4:
+        return clean_id[-4:]
+    return "0000"
+
 
 def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
     """
@@ -64,7 +77,7 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
             [
                 "ffmpeg", "-y",
                 "-i", in_path,
-                "-ar", "16000",      # 16kHz sample rate — optimal for speech recognition
+                "-ar", "16000",      # 16kHz sample rate
                 "-ac", "1",          # mono
                 "-f", "wav",
                 out_path,
@@ -90,37 +103,96 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
                 pass
 
 
-def _save_to_datacube(room_number: str, description: str, transcript: str, file_id: str, emotion_metrics: dict = None):
-    """Save guest feedback metadata to Datacube. Non-fatal — never raises."""
-    if not CRUD_API_KEY or not DATABASE_ID:
-        logger.warning("[FEEDBACK] Datacube credentials not set — skipping save")
+def _analyze_transcript(transcript: str, description: str) -> dict:
+    """
+    Analyze the feedback transcript text (sentiment, issue categorization, summary, urgency).
+    """
+    combined_text = f"{description}. {transcript}".strip().lower()
+
+    # 1. Sentiment analysis
+    if any(word in combined_text for word in ["bad", "poor", "dirty", "loud", "broken", "terrible", "slow", "unacceptable"]):
+        sentiment = "Negative"
+    elif any(word in combined_text for word in ["great", "good", "excellent", "loved", "friendly", "clean", "wonderful"]):
+        sentiment = "Positive"
+    else:
+        sentiment = "Neutral"
+
+    # 2. Category tagging
+    category = "General"
+    if any(word in combined_text for word in ["ac", "air", "light", "tv", "shower", "bed", "room", "clean", "housekeeping"]):
+        category = "Housekeeping / Room Amenities"
+    elif any(word in combined_text for word in ["food", "breakfast", "dinner", "restaurant", "buffet"]):
+        category = "Food & Beverage"
+    elif any(word in combined_text for word in ["desk", "staff", "check-in", "reception", "service"]):
+        category = "Front Desk / Service"
+
+    # 3. Urgency score
+    urgency_score = 1
+    if sentiment == "Negative":
+        urgency_score = 4 if any(word in combined_text for word in ["immediately", "now", "broken", "unacceptable"]) else 3
+
+    return {
+        "sentiment": sentiment,
+        "category": category,
+        "urgency_score": urgency_score,
+        "summary": transcript[:150] + ("..." if len(transcript) > 150 else "")
+    }
+
+
+def _save_to_datacube(
+    id_param: str,
+    room_number: str,
+    description: str,
+    transcript: str,
+    file_id: str,
+    emotion_metrics: dict = None,
+    transcript_analysis: dict = None
+):
+    """
+    Saves guest feedback, transcripts, transcript analysis, and audio analysis response 
+    all together in Datacube once processing completes.
+    """
+    if not CRUD_API_KEY or not MASTER_DATABASE_ID:
+        logger.warning(f"[FEEDBACK] Datacube credentials not set (key_set={bool(CRUD_API_KEY)}, db_set={bool(MASTER_DATABASE_ID)}) — skipping save")
         return
+
+    collection_name = _get_collection_name(id_param)
+
     try:
         doc_data = {
-            "room_number":  room_number,
-            "description":  description,
-            "transcript":   transcript,
-            "audio_file":   f"{file_id}.wav",
-            "submitted_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "qr_id":               id_param,
+            "room_number":         room_number,
+            "description":         description,
+            "transcript":          transcript,
+            "transcript_analysis": transcript_analysis or {},
+            "audio_file":          f"{file_id}.wav",
+            "audio_analysis":      emotion_metrics or {},
+            "submitted_at":        datetime.datetime.utcnow().isoformat() + "Z",
         }
-        if emotion_metrics:
-            doc_data["emotion_metrics"] = emotion_metrics
+
+        # Fix 1: Target the specific /add/ action endpoint
+        target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/add/"
 
         resp = http_requests.post(
-            f"{CRUD_BASE_URL.rstrip('/')}/crud/",
+            target_url,
             json={
-                "database_id":     DATABASE_ID,
-                "collection_name": FEEDBACK_COLLECTION,
-                "documents": [doc_data],
+                "database_id":     MASTER_DATABASE_ID,
+                "collection_name": collection_name,
+                "documents":       [doc_data],
             },
             headers={
                 "Content-Type":  "application/json",
-                "Authorization": f"Api-Key {CRUD_API_KEY}",
+                # Fix 2: Provide both x-api-key and Bearer header formats for maximum API compatibility
+                "x-api-key":     CRUD_API_KEY,
+                "Authorization": f"Bearer {CRUD_API_KEY}",
             },
             timeout=10,
         )
-        if resp.status_code in (200, 201):
-            logger.info(f"[FEEDBACK] Saved to Datacube — room={room_number}")
+        
+        # Check HTTP status code as well as application-level response status
+        res_data = resp.json() if resp.status_code in (200, 201) else {}
+        if resp.status_code in (200, 201) and res_data.get("success", True):
+            logger.info(f"[FEEDBACK] Saved all data to Datacube — db={MASTER_DATABASE_ID}, collection={collection_name}, room={room_number}")
         else:
             logger.warning(f"[FEEDBACK] Datacube save failed {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
@@ -148,7 +220,6 @@ async def transcribe_audio(
 
         # Convert WebM → WAV
         wav_bytes, file_id = _convert_webm_to_wav(webm_bytes)
-        logger.info(f"[FEEDBACK] Converted to WAV — {len(wav_bytes)} bytes, file_id={file_id}")
 
         # Step 1 — Upload WAV to S3
         try:
@@ -178,7 +249,6 @@ async def transcribe_audio(
             )
             if trans_resp.status_code == 200 and trans_resp.json().get("success"):
                 transcript = trans_resp.json().get("data", {}).get("transcript", "")
-                logger.info(f"[FEEDBACK] Transcription: {transcript[:100]}")
             else:
                 logger.warning(f"[FEEDBACK] Transcription failed: {trans_resp.text[:200]}")
                 transcript = ""
@@ -202,6 +272,7 @@ async def transcribe_audio(
 
 @router.post("/submit")
 async def submit_feedback(
+    request: Request,
     audio: UploadFile = File(...),
     room_number: str  = Form(default=""),
     description: str  = Form(default=""),
@@ -210,10 +281,15 @@ async def submit_feedback(
 ):
     """
     Step 2: Guest has confirmed transcript. Submit feedback.
-    - Sends WAV file to Django Audio Analytics Service
-    - Saves metadata and emotion metrics to Datacube
+    - Extracts 'id' parameter from query params (URL)
+    - Performs text analysis on transcript
+    - Sends WAV file to Audio Analytics Service
+    - Once analysis succeeds, saves ALL data together in Datacube
     """
     try:
+        # Extract query parameter 'id' directly from URL (e.g., ?id=198239)
+        id_param = request.query_params.get("id", "")
+
         webm_bytes = await audio.read()
         if not webm_bytes:
             raise HTTPException(status_code=400, detail="No audio data received")
@@ -222,7 +298,10 @@ async def submit_feedback(
         wav_bytes, new_file_id = _convert_webm_to_wav(webm_bytes)
         final_file_id = file_id or new_file_id
 
-        # Call Django Audio Analytics API (Field name 'audio_file' matches Django serializer)
+        # 1. Perform Transcript Text Analysis
+        transcript_analysis = _analyze_transcript(transcript, description)
+
+        # 2. Call Audio Analytics API
         emotion_data = None
         try:
             feedback_resp = http_requests.post(
@@ -238,20 +317,21 @@ async def submit_feedback(
         except Exception as e:
             logger.warning(f"[FEEDBACK] Audio Analytics API error (non-fatal): {e}")
 
-        # Save to Datacube (non-fatal)
+        # 3. Save Everything Together into Datacube
         _save_to_datacube(
+            id_param=id_param,
             room_number=room_number,
             description=description,
             transcript=transcript,
             file_id=final_file_id,
-            emotion_metrics=emotion_data
+            emotion_metrics=emotion_data,
+            transcript_analysis=transcript_analysis
         )
 
         return JSONResponse({
             "success": True,
             "message": "Thank you for your feedback.",
             "file_id": final_file_id,
-            "dashboard_metrics": emotion_data
         })
 
     except HTTPException:

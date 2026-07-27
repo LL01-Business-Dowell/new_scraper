@@ -9,16 +9,18 @@ services:
       - WATCHFILES_FORCE_POLLING=true
     env_file:
       - .env
+    networks:
+      - queue-net
 
   # Audio Analytics (Django) service
-  audio_analysis:
+  audio-analysis:
     build: ./audio_analysis
     volumes:
       - ./audio_analysis:/usr/src/app
     ports:
       - "8003:8003"
-    env_file:
-      - .env
+    networks:
+      - queue-net
 
   frontend:
     build:
@@ -37,6 +39,12 @@ services:
       - VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY}
     env_file:
       - .env
+    networks:
+      - queue-net
 
   nginx:
     profiles: ["production"]
+
+networks:
+  queue-net:
+    driver: bridge

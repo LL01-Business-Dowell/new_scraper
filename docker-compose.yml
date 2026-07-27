@@ -16,7 +16,12 @@ services:
       CRUD_COORDS_PATH: /crud
       CRUD_RESULTS_PATH: /crud
       SESSION_COLLECTION_NAME: csv_chat_sessions
+      CRUD_API_KEY: ${CRUD_API_KEY}
+      DATABASE_ID: ${DATABASE_ID}
     shm_size: "512mb"
+    depends_on:
+      - audio-analysis
+      - inscriber
     networks:
       - queue-net
 
@@ -34,15 +39,13 @@ services:
     networks:
       - queue-net
     
-  audio_analysis:
+  audio-analysis:
     build:
       context: ./audio_analysis
     container_name: audio_analysis_container
     ports:
       - "8003:8003"
     restart: unless-stopped
-    env_file:
-      - ./audio_analysis/aud.env
     environment:
       PYTHONUNBUFFERED: 1
     networks:
@@ -79,6 +82,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot
     networks:
       - queue-net
 
