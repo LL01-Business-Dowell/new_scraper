@@ -17,7 +17,14 @@ CRUD_API_KEY = os.getenv("CRUD_API_KEY", "")
 MASTER_DATABASE_ID = "695ce92eff84eaf663c457c2"
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
-AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/analyze-audio/"
+AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
+
+# Hugging Face Configuration
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY", "")
+HF_MODEL_URL = os.getenv(
+    "HF_MODEL_URL", 
+    "https://api-inference.huggingface.co/models/cardiffnlp/twitter-roberta-base-sentiment-latest"
+)
 
 
 def _get_collection_name(id_param: str) -> str:
@@ -67,7 +74,7 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
                 pass
 
 
-def _analyze_transcript(transcript: str, description: str) -> dict:
+def _analyze_transcript_fallback(transcript: str, description: str) -> dict:
     combined_text = f"{description}. {transcript}".strip().lower()
 
     if any(word in combined_text for word in ["bad", "poor", "dirty", "loud", "broken", "terrible", "slow", "unacceptable"]):
@@ -95,6 +102,47 @@ def _analyze_transcript(transcript: str, description: str) -> dict:
         "urgency_score": urgency_score,
         "summary": transcript[:150] + ("..." if len(transcript) > 150 else "")
     }
+
+
+def _analyze_transcript_huggingface(transcript: str, description: str) -> dict:
+    combined_text = f"{description}. {transcript}".strip()
+    if not combined_text or not HUGGINGFACE_API_KEY:
+        return _analyze_transcript_fallback(transcript, description)
+
+    try:
+        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+        payload = {"inputs": combined_text[:512]}
+
+        resp = http_requests.post(HF_MODEL_URL, headers=headers, json=payload, timeout=10)
+        
+        if resp.status_code == 200:
+            predictions = resp.json()
+            if isinstance(predictions, list) and len(predictions) > 0:
+                top_pred = predictions[0][0] if isinstance(predictions[0], list) else predictions[0]
+                raw_label = top_pred.get("label", "Neutral").lower()
+
+                if "pos" in raw_label:
+                    sentiment = "Positive"
+                elif "neg" in raw_label:
+                    sentiment = "Negative"
+                else:
+                    sentiment = "Neutral"
+
+                fallback_data = _analyze_transcript_fallback(transcript, description)
+
+                return {
+                    "sentiment": sentiment,
+                    "category": fallback_data["category"],
+                    "urgency_score": 4 if sentiment == "Negative" else 1,
+                    "summary": transcript[:150] + ("..." if len(transcript) > 150 else ""),
+                    "confidence_score": round(top_pred.get("score", 0.0), 4)
+                }
+        else:
+            logger.warning(f"[FEEDBACK] HuggingFace inference status {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"[FEEDBACK] HuggingFace inference error, using fallback: {e}")
+
+    return _analyze_transcript_fallback(transcript, description)
 
 
 def _save_to_datacube(
@@ -267,7 +315,7 @@ async def submit_feedback(
 async def transcribe_on_demand(
     request: Request,
     audio: UploadFile = File(...),
-    doc_id: str = Form(...),
+    doc_id: str = Form(default=""),
     description: str = Form(default=""),
     file_id: str = Form(default=""),
 ):
@@ -313,14 +361,15 @@ async def transcribe_on_demand(
         except Exception as e:
             logger.warning(f"[FEEDBACK] Transcription error (non-fatal): {e}")
 
-        transcript_analysis = _analyze_transcript(transcript, description)
+        transcript_analysis = _analyze_transcript_huggingface(transcript, description)
 
-        _update_datacube_transcription(
-            id_param=id_param,
-            doc_id=doc_id,
-            transcript=transcript,
-            transcript_analysis=transcript_analysis
-        )
+        if doc_id:
+            _update_datacube_transcription(
+                id_param=id_param,
+                doc_id=doc_id,
+                transcript=transcript,
+                transcript_analysis=transcript_analysis
+            )
 
         return JSONResponse({
             "success": True,

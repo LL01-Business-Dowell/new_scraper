@@ -1,17 +1,9 @@
-/**
- * FeedbackPage.jsx
- * ----------------
- * Guest voice feedback form at /feedback.
- * Accessible via QR code scan — standalone page, no nav links.
- */
-
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import API_BASE_URL from "./config";
 
 const BASE = (API_BASE_URL || "").replace(/\/+$/, "");
 
-// ── Icons ────────────────────────────────────────────────────────────────────
 const MicIcon = () => (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -60,7 +52,6 @@ const MoonIcon = () => (
     </svg>
 );
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = {
     page: (isLight) => ({
         minHeight: "100vh",
@@ -213,7 +204,6 @@ const styles = {
     }),
 };
 
-// ── Pulse animation ───────────────────────────────────────────────────────────
 const PulseStyle = () => (
     <style>{`
     @keyframes pulse {
@@ -227,7 +217,6 @@ const PulseStyle = () => (
   `}</style>
 );
 
-// ── Timer hook ────────────────────────────────────────────────────────────────
 function useTimer(running, maxSeconds, onLimitReached) {
     const [secondsLeft, setSecondsLeft] = useState(maxSeconds);
 
@@ -259,10 +248,7 @@ function useTimer(running, maxSeconds, onLimitReached) {
     };
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 export default function FeedbackPage() {
-
-    // Theme configuration state
     const [theme, setTheme] = useState("dark");
     const isLight = theme === "light";
 
@@ -270,19 +256,16 @@ export default function FeedbackPage() {
         setTheme(prev => prev === "dark" ? "light" : "dark");
     };
 
-    // Form state
     const [roomNumber, setRoomNumber] = useState("");
     const [description, setDescription] = useState("");
     const [consentGiven, setConsentGiven] = useState(false);
 
-    // Initial phase set to "privacy"
     const [phase, setPhase] = useState("privacy");
     const [recording, setRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState(null);
     const [audioUrl, setAudioUrl] = useState(null);
     const [errorMsg, setErrorMsg] = useState("");
 
-    // Thank you page transcription states
     const [loadingTranscript, setLoadingTranscript] = useState(false);
     const [transcriptText, setTranscriptText] = useState("");
     const [transcribeChoiceMade, setTranscribeChoiceMade] = useState(false);
@@ -297,7 +280,6 @@ export default function FeedbackPage() {
 
     const isRoomNumberValid = roomNumber.trim() !== "";
 
-    // ── Start recording ───────────────────────────────────────────────────────
     const startRecording = async () => {
         if (!isRoomNumberValid) {
             setErrorMsg("Please enter your room number before recording.");
@@ -315,7 +297,7 @@ export default function FeedbackPage() {
                 setAudioBlob(blob);
                 setAudioUrl(URL.createObjectURL(blob));
                 stream.getTracks().forEach(t => t.stop());
-                setPhase("recorded"); // Just let them hear the audio, don't transcribe yet
+                setPhase("recorded");
             };
             mediaRecorderRef.current = mr;
             mr.start(250);
@@ -326,13 +308,12 @@ export default function FeedbackPage() {
         }
     };
 
-    // ── Stop recording ────────────────────────────────────────────────────────
     const stopRecording = () => {
         mediaRecorderRef.current?.stop();
         setRecording(false);
     };
 
-    // ── Submit feedback via FastAPI ────────────────────────────────────────────
+    // Submits feedback and automatically triggers backend transcription/analysis in background
     const handleSubmit = async () => {
         if (!isRoomNumberValid) {
             setErrorMsg("Please enter your room number.");
@@ -341,51 +322,48 @@ export default function FeedbackPage() {
 
         setPhase("submitting");
         setErrorMsg("");
+        setLoadingTranscript(true);
+
         try {
             const form = new FormData();
             form.append("audio", audioBlob, "recording.webm");
             form.append("room_number", roomNumber);
             form.append("description", description);
 
-            // Forward current URL query params (contains ?id=...)
-            await axios.post(`${BASE}/api/feedback/submit${window.location.search}`, form, {
+            const resp = await axios.post(`${BASE}/api/feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
                 timeout: 120000,
             });
 
+            const docId = resp.data?.doc_id;
+            const fileId = resp.data?.file_id;
+
             setPhase("done");
+
+            // Execute transcription & analysis via Hugging Face on the backend immediately
+            runBackgroundTranscription(docId, fileId);
+
         } catch (err) {
             setErrorMsg("Submission failed. Please try again.");
             setPhase("recorded");
+            setLoadingTranscript(false);
         }
     };
 
-    // ── Re-record audio ────────────────────────────────────────────────────────
-    const handleReRecord = () => {
-        setAudioBlob(null);
-        setAudioUrl(null);
-        setErrorMsg("");
-        setPhase("form");
-    };
-
-    // ── Thank You Page: Request Transcript ────────────────────────────────────
-    const handleRequestTranscript = async () => {
-        setTranscribeChoiceMade(true);
-        setLoadingTranscript(true);
-        setErrorMsg("");
-
+    const runBackgroundTranscription = async (docId, fileId) => {
         try {
             const form = new FormData();
             form.append("audio", audioBlob, "recording.webm");
-            form.append("room_number", roomNumber);
+            form.append("doc_id", docId || "");
+            form.append("file_id", fileId || "");
             form.append("description", description);
 
-            const resp = await axios.post(`${BASE}/api/feedback/transcribe`, form, {
+            const resp = await axios.post(`${BASE}/api/feedback/transcribe-lazy${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
                 timeout: 180000,
             });
 
-            setTranscriptText(resp.data.transcript || "No readable audio transcript available.");
+            setTranscriptText(resp.data?.transcript || "No readable audio transcript available.");
         } catch (err) {
             setErrorMsg("Could not fetch transcript at this time.");
         } finally {
@@ -393,13 +371,22 @@ export default function FeedbackPage() {
         }
     };
 
-    // ── Thank You Page: Close Tab ─────────────────────────────────────────────
+    const handleReRecord = () => {
+        setAudioBlob(null);
+        setAudioUrl(null);
+        setErrorMsg("");
+        setPhase("form");
+    };
+
+    const handleRequestTranscript = () => {
+        setTranscribeChoiceMade(true);
+    };
+
     const handleCloseTab = () => {
         window.close();
         setTabClosed(true);
     };
 
-    // ── Done screen (Thank You) ───────────────────────────────────────────────
     if (phase === "done") {
         return (
             <div style={styles.page(isLight)}>
@@ -409,7 +396,7 @@ export default function FeedbackPage() {
                         type="button"
                         onClick={toggleTheme}
                         style={styles.themeToggle(isLight)}
-                        aria-label="Toggle visual theme style"
+                        aria-label="Toggle theme"
                     >
                         {isLight ? <MoonIcon /> : <SunIcon />}
                     </button>
@@ -431,7 +418,6 @@ export default function FeedbackPage() {
                             </div>
                         </div>
 
-                        {/* Interactive Transcript Option on Thank You Page */}
                         {!transcribeChoiceMade ? (
                             <div style={{ marginTop: 24, paddingTop: 16, borderTop: isLight ? "1px solid #e2e8f0" : "1px solid rgba(255,255,255,0.1)" }}>
                                 <p style={{ fontSize: "0.88rem", fontWeight: 600, color: isLight ? "#0f172a" : "#f1f5f9", marginBottom: 14 }}>
@@ -456,7 +442,7 @@ export default function FeedbackPage() {
                             <div style={{ marginTop: 16 }}>
                                 {loadingTranscript && (
                                     <p style={{ fontSize: "0.85rem", color: isLight ? "#475569" : "#94a3b8" }}>
-                                        Fetching audio transcript...
+                                        Generating audio transcript...
                                     </p>
                                 )}
 
@@ -488,7 +474,6 @@ export default function FeedbackPage() {
         );
     }
 
-    // ── Main UI Card ──────────────────────────────────────────────────────────
     return (
         <div style={styles.page(isLight)}>
             <PulseStyle />
@@ -499,7 +484,7 @@ export default function FeedbackPage() {
                     type="button"
                     onClick={toggleTheme}
                     style={styles.themeToggle(isLight)}
-                    aria-label="Toggle visual theme style"
+                    aria-label="Toggle theme"
                 >
                     {isLight ? <MoonIcon /> : <SunIcon />}
                 </button>
@@ -512,7 +497,6 @@ export default function FeedbackPage() {
 
                 {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
 
-                {/* ── PHASE: PRIVACY STATEMENT INITIAL SCREEN ──────────────────── */}
                 {phase === "privacy" && (
                     <div>
                         <div style={styles.consentBox(isLight)}>
@@ -557,10 +541,8 @@ export default function FeedbackPage() {
                     </div>
                 )}
 
-                {/* ── MAIN FORM (RECORDING & PLAYBACK) ────────────────────────────── */}
                 {phase !== "privacy" && (
                     <>
-                        {/* 1. AUDIO RECORDING CONTAINER */}
                         {phase === "form" && (
                             <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
                                 <label style={{ ...styles.label(isLight), textAlign: "center", marginBottom: 10 }}>
@@ -580,7 +562,6 @@ export default function FeedbackPage() {
                             </div>
                         )}
 
-                        {/* LIVE RECORDING STATE */}
                         {phase === "recording" && (
                             <div style={{ textAlign: "center", padding: "1rem 0", marginBottom: "1.5rem" }}>
                                 <p style={{ color: "#ef4444", fontSize: "0.85rem", marginBottom: 16, fontWeight: 600 }}>
@@ -603,7 +584,6 @@ export default function FeedbackPage() {
                             </div>
                         )}
 
-                        {/* RECORDED AUDIO LISTEN BACK STATE */}
                         {phase === "recorded" && audioUrl && (
                             <div style={{ marginBottom: "1.5rem", textAlign: "center" }}>
                                 <label style={{ ...styles.label(isLight), marginBottom: 8 }}>Listen Back To Recording</label>
@@ -614,7 +594,6 @@ export default function FeedbackPage() {
                             </div>
                         )}
 
-                        {/* 2. DESCRIPTION TEXT BOX */}
                         <div style={{ marginBottom: "1.25rem" }}>
                             <label style={styles.label(isLight)}>
                                 Brief Description <span style={{ color: "#475569", fontWeight: 400 }}>(optional)</span>
@@ -628,7 +607,6 @@ export default function FeedbackPage() {
                             />
                         </div>
 
-                        {/* 3. ROOM NUMBER TEXT BOX */}
                         <div style={{ marginBottom: "1.25rem" }}>
                             <label style={styles.label(isLight)}>Room Number *</label>
                             <input
@@ -642,7 +620,6 @@ export default function FeedbackPage() {
                             />
                         </div>
 
-                        {/* SUBMIT BUTTON */}
                         {phase === "recorded" && (
                             <button onClick={handleSubmit} style={styles.primaryBtn}>
                                 ✓ Submit Feedback
@@ -651,14 +628,12 @@ export default function FeedbackPage() {
                     </>
                 )}
 
-                {/* ── PHASE: SUBMITTING BLOCKER ────────────────────────────────── */}
                 {phase === "submitting" && (
                     <div style={{ textAlign: "center", padding: "2rem 0" }}>
                         <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.88rem" }}>Finalizing submission...</p>
                     </div>
                 )}
 
-                {/* Footer */}
                 <p style={{ textAlign: "center", color: "#334155", fontSize: "0.7rem", marginTop: "1.5rem", marginBottom: 0 }}>
                     Your privacy is protected · Data processed securely
                 </p>
