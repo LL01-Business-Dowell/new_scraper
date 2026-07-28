@@ -5,6 +5,9 @@ import logging
 import tempfile
 import subprocess
 import requests as http_requests
+from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+import torch
+import json
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -25,7 +28,7 @@ HF_MODEL_URL = os.getenv(
     "HF_MODEL_URL", 
     "https://api-inference.huggingface.co/models/cardiffnlp/twitter-roberta-base-sentiment-latest"
 )
-
+print(f"Using HF model URL: {HF_MODEL_URL}")
 
 def _get_collection_name(id_param: str) -> str:
     clean_id = "".join(filter(str.isdigit, str(id_param or "")))
@@ -103,7 +106,111 @@ def _analyze_transcript_fallback(transcript: str, description: str) -> dict:
         "summary": transcript[:150] + ("..." if len(transcript) > 150 else "")
     }
 
+MODEL_ID = "joeddav/distilbert-base-uncased-go-emotions-student"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+def _load_huggingface_model(model_id: str):
+    try:
+        tokenizer = DistilBertTokenizer.from_pretrained(model_id)
+        model = DistilBertForSequenceClassification.from_pretrained(model_id)
+        
+        # Move model to device (CUDA/CPU) and set to evaluation mode once
+        model.to(DEVICE)
+        model.eval()
+        
+        logger.info(f"[FEEDBACK] HuggingFace model '{model_id}' successfully pre-loaded on {DEVICE}.")
+        return tokenizer, model
+    except Exception as e:
+        logger.error(f"[FEEDBACK] Error loading HuggingFace model {model_id}: {e}")
+        return None, None
+
+TOKENIZER, MODEL = _load_huggingface_model(MODEL_ID)
+def _distilbert_sentiment_analysis(transcript: str) -> dict:
+    if MODEL is None or TOKENIZER is None:
+        logger.error("[FEEDBACK] Model or Tokenizer not loaded properly.")
+        return {"error": "Model initialization failed"}
+    try:
+        
+        # TOKENIZE TEXT
+        tokenize = TOKENIZER(
+            transcript,
+            return_tensors = "pt",
+            truncation = True,
+            max_length = TOKENIZER.model_max_length,
+            padding = True
+        )
+
+        # MOVE INPUTS TO THE SAME DEVICE AS MODEL
+        inputs = {key: value.to(DEVICE) for key, value in tokenize.items()}
+
+        # SEND INPUTS TO MODEL
+        with torch.no_grad():
+            output = MODEL(**inputs)
+
+        # SHAPE THE OUTPUT (LOGITS --> PROBABILITIES)
+        logits = output.logits
+        probabilities = torch.softmax(logits, dim=-1)
+
+        # GET THE CONFIDENCE SCORE
+        predicted_class = torch.argmax(probabilities, dim=-1).item()
+        confidence_score = probabilities[0][predicted_class].item()
+
+        # INTERPRET EMOTIONS FROM LABELS
+        return {
+            "predicted_class": predicted_class,
+            "label": "positive" if predicted_class == 1 else "negative",
+            "confidence_score": confidence_score,
+            "text": transcript
+        
+        }
+    except Exception as e:
+            logger.warning(f"[FEEDBACK] HuggingFace inference error, using distilbert: {e}")
+def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_score):
+    # Normalize inputs
+    text_sentiment = text_sentiment.upper()
+    audio_emotion = audio_emotion.lower()
+    
+    # Define high-intensity acoustic triggers
+    high_urgency_audio = ["angry", "fearful"]
+    medium_urgency_audio = ["sad", "disgust"]
+    
+    # Default baseline configuration
+    dashboard_color = "green"
+    severity_level = "low"
+    action_required = "No immediate action. Review at shift change."
+   
+    # FUSION MATRIX LOGIC
+    if text_sentiment == "NEGATIVE":
+        if audio_emotion in high_urgency_audio:
+            dashboard_color = "red"
+            severity_level = "high"
+            action_required = "CRITICAL: Immediate manager dispatch to guest room/table."
+        elif audio_emotion in medium_urgency_audio:
+            dashboard_color = "orange"
+            severity_level = "medium"
+            action_required = "URGENT: Front desk to call guest with an alternative/resolution within 15 mins."
+        else:
+            # SARCASM / CALM DISAPPOINTMENT OVERRIDE
+            dashboard_color = "red"
+            severity_level = "high"
+            action_required = "HIGH RISK: Guest is expressing severe dissatisfaction with a controlled tone."
+
+    elif text_sentiment in ["POSITIVE", "NEUTRAL"] and audio_emotion in high_urgency_audio:
+        # Text sounds fine, but tone implies friction, distress, or panic
+        dashboard_color = "orange"
+        severity_level = "medium"
+        action_required = "POTENTIAL FRICTION: Staff to follow up and verify guest comfort."
+
+    # Return structured dashboard payload
+    return {
+        "assigned_color": dashboard_color,
+        "severity": severity_level,
+        "recommended_action": action_required,
+        "confidence_scores": {
+            "semantic_confidence": round(text_score, 2),
+            "acoustic_confidence": round(audio_score, 2)
+        }
+    }
 def _analyze_transcript_huggingface(transcript: str, description: str) -> dict:
     combined_text = f"{description}. {transcript}".strip()
     if not combined_text or not HUGGINGFACE_API_KEY:
@@ -151,6 +258,7 @@ def _save_to_datacube(
     description: str,
     file_id: str,
     emotion_metrics: dict = None,
+    fused_metrics: dict = None,
     transcript: str = "",
     transcript_analysis: dict = None
 ) -> str:
@@ -161,7 +269,9 @@ def _save_to_datacube(
     collection_name = _get_collection_name(id_param)
 
     try:
+        
         doc_data = {
+            "type": "feedback",
             "qr_id": id_param,
             "room_number": room_number,
             "description": description,
@@ -169,6 +279,7 @@ def _save_to_datacube(
             "transcript_analysis": transcript_analysis or {},
             "audio_file": f"{file_id}.wav",
             "audio_analysis": emotion_metrics or {},
+            "dashboard_metrics": fused_metrics,
             "submitted_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
 
@@ -361,7 +472,8 @@ async def transcribe_on_demand(
         except Exception as e:
             logger.warning(f"[FEEDBACK] Transcription error (non-fatal): {e}")
 
-        transcript_analysis = _analyze_transcript_huggingface(transcript, description)
+        transcript_analysis = _distilbert_sentiment_analysis(transcript)
+        # transcript_analysis = _analyze_transcript_huggingface(transcript, description)
 
         if doc_id:
             _update_datacube_transcription(

@@ -107,6 +107,7 @@ class AudioSentimentAnalysisView(APIView):
             
             # Map structural raw logits into percentage/probabilities weights
             scores = torch.nn.functional.softmax(logits, dim=-1).flatten().tolist()
+            audio_score = max(scores)
             labels = app_config.predictor_model.config.id2label
 
             # Match emotion labels directly with evaluated float values
@@ -130,7 +131,8 @@ class AudioSentimentAnalysisView(APIView):
                 "dashboard_metrics": {
                     "assigned_color": dashboard_color,
                     "severity": severity_level,
-                    "dominant_emotion": primary_emotion
+                    "dominant_emotion": primary_emotion,
+                    "audio_score": audio_score
                 },
                 "raw_emotion_distribution": analysis_distribution
             }, status=status.HTTP_200_OK)
