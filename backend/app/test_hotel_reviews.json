@@ -1,0 +1,74 @@
+{
+  "Grand Hyatt Regency": [
+    {
+      "author": "Elena Rostova",
+      "date": "2 days ago",
+      "rating": 5,
+      "text": "The service and staff at the Grand Hyatt were absolutely phenomenal! The front desk concierge handled our check-in seamlessly, and the room comfort was top-tier. Breakfast spread was vast and delicious."
+    },
+    {
+      "author": "Marcus Vance",
+      "date": "1 week ago",
+      "rating": 4,
+      "text": "Extremely clean room and comfortable king-sized bed. The location is very central, though traffic noise outside during peak morning hours was slightly noticeable."
+    },
+    {
+      "author": "Sarah Jenkins",
+      "date": "2 weeks ago",
+      "rating": 2,
+      "text": "Disappointed with the room service delay. We waited over an hour for dining orders, and the food arrived lukewarm. The staff apologized, but for a luxury rate, this shouldn't happen."
+    },
+    {
+      "author": "David Miller",
+      "date": "3 weeks ago",
+      "rating": 5,
+      "text": "Incredible spa experience and brilliant concierge team. The room cleanliness was spotless, and the evening rooftop dining offered stunning city views."
+    }
+  ],
+  "Ritz-Carlton Plaza": [
+    {
+      "author": "Sophia Chen",
+      "date": "3 days ago",
+      "rating": 5,
+      "text": "Flawless hospitality from start to finish! The room and comfort exceeded expectations. Staff members knew us by name and made our wedding anniversary unforgettable."
+    },
+    {
+      "author": "Liam O'Connor",
+      "date": "5 days ago",
+      "rating": 5,
+      "text": "The dining & breakfast experience here is second to none. Exceptional pastries, freshly brewed coffee, and attentive waiters."
+    },
+    {
+      "author": "Rachel Adams",
+      "date": "2 weeks ago",
+      "rating": 3,
+      "text": "Beautiful property and great location, but street construction noise woke us up early at 6:00 AM. Earplugs were provided, but soundproofing could be better."
+    },
+    {
+      "author": "Michael Thorne",
+      "date": "1 month ago",
+      "rating": 1,
+      "text": "Unacceptable wait times at the front desk check-in. Only one staff member was managing a queue of fifteen guests. Not worth the premium cost."
+    }
+  ],
+  "The St. Regis Downtown": [
+    {
+      "author": "Alexander Wright",
+      "date": "Yesterday",
+      "rating": 5,
+      "text": "Signature butler service was outstanding! Room amenities, bedding, and bathroom cleanliness were immaculately maintained."
+    },
+    {
+      "author": "Jessica Taylor",
+      "date": "4 days ago",
+      "rating": 4,
+      "text": "Prime location right in the city center. Easy walking distance to luxury shopping and dining. Room was spacious and quiet."
+    },
+    {
+      "author": "Carlos Mendez",
+      "date": "2 weeks ago",
+      "rating": 2,
+      "text": "The air conditioning in our room was noisy and malfunctioned twice during our stay. Maintenance resolved it eventually, but it disrupted our sleep."
+    }
+  ]
+}

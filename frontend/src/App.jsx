@@ -23,6 +23,8 @@ import ReviewAnalysis from "./ReviewAnalysis";
 import Dashboard from "./Dashboard";
 import SentimentApp from "./SentimentApp";
 import FeedbackPage from "./FeedbackPage";
+import SentimentTestPage from "./SentimentTestPage";
+import FeedbackQrManager from "./FeedbackQrManager";
 import "./App.css";
 
 // Normalise base URL — strip trailing slash once
@@ -228,6 +230,14 @@ const App = () => {
 
   if (currentPath === "/feedback") {
     return <FeedbackPage />;
+  }
+
+  if (currentPath === "/test-sentiment") {
+    return <SentimentTestPage />;
+  }
+
+  if (currentPath === "/feedback-qr" || currentPath === "/qr-manager") {
+    return <FeedbackQrManager />;
   }
 
   if (showCsvProcessor) {

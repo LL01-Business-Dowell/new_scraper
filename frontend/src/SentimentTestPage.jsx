@@ -1,25 +1,17 @@
-/**
- * SentimentAnalysis.jsx (Hugging Face Ready)
- * ---------------------
- * Full search → approve → analyse → sentiment report flow.
- * Supports Hugging Face Deep Learning models & legacy VADER pipelines seamlessly.
- */
-
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { FaArrowLeft, FaStar, FaChartBar, FaClock, FaBrain, FaInfoCircle } from "react-icons/fa";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers (Identical to Production) ──────────────────────────────────────
 const sentColor = (score) => {
     if (score == null) return "#6b7280";
-    // Standard compound score (-1.0 to 1.0) or confidence scale
     if (score > 0.25) return "#10b981";  // Positive
     if (score < -0.25) return "#ef4444"; // Negative
     return "#f59e0b";                    // Neutral/Mixed
 };
 
 const sentLabel = (score, explicitLabel = null) => {
-    if (explicitLabel) return explicitLabel; // Use HuggingFace direct label if provided by backend
+    if (explicitLabel) return explicitLabel;
     if (score == null) return "No Data";
     if (score > 0.6) return "Very Positive";
     if (score > 0.2) return "Positive";
@@ -36,244 +28,61 @@ function Bar({ ratio, color, height = 8 }) {
     );
 }
 
-// ── Approving phase (Google Maps Integration) ─────────────────────────────────
-function ApprovingPhase({ places, checkedPlaces, togglePlace, selectedCount, establishmentName, originLat, originLng, radiusKm, city, onApprove, onBack, googleMapsApiKey }) {
-    const [hoveredIdx, setHoveredIdx] = React.useState(null);
-    const mapRef = React.useRef(null);
-    const googleMapRef = React.useRef(null);
-    const markersRef = React.useRef([]);
-    const circleRef = React.useRef(null);
-
-    const handleApprove = onApprove;
-
-    const mapCenter = React.useMemo(() => {
-        if (originLat && originLng) return { lat: originLat, lng: originLng };
-        const f = places.find(p => p.lat != null && p.lng != null);
-        return f ? { lat: f.lat, lng: f.lng } : { lat: 20, lng: 0 };
-    }, [originLat, originLng, places]);
-
-    React.useEffect(() => {
-        if (!mapRef.current) return;
-
-        const initGoogleMap = () => {
-            if (!window.google || googleMapRef.current) return;
-            const map = new window.google.maps.Map(mapRef.current, {
-                center: mapCenter,
-                zoom: 13,
-                disableDefaultUI: false,
-                zoomControl: true,
-            });
-            googleMapRef.current = map;
-            renderMap();
-        };
-
-        if (window.google && window.google.maps) {
-            initGoogleMap();
-        } else {
-            const scriptId = "google-maps-js-sdk";
-            if (!document.getElementById(scriptId)) {
-                const script = document.createElement("script");
-                script.id = scriptId;
-                script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey || 'YOUR_GOOGLE_MAPS_API_KEY'}`;
-                script.async = true;
-                script.onload = initGoogleMap;
-                document.head.appendChild(script);
-            }
-        }
-    }, []);
-
-    React.useEffect(() => {
-        if (googleMapRef.current && window.google) {
-            renderMap();
-        }
-    }, [places, checkedPlaces, hoveredIdx]);
-
-    const renderMap = () => {
-        const map = googleMapRef.current;
-        if (!map || !window.google) return;
-
-        markersRef.current.forEach(m => m.setMap(null));
-        markersRef.current = [];
-
-        if (circleRef.current) {
-            circleRef.current.setMap(null);
-            circleRef.current = null;
-        }
-
-        const bounds = new window.google.maps.LatLngBounds();
-        let validPoints = 0;
-
-        if (originLat && originLng && radiusKm) {
-            circleRef.current = new window.google.maps.Circle({
-                strokeColor: "#9333ea",
-                strokeOpacity: 0.7,
-                strokeWeight: 2,
-                fillColor: "#9333ea",
-                fillOpacity: 0.06,
-                map: map,
-                center: { lat: originLat, lng: originLng },
-                radius: radiusKm * 1000,
-            });
-        }
-
-        if (originLat && originLng) {
-            const originPos = { lat: originLat, lng: originLng };
-            const originMarker = new window.google.maps.Marker({
-                position: originPos,
-                map: map,
-                title: "Your establishment",
-                icon: {
-                    path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-                    scale: 6,
-                    fillColor: "#f59e0b",
-                    fillOpacity: 1,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 2,
-                }
-            });
-
-            const infoWindow = new window.google.maps.InfoWindow({
-                content: "<strong>Your establishment</strong>",
-            });
-            originMarker.addListener("click", () => infoWindow.open(map, originMarker));
-
-            markersRef.current.push(originMarker);
-            bounds.extend(originPos);
-            validPoints++;
-        }
-
-        places.forEach((place, idx) => {
-            if (place.lat == null || place.lng == null || place.is_user_establishment) return;
-
-            const pos = { lat: place.lat, lng: place.lng };
-            const excl = checkedPlaces[idx] === false;
-            const hov = hoveredIdx === idx;
-            const color = excl ? "#4b5563" : hov ? "#38bdf8" : "#818cf8";
-
-            const marker = new window.google.maps.Marker({
-                position: pos,
-                map: map,
-                title: place.name,
-                icon: {
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: hov ? 10 : 7,
-                    fillColor: color,
-                    fillOpacity: 1,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 2,
-                },
-                zIndex: hov ? 1000 : 1,
-            });
-
-            const contentStr = `<div style="font-family:sans-serif;min-width:140px;color:#111">
-                <strong>${place.name}</strong>
-                ${place.rating ? `<div style="color:#d97706">★ ${place.rating}</div>` : ""}
-                ${place.distance_km != null ? `<div style="color:#7c3aed;font-size:0.75rem">${place.distance_km} km</div>` : ""}
-            </div>`;
-
-            const infoWindow = new window.google.maps.InfoWindow({ content: contentStr });
-
-            marker.addListener("click", () => {
-                infoWindow.open(map, marker);
-                const el = document.getElementById(`sa-row-${idx}`);
-                if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-            });
-
-            markersRef.current.push(marker);
-            bounds.extend(pos);
-            validPoints++;
-        });
-
-        if (validPoints > 1) {
-            map.fitBounds(bounds);
-        } else if (validPoints === 1 && originLat && originLng) {
-            map.setCenter({ lat: originLat, lng: originLng });
-            map.setZoom(13);
-        }
-    };
-
-    return (
-        <div className="app-container">
-            <div className="animated-background"><div className="gradient-overlay" /><div className="dot-pattern" /></div>
-            <div className="content-container">
-                <div style={{ maxWidth: 1200, width: "100%", margin: "0 auto", padding: "1.5rem 1rem" }}>
-                    <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#a78bfa", cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, padding: 0, marginBottom: 14 }}>
-                        <FaArrowLeft style={{ fontSize: 11 }} /> Back
-                    </button>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, background: "linear-gradient(to right,#a78bfa,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                                Luxury Hotels near {city}
-                            </h2>
-                            <p style={{ margin: "4px 0 0", fontSize: "0.82rem", color: "#6b7280" }}>{selectedCount} selected · Hover a row to highlight its pin</p>
-                        </div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                            {[{ label: "Found", value: places.length, color: "#a78bfa" }, { label: "Selected", value: selectedCount, color: "#10b981" }, { label: "Excluded", value: places.length - selectedCount, color: "#ef4444" }].map(({ label, value, color }) => (
-                                <div key={label} style={{ background: "#1f2937", borderRadius: 8, padding: "6px 14px", border: "1px solid #374151", textAlign: "center" }}>
-                                    <div style={{ fontSize: "1.1rem", fontWeight: 700, color }}>{value}</div>
-                                    <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>{label}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16, alignItems: "start" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            <div style={{ maxHeight: "calc(100vh - 260px)", overflowY: "auto", border: "1px solid #374151", borderRadius: 12, background: "#1A1E2E" }}>
-                                {places.map((place, idx) => {
-                                    const excl = checkedPlaces[idx] === false; const hov = hoveredIdx === idx;
-                                    const isUser = place.is_user_establishment || (establishmentName && place.name?.toLowerCase() === establishmentName.trim().toLowerCase());
-                                    return (
-                                        <div id={`sa-row-${idx}`} key={idx} onClick={() => togglePlace(idx)} onMouseEnter={() => setHoveredIdx(idx)} onMouseLeave={() => setHoveredIdx(null)}
-                                            style={{
-                                                padding: "11px 14px", borderBottom: idx < places.length - 1 ? "1px solid #1f2937" : "none", display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
-                                                background: hov ? "rgba(56,189,248,0.07)" : excl ? "rgba(239,68,68,0.04)" : isUser ? "rgba(245,158,11,0.05)" : "transparent",
-                                                borderLeft: hov ? "3px solid #38bdf8" : isUser ? "3px solid #f59e0b" : "3px solid transparent", transition: "all 0.15s", opacity: excl ? 0.5 : 1
-                                            }}>
-                                            <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `2px solid ${excl ? "#4b5563" : "#9333ea"}`, background: excl ? "transparent" : "linear-gradient(to right,#9333ea,#4f46e5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                                {!excl && <svg width="9" height="7" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                                            </div>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                                    {isUser && <span style={{ fontSize: "0.58rem", background: "#f59e0b", color: "#000", padding: "1px 5px", borderRadius: 3, fontWeight: 800 }}>YOU</span>}
-                                                    <span style={{ fontWeight: 600, fontSize: "0.85rem", color: isUser ? "#fbbf24" : hov ? "#38bdf8" : "#f1f1f1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 240 }}>{place.name}</span>
-                                                </div>
-                                                <div style={{ display: "flex", gap: 6, fontSize: "0.7rem", color: "#6b7280", marginTop: 3, flexWrap: "wrap", alignItems: "center" }}>
-                                                    {place.rating && <span style={{ color: "#f59e0b", display: "flex", alignItems: "center", gap: 2 }}><FaStar style={{ fontSize: 8 }} /> {place.rating}</span>}
-                                                    {place.reviews > 0 && <span>{place.reviews.toLocaleString()} reviews</span>}
-                                                    {place.distance_km != null && <span style={{ background: "rgba(147,51,234,0.15)", color: "#c084fc", padding: "1px 5px", borderRadius: 3, fontSize: "0.68rem", fontWeight: 600, border: "1px solid rgba(147,51,234,0.3)" }}>{place.distance_km} km</span>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            <div style={{ display: "flex", gap: 8 }}>
-                                <button onClick={handleApprove} className="submit-button" style={{ flex: 1, margin: 0 }}><FaChartBar className="button-icon" /> Analyse {selectedCount} Hotels</button>
-                                <button onClick={onBack} className="reset-button" style={{ width: "auto", marginTop: 0, padding: "0.75rem 1.2rem" }}>Cancel</button>
-                            </div>
-                        </div>
-                        <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid #374151", height: "calc(100vh - 260px)", minHeight: 500, position: "sticky", top: "1rem" }}>
-                            <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── Results ───────────────────────────────────────────────────────────────────
-function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, generatedAt }) {
+// ── Main Test Component ──────────────────────────────────────────────────────
+export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Market", daysBack = 30 }) {
+    const BASE = (baseUrl || "").replace(/\/+$/, "");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [taskId, setTaskId] = useState("mock-task-id");
+    const [results, setResults] = useState([]);
+    const [combined, setCombined] = useState(null);
+    const [generatedAt, setGeneratedAt] = useState("");
+    
     const [activeTab, setActiveTab] = useState("combined");
     const [expandedIdx, setExpandedIdx] = useState(null);
     const [rankingCollapsed, setRankingCollapsed] = useState(false);
 
-    const downloadPdf = () => {
-        const encodedTime = encodeURIComponent(generatedAt || "");
-        window.open(`${baseUrl}/api/hotel-sentiment/report/pdf/${taskId}?client_time=${encodedTime}`, "_blank");
+    const createClientTimestamp = () => {
+        return new Date().toLocaleString("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+        });
     };
 
-    const modelEngine = combined?.model_engine || "Hugging Face Transformer";
+    // Load mock test data instantly on component mount
+    useEffect(() => {
+        const fetchTestData = async () => {
+            try {
+                setLoading(true);
+                const response = await axios.post(`${BASE}/api/hotel-sentiment/test-instant`);
+                
+                if (response.data) {
+                    setResults(response.data.results || []);
+                    setCombined(response.data.combined_report || {});
+                    if (response.data.task_id) setTaskId(response.data.task_id);
+                    setGeneratedAt(createClientTimestamp());
+                }
+            } catch (err) {
+                console.error("Failed to load test mock data:", err);
+                setError(err.message || "Failed to load mock report data");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchTestData();
+    }, [BASE]);
+
+    const downloadPdf = () => {
+        const encodedTime = encodeURIComponent(generatedAt || "");
+        window.open(`${BASE}/api/hotel-sentiment/report/pdf/${taskId}?client_time=${encodedTime}`, "_blank");
+    };
+
+    const modelEngine = combined?.model_engine || "Hugging Face Transformer (Mock)";
 
     const Shell = ({ children }) => (
         <div className="app-container">
@@ -282,7 +91,7 @@ function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, g
                 <div style={{ maxWidth: 960, width: "100%", margin: "0 auto", padding: "2rem 1rem" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
                         <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#a78bfa", cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, padding: 0 }}>
-                            <FaArrowLeft style={{ fontSize: 11 }} /> New Search
+                            <FaArrowLeft style={{ fontSize: 11 }} /> Back to Dashboard
                         </button>
                         <button onClick={downloadPdf} style={{ display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(to right,#9333ea,#4f46e5)", border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer" }}>
                             ↓ Download PDF Report
@@ -294,10 +103,40 @@ function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, g
         </div>
     );
 
+    if (loading) {
+        return (
+            <div className="app-container">
+                <div className="animated-background"><div className="gradient-overlay" /><div className="dot-pattern" /></div>
+                <div className="content-container">
+                    <div style={{ maxWidth: 600, margin: "0 auto", padding: "4rem 1rem", textAlign: "center" }}>
+                        <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 24px", background: "conic-gradient(#9333ea,#4f46e5,#9333ea 30%,#1f2937 30%)", animation: "spin 1.2s linear infinite" }} />
+                        <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+                        <h2 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 8, background: "linear-gradient(to right,#a78bfa,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                            Loading Test Report Data...
+                        </h2>
+                        <p style={{ color: "#9ca3af", fontSize: "0.85rem" }}>Processing mock reviews directly from backend JSON...</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <Shell>
+                <div style={{ padding: 20, background: "rgba(239, 68, 68, 0.1)", border: "1px solid #ef4444", borderRadius: 12, color: "#fca5a5" }}>
+                    <h3 style={{ margin: "0 0 8px" }}>Error Loading Mock Report</h3>
+                    <p style={{ margin: 0, fontSize: "0.85rem" }}>{error}</p>
+                    <button onClick={onBack} style={{ marginTop: 12, background: "#ef4444", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 6, cursor: "pointer" }}>Go Back</button>
+                </div>
+            </Shell>
+        );
+    }
+
     return (
         <Shell>
             <h2 style={{ margin: "0 0 4px", fontSize: "1.4rem", fontWeight: 800, background: "linear-gradient(to right,#a78bfa,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                Sentiment Analysis
+                Sentiment Analysis (Mock Test Mode)
             </h2>
             
             {/* Dynamic Metadata Section */}
@@ -509,7 +348,7 @@ function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, g
                                                         <p style={{ margin: "0 0 8px", fontSize: "0.7rem", color: "#10b981", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Most Positive Feedback</p>
                                                         {s.top_positive_phrases.slice(0, 2).map((p, i) => (
                                                             <div key={i} style={{ background: "rgba(16,185,129,0.05)", borderRadius: 6, padding: "8px 12px", marginBottom: 6, borderLeft: "2px solid #10b981" }}>
-                                                                <div style={{ fontSize: "0.7rem", color: "#6b7280", marginBottom: 3 }}>{p.author} · {p.date}</div>
+                                                                <div style={{ fontSize: "0.7rem", color: "#6b7280", marginBottom: 3 }}>{p.author || "Guest"} · {p.date || "Recent"}</div>
                                                                 <p style={{ margin: 0, fontSize: "0.8rem", color: "#9ca3af", fontStyle: "italic" }}>"{p.text}…"</p>
                                                             </div>
                                                         ))}
@@ -521,7 +360,7 @@ function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, g
                                                         <p style={{ margin: "0 0 8px", fontSize: "0.7rem", color: "#ef4444", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Most Critical Feedback</p>
                                                         {s.top_negative_phrases.slice(0, 2).map((p, i) => (
                                                             <div key={i} style={{ background: "rgba(239,68,68,0.05)", borderRadius: 6, padding: "8px 12px", marginBottom: 6, borderLeft: "2px solid #ef4444" }}>
-                                                                <div style={{ fontSize: "0.7rem", color: "#6b7280", marginBottom: 3 }}>{p.author} · {p.date}</div>
+                                                                <div style={{ fontSize: "0.7rem", color: "#6b7280", marginBottom: 3 }}>{p.author || "Guest"} · {p.date || "Recent"}</div>
                                                                 <p style={{ margin: 0, fontSize: "0.8rem", color: "#9ca3af", fontStyle: "italic" }}>"{p.text}…"</p>
                                                             </div>
                                                         ))}
@@ -538,171 +377,4 @@ function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, g
             )}
         </Shell>
     );
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
-export default function SentimentAnalysis({ baseUrl, onBack, city, country, establishmentName, originLat, originLng, radiusKm, daysBack = 30 }) {
-    const BASE = (baseUrl || "").replace(/\/+$/, "");
-    const [phase, setPhase] = useState("searching");
-    const [taskId, setTaskId] = useState(null);
-    const [progress, setProgress] = useState(0);
-    const [statusMessage, setStatusMessage] = useState("Starting search...");
-    const [places, setPlaces] = useState([]);
-    const [checkedPlaces, setCheckedPlaces] = useState({});
-    const [results, setResults] = useState([]);
-    const [combined, setCombined] = useState(null);
-    const [generatedAt, setGeneratedAt] = useState("");
-    const pollRef = useRef(null);
-
-    const createClientTimestamp = () => {
-        return new Date().toLocaleString("en-US", {
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: true,
-        });
-    };
-
-    useEffect(() => { startSearch(); }, []);
-
-    const startSearch = async () => {
-        try {
-            const resp = await axios.post(`${BASE}/api/hotel-sentiment/search`, {
-                city, country, establishment_name: establishmentName,
-                radius_km: radiusKm, limit: 100,
-                origin_lat: originLat, origin_lng: originLng,
-            });
-            setTaskId(resp.data.task_id);
-        } catch (err) { 
-            alert(`Search failed: ${err.message}`); 
-            onBack(); 
-        }
-    };
-
-    useEffect(() => {
-        if (!taskId) return;
-
-        const poll = async () => {
-            try {
-                const resp = await axios.get(`${BASE}/api/hotel-sentiment/progress/${taskId}`);
-                const data = resp.data;
-                setProgress(data.progress || 0);
-                setStatusMessage(data.status_message || "");
-
-                if (data.status === "ready_for_approval") {
-                    clearInterval(pollRef.current);
-                    setStatusMessage(data.status_message);
-                    await new Promise(r => setTimeout(r, 1200));
-                    const all = data.places || [];
-                    setPlaces(all);
-                    const checked = {}; 
-                    all.forEach((p, i) => { checked[i] = p.selected !== false; }); 
-                    setCheckedPlaces(checked);
-                    setPhase("approving");
-                } else if (data.status === "completed") {
-                    clearInterval(pollRef.current);
-                    setResults(data.results || []); 
-                    setCombined(data.combined_report || {}); 
-                    setGeneratedAt(createClientTimestamp());
-                    setPhase("complete");
-                } else if (data.status === "error") {
-                    clearInterval(pollRef.current); 
-                    alert(`Error: ${data.error}`); 
-                    onBack();
-                }
-            } catch (err) { 
-                console.error("Poll error:", err.message); 
-            }
-        };
-
-        poll();
-        // Set polling interval to 3 seconds to account for Hugging Face batch inference processing
-        pollRef.current = setInterval(poll, 3000);
-        return () => clearInterval(pollRef.current);
-    }, [taskId]);
-
-    const togglePlace = (i) => setCheckedPlaces(prev => ({ ...prev, [i]: !prev[i] }));
-    const selectedCount = Object.values(checkedPlaces).filter(Boolean).length;
-
-    const handleApprove = async () => {
-        const approved = places.map((p, i) => ({ ...p, selected: checkedPlaces[i] !== false }));
-        setPhase("analysing"); 
-        setProgress(0); 
-        setStatusMessage("Initializing Neural Transformer Pipeline...");
-
-        try {
-            const resp = await axios.post(`${BASE}/api/hotel-sentiment/analyse`, {
-                task_id: taskId, approved_places: approved,
-                establishment_name: establishmentName, days_back: daysBack,
-            });
-            
-            clearInterval(pollRef.current);
-            pollRef.current = setInterval(async () => {
-                try {
-                    const poll = await axios.get(`${BASE}/api/hotel-sentiment/progress/${resp.data.task_id}`);
-                    const data = poll.data;
-                    setProgress(data.progress || 0); 
-                    setStatusMessage(data.status_message || "");
-
-                    if (data.status === "completed") { 
-                        clearInterval(pollRef.current); 
-                        setResults(data.results || []); 
-                        setCombined(data.combined_report || {}); 
-                        setGeneratedAt(createClientTimestamp());
-                        setPhase("complete"); 
-                    }
-                    else if (data.status === "error") { 
-                        clearInterval(pollRef.current); 
-                        alert(`Error: ${data.error}`); 
-                        setPhase("approving"); 
-                    }
-                } catch (err) { 
-                    console.error("Poll error:", err.message); 
-                }
-            }, 3000);
-        } catch (err) { 
-            alert(`Failed: ${err.message}`); 
-            setPhase("approving"); 
-        }
-    };
-
-    if (phase === "searching" || phase === "analysing") {
-        return (
-            <div className="app-container">
-                <div className="animated-background"><div className="gradient-overlay" /><div className="dot-pattern" /></div>
-                <div className="content-container">
-                    <div style={{ maxWidth: 600, margin: "0 auto", padding: "4rem 1rem", textAlign: "center" }}>
-                        <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 24px", background: "conic-gradient(#9333ea,#4f46e5,#9333ea 30%,#1f2937 30%)", animation: "spin 1.2s linear infinite" }} />
-                        <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
-                        <h2 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 8, background: "linear-gradient(to right,#a78bfa,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                            {phase === "analysing" ? "Deep Learning Inference Running" : `Finding Your Competitors`}
-                        </h2>
-                        <p style={{ color: "#9ca3af", fontSize: "0.85rem", marginBottom: 20 }}>{statusMessage || "Processing neural models..."}</p>
-                        <div style={{ height: 6, background: "#1f2937", borderRadius: 3, overflow: "hidden", maxWidth: 400, margin: "0 auto 8px" }}>
-                            <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(to right,#9333ea,#4f46e5)", borderRadius: 3, transition: "width 0.5s" }} />
-                        </div>
-                        <span style={{ fontSize: "0.75rem", color: "#6b7280" }}>{progress}%</span>
-                        {phase === "analysing" && (
-                            <p style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 16, lineHeight: 1.5 }}>
-                                Evaluating hotel reviews using transformer models. <br />
-                                Deep learning inference takes slightly longer than standard tools—please keep this tab open.
-                            </p>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    if (phase === "approving") {
-        return <ApprovingPhase places={places} checkedPlaces={checkedPlaces} togglePlace={togglePlace} selectedCount={selectedCount} establishmentName={establishmentName} originLat={originLat} originLng={originLng} radiusKm={radiusKm} city={city} onApprove={handleApprove} onBack={onBack} />;
-    }
-
-    if (phase === "complete") {
-        return <Results results={results} combined={combined} city={city} daysBack={daysBack} onBack={onBack} taskId={taskId} baseUrl={BASE} generatedAt={generatedAt} />;
-    }
-
-    return null;
 }

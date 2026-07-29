@@ -48,6 +48,7 @@ from .competitor_routes import router as competitor_router
 from .review_analysis_routes import router as review_analysis_router
 from .hotel_sentiment_routes import router as hotel_sentiment_router
 from .feedback_routes import router as feedback_router
+from .qr_datacube_routes import router as qr_router
 
 
 # ─── Logging ────────────────────────────────────────────────────────────────
@@ -88,6 +89,7 @@ app.include_router(competitor_router)
 app.include_router(review_analysis_router, prefix="/api/review-analysis")
 app.include_router(hotel_sentiment_router)
 app.include_router(feedback_router, prefix="/api/feedback")
+app.include_router(qr_router)
 
 tasks = {}
 csv_tasks: dict[str, dict] = {}

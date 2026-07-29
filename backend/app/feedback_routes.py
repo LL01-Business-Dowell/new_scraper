@@ -219,6 +219,7 @@ def _save_to_datacube(
     description: str,
     file_id: str,
     emotion_metrics: dict = None,
+    raw_emotion_distribution: dict = None,
     fused_metrics: dict = None,
     transcript: str = "",
     transcript_analysis: dict = None
@@ -239,6 +240,7 @@ def _save_to_datacube(
             "transcript_analysis": transcript_analysis or {},
             "audio_file": f"{file_id}.wav",
             "audio_analysis": emotion_metrics or {},
+            "raw_emotion_distribution": raw_emotion_distribution or {},
             "dashboard_metrics": fused_metrics,
             "submitted_at": datetime.datetime.utcnow().isoformat() + "Z",
         }
@@ -365,6 +367,8 @@ async def submit_feedback(
         final_file_id = file_id or new_file_id
 
         emotion_data = None
+        raw_emotions = None
+
         try:
             feedback_resp = http_requests.post(
                 AUDIO_ANALYSIS_API_URL,
@@ -375,6 +379,7 @@ async def submit_feedback(
                 res_json = feedback_resp.json()
                 if res_json.get("status") == "success":
                     emotion_data = res_json.get("dashboard_metrics")
+                    raw_emotions = res_json.get("raw_emotion_distribution")
         except Exception as e:
             logger.warning(f"[FEEDBACK] Audio analysis error: {e}")
 
@@ -393,6 +398,7 @@ async def submit_feedback(
             description=description,
             file_id=final_file_id,
             emotion_metrics=emotion_data,
+            raw_emotion_distribution=raw_emotions,
             fused_metrics=fused_metrics,
             transcript="",
             transcript_analysis={}
