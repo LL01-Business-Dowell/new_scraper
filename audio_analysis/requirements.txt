@@ -1,8 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 django
 djangorestframework
 django-cors-headers
-torch --index-url https://download.pytorch.org/whl/cpu
-torchaudio --index-url https://download.pytorch.org/whl/cpu
+torch
+torchaudio
 transformers
 pydub
 scipy
