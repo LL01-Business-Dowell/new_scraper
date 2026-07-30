@@ -67,15 +67,29 @@ jobs:
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST "bash -s" << 'ENDSSH'
             set -e
+            cd /home/SamantaScraper
+
+            echo "=== Enabling Single-Threaded Sequential BuildKit ==="
             export DOCKER_BUILDKIT=1
             export COMPOSE_DOCKER_CLI_BUILD=1
-            cd /home/SamantaScraper
-            echo "=== Building updated services ==="
-            docker compose build
+            export BUILDKIT_PARALLEL_LIMIT=1
+
+            echo "=== Pruning previous build cache to free memory ==="
+            docker builder prune -f || true
+
+            echo "=== Building Backend Service ==="
+            docker compose build --parallel=false backend
+
+            echo "=== Building Audio Analysis Service ==="
+            docker compose build --parallel=false audio_analysis
+
             echo "=== Restarting containers ==="
             docker compose up -d
-            echo "=== Cleaning dangling images ==="
-            docker image prune -f
+
+            echo "=== Cleaning build cache and dangling images ==="
+            docker builder prune -f || true
+            docker image prune -f || true
+
             echo "=== Running containers ==="
             docker compose ps
             echo "=== Deployment complete ==="
