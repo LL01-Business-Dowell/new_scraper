@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, QrCode, Plus, RefreshCw, CheckCircle2, AlertCircle, Link as LinkIcon, UserPlus } from 'lucide-react';
+import { Building2, QrCode, Plus, RefreshCw, CheckCircle2, AlertCircle, Link as LinkIcon, UserPlus, Download, FileText } from 'lucide-react';
 import QRCode from 'qrcode';
 import axios from 'axios';
+import { jsPDF } from 'jspdf';
 
 export default function FeedbackQrManager() {
   const [clients, setClients] = useState([]);
@@ -13,6 +14,7 @@ export default function FeedbackQrManager() {
   const [loadingQrs, setLoadingQrs] = useState(false);
   const [creating, setCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   
   // Add Client State
   const [showAddClient, setShowAddClient] = useState(false);
@@ -31,6 +33,22 @@ export default function FeedbackQrManager() {
   });
 
   const [activeQrImage, setActiveQrImage] = useState(null);
+
+  // Auto-dismiss success notifications
+  useEffect(() => {
+    if (successMsg) {
+      const timer = setTimeout(() => setSuccessMsg(''), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMsg]);
+
+  // Auto-dismiss error notifications
+  useEffect(() => {
+    if (errorMsg) {
+      const timer = setTimeout(() => setErrorMsg(''), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMsg]);
 
   // 1. Fetch Client List on Load
   useEffect(() => {
@@ -72,10 +90,10 @@ export default function FeedbackQrManager() {
       const res = await axios.get(`/api/feedback-qr/qrs/${clientName}`);
       const rawQrs = res.data.qr_codes || [];
 
-      // Generate QR Code image data URLs for display
+      // Generate high-res QR Code image data URLs for display & export
       const processedQrs = await Promise.all(
         rawQrs.map(async (item) => {
-          const qrDataUrl = await QRCode.toDataURL(item.target_url || `https://feedback?id=${item.full_id}`, { width: 150 });
+          const qrDataUrl = await QRCode.toDataURL(item.target_url || `https://reviewanalysis.uxlivinglab.org/feedback?id=${item.sequence_number || item.full_id}`, { width: 300, margin: 1 });
           return { ...item, qrDataUrl };
         })
       );
@@ -109,7 +127,6 @@ export default function FeedbackQrManager() {
       setNewClientName('');
       setShowAddClient(false);
 
-      // Refresh clients dropdown and auto-select new client
       await fetchClients(createdClient);
     } catch (err) {
       setErrorMsg(err.response?.data?.detail || 'Failed to add new client.');
@@ -128,7 +145,7 @@ export default function FeedbackQrManager() {
     setSuccessMsg('');
 
     if (!formData.name || !formData.room_number || !formData.user_id) {
-      setErrorMsg('Please fill in all fields (Name, Room Number, Alphanumeric ID).');
+      setErrorMsg('Please fill in all fields (Name, Room Number, ID).');
       return;
     }
 
@@ -145,21 +162,123 @@ export default function FeedbackQrManager() {
       const res = await axios.post('/api/feedback-qr/create', payload);
       const newRecord = res.data.record;
 
-      // Generate QR Image for the new item
-      const qrDataUrl = await QRCode.toDataURL(newRecord.target_url, { width: 150 });
+      const qrDataUrl = await QRCode.toDataURL(newRecord.target_url, { width: 300, margin: 1 });
       const fullRecord = { ...newRecord, qrDataUrl };
 
-      // Update frontend list seamlessly
       setQrList((prev) => [fullRecord, ...prev]);
 
-      // Reset Form & show success notice
       setFormData({ name: '', room_number: '', user_id: '' });
-      setSuccessMsg(`QR Code generated successfully! ID assigned: ${newRecord.full_id}`);
+      setSuccessMsg(`QR Code generated successfully! ID assigned: ${newRecord.sequence_number || newRecord.full_id}`);
       setShowCreateForm(false);
     } catch (err) {
       setErrorMsg(err.response?.data?.detail || 'Failed to create QR code.');
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Single QR PNG Download
+  const downloadSingleQr = (qrItem) => {
+    const link = document.createElement('a');
+    link.href = qrItem.qrDataUrl;
+    link.download = `QR_${selectedClient}_${qrItem.sequence_number || qrItem.full_id}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // PDF Export for All Client QRs (Exact 3cm x 3cm QR Image + Cutout Box)
+  const downloadAllQrsAsPdf = async () => {
+    if (!qrList || qrList.length === 0) return;
+    setGeneratingPdf(true);
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = 210;  // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const marginX = 12;
+      const marginY = 15;
+      
+      // 1. EXACT QR CODE SIZE: 3cm x 3cm (30mm x 30mm)
+      const qrSize = 30;
+
+      // 2. CUTOUT CARD SIZE: 3.6cm wide x 4.8cm high (Fits QR + text with breathing room)
+      const cardWidth = 36;  
+      const cardHeight = 48; 
+      
+      const gapX = 4; // Horizontal spacing between boxes
+      const gapY = 4; // Vertical spacing between boxes
+
+      // Grid: Fits 4 across (4 x 36mm = 144mm) and 5 down (5 x 48mm = 240mm) = 20 cutouts per page
+      const cols = Math.floor((pageWidth - marginX * 2 + gapX) / (cardWidth + gapX)); 
+      const rows = Math.floor((pageHeight - marginY * 2 - 15 + gapY) / (cardHeight + gapY)); 
+      const itemsPerPage = cols * rows;
+
+      // Document Header
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`QR Codes - ${selectedClient.toUpperCase()}`, marginX, marginY);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, marginX, marginY + 4);
+
+      let startY = marginY + 10;
+
+      for (let i = 0; i < qrList.length; i++) {
+        const item = qrList[i];
+        
+        // Page break logic
+        const pageItemIndex = i % itemsPerPage;
+        if (i > 0 && pageItemIndex === 0) {
+          doc.addPage();
+          startY = marginY;
+        }
+
+        const colIndex = pageItemIndex % cols;
+        const rowIndex = Math.floor(pageItemIndex / cols);
+
+        // Coordinates for outer box
+        const x = marginX + colIndex * (cardWidth + gapX);
+        const y = startY + rowIndex * (cardHeight + gapY);
+
+        // A. Draw Dotted Outer Cutout Box
+        doc.setLineWidth(0.3);
+        doc.setDrawColor(150, 150, 150);
+        doc.setLineDashPattern([2, 2], 0);
+        doc.rect(x, y, cardWidth, cardHeight);
+        doc.setLineDashPattern([], 0); // Reset dash style
+
+        // B. Add QR Image (Exact 3cm x 3cm) centered horizontally
+        const qrX = x + (cardWidth - qrSize) / 2;
+        const qrY = y + 3; // 3mm top padding inside box
+        doc.addImage(item.qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+
+        // C. Room / Name Label
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 41, 59);
+        const displayName = item.name ? `${item.name}` : `Rm ${item.room_number}`;
+        doc.text(displayName, x + cardWidth / 2, qrY + qrSize + 4.5, { align: 'center', maxWidth: cardWidth - 4 });
+
+        // D. Sequential ID Label
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(37, 99, 235);
+        doc.text(`ID: ${item.sequence_number || item.full_id}`, x + cardWidth / 2, qrY + qrSize + 9.5, { align: 'center' });
+      }
+
+      doc.save(`${selectedClient}_3cm_qrcodes.pdf`);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      setErrorMsg('Failed to generate PDF document.');
+    } finally {
+      setGeneratingPdf(false);
     }
   };
 
@@ -175,9 +294,6 @@ export default function FeedbackQrManager() {
                 <QrCode className="w-7 h-7 text-blue-600" />
                 Feedback QR Code Manager
               </h1>
-              <p className="text-xs text-slate-500 mt-1">
-                DataCube Database: <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-blue-600">feedback_qr</code>
-              </p>
             </div>
 
             {/* Client Selection Dropdown & Add Client Trigger */}
@@ -237,16 +353,16 @@ export default function FeedbackQrManager() {
           )}
         </div>
 
-        {/* Notifications */}
+        {/* Notifications (Auto-fading) */}
         {errorMsg && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center gap-2">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center gap-2 animate-fade-in">
             <AlertCircle className="w-5 h-5 shrink-0" />
             {errorMsg}
           </div>
         )}
 
         {successMsg && (
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm flex items-center gap-2">
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm flex items-center gap-2 animate-fade-in">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
             {successMsg}
           </div>
@@ -254,25 +370,38 @@ export default function FeedbackQrManager() {
 
         {/* Action Header & Seamless Create Form */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <h2 className="text-lg font-bold text-slate-900">
               QR Codes for <span className="text-blue-600 uppercase">{selectedClient || 'Select Client'}</span>
             </h2>
-            <button
-              onClick={() => setShowCreateForm(!showCreateForm)}
-              disabled={!selectedClient}
-              className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition flex items-center gap-1.5 shadow-sm disabled:bg-slate-300"
-            >
-              <Plus className="w-4 h-4" />
-              {showCreateForm ? 'Cancel' : 'Create New QR Code'}
-            </button>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={downloadAllQrsAsPdf}
+                disabled={!selectedClient || qrList.length === 0 || generatingPdf}
+                className="px-4 py-2 bg-slate-800 text-white text-xs font-semibold rounded-xl hover:bg-slate-900 transition flex items-center gap-1.5 shadow-sm disabled:bg-slate-300"
+                title="Download printable cut-out PDF sheet"
+              >
+                {generatingPdf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4 text-emerald-400" />}
+                {generatingPdf ? 'Building PDF...' : 'Export To PDF'}
+              </button>
+
+              <button
+                onClick={() => setShowCreateForm(!showCreateForm)}
+                disabled={!selectedClient}
+                className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 transition flex items-center gap-1.5 shadow-sm disabled:bg-slate-300"
+              >
+                <Plus className="w-4 h-4" />
+                {showCreateForm ? 'Cancel' : 'Create New QR Code'}
+              </button>
+            </div>
           </div>
 
-          {/* Inline Seamless Form */}
+          {/* Inline Form */}
           {showCreateForm && (
             <form onSubmit={handleCreateQr} className="pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Name / Tag</label>
+                <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Name</label>
                 <input
                   type="text"
                   name="name"
@@ -284,7 +413,7 @@ export default function FeedbackQrManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Room / Location Number</label>
+                <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Room Number</label>
                 <input
                   type="text"
                   name="room_number"
@@ -296,7 +425,7 @@ export default function FeedbackQrManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Alphanumeric ID Prefix</label>
+                <label className="block text-xs font-medium text-slate-500 uppercase mb-1"> ID </label>
                 <input
                   type="text"
                   name="user_id"
@@ -314,7 +443,7 @@ export default function FeedbackQrManager() {
                   className="px-6 py-2.5 bg-emerald-600 text-white font-semibold text-xs rounded-xl hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm disabled:bg-slate-300"
                 >
                   {creating && <RefreshCw className="w-4 h-4 animate-spin" />}
-                  {creating ? 'Saving to DataCube...' : 'Generate & Save QR'}
+                  {creating ? 'Saving to DataCube...' : 'Generate QR Code'}
                 </button>
               </div>
             </form>
@@ -338,10 +467,10 @@ export default function FeedbackQrManager() {
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase font-semibold">
                   <tr>
                     <th className="py-3 px-4">QR</th>
-                    <th className="py-3 px-4">Full Generated ID</th>
                     <th className="py-3 px-4">Name</th>
                     <th className="py-3 px-4">Room No.</th>
-                    <th className="py-3 px-4">Target Link</th>
+                    <th className="py-3 px-4">Link</th>
+                    <th className="py-3 px-4 text-right">Download</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -357,9 +486,6 @@ export default function FeedbackQrManager() {
                           />
                         )}
                       </td>
-                      <td className="py-3 px-4 font-mono font-bold text-blue-600">
-                        {qr.full_id}
-                      </td>
                       <td className="py-3 px-4 font-medium text-slate-800">{qr.name}</td>
                       <td className="py-3 px-4 text-slate-600">{qr.room_number}</td>
                       <td className="py-3 px-4">
@@ -372,6 +498,16 @@ export default function FeedbackQrManager() {
                           <LinkIcon className="w-3 h-3 shrink-0" />
                           {qr.target_url}
                         </a>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          onClick={() => downloadSingleQr(qr)}
+                          className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition"
+                          title="Download PNG QR Code"
+                        >
+                          <Download className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="hidden sm:inline">PNG</span>
+                        </button>
                       </td>
                     </tr>
                   ))}

@@ -136,7 +136,7 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
     return (
         <Shell>
             <h2 style={{ margin: "0 0 4px", fontSize: "1.4rem", fontWeight: 800, background: "linear-gradient(to right,#a78bfa,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                Sentiment Analysis (Mock Test Mode)
+                Sentiment Analysis
             </h2>
             
             {/* Dynamic Metadata Section */}

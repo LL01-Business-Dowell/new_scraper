@@ -16,8 +16,6 @@ services:
       CRUD_COORDS_PATH: /crud
       CRUD_RESULTS_PATH: /crud
       SESSION_COLLECTION_NAME: csv_chat_sessions
-      CRUD_API_KEY: ${CRUD_API_KEY}
-      DATABASE_ID: ${DATABASE_ID}
     shm_size: "512mb"
     depends_on:
       - audio-analysis
@@ -33,7 +31,7 @@ services:
       - "8002:8002"
     restart: unless-stopped
     env_file:
-      - ./inscribing_proj/dev.env
+      - .env
     environment:
       PYTHONUNBUFFERED: 1
     networks:
@@ -46,6 +44,8 @@ services:
     ports:
       - "8003:8003"
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       PYTHONUNBUFFERED: 1
     networks:
@@ -56,7 +56,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: https://reviewanalysis.uxlivinglab.org/api
+        VITE_API_URL: ${VITE_API_URL:-https://reviewanalysis.uxlivinglab.org/api}
         VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
     container_name: frontend_container
     restart: unless-stopped

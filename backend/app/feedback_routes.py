@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 CRUD_BASE_URL = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
-CRUD_API_KEY = os.getenv("CRUD_API_KEY", "")
+CRUD_API_KEY = os.getenv("FEEDBACK_CRUD_API_KEY", "")
 MASTER_DATABASE_ID = "695ce92eff84eaf663c457c2"
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"

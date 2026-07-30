@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/hotel-sentiment", tags=["Sentiment Analysis"])
 # 🎛️ CONFIGURATION SWITCH
 # Set to True to test locally with zero Apify credits used.
 # Set to False to run live scraping via Apify on Google Maps reviews.
-USE_MOCK_DATA = True
+USE_MOCK_DATA = False
 # ─────────────────────────────────────────────────────────────────────────────
 
 # In-memory task store
