@@ -413,11 +413,11 @@ export default function FeedbackQrManager() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Room Number</label>
+                <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Room Number/Location</label>
                 <input
                   type="text"
                   name="room_number"
-                  placeholder="e.g. 1004"
+                  placeholder="e.g. 1004 / Restaurant"
                   value={formData.room_number}
                   onChange={handleInputChange}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-sm outline-none focus:border-blue-600"
