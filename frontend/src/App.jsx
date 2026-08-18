@@ -42,6 +42,10 @@ const KEYWORD_OPTIONS = [
   { group: "Food & Beverage", value: "Cafe" },
   { group: "Food & Beverage", value: "Restaurant" },
   { group: "Food & Beverage", value: "Bakery" },
+  // Hospitality & Lodging
+  { group: "Hospitality", value: "Hotel" },
+  { group: "Hospitality", value: "Resort" },
+  { group: "Hospitality", value: "Luxury Hotel" },
 ];
 
 // ---------------------------------------------------------------------------

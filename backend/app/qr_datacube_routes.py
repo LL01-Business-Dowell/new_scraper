@@ -247,7 +247,7 @@ async def create_qr_code(req: CreateQrRequest):
         
         # 2. Combine user alphanumeric ID with sequence ID
         full_id = f"{req.user_id.strip()}-{next_seq}"
-        target_url = f"https://reviewanalysis.uxlivinglab.org/feedback?id={next_seq}"
+        target_url = f"https://reviewanalysis.uxlivinglab.org/feedback?id={full_id}"
         
         doc = {
             "name": req.name,

@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     ffmpeg \
+    libjpeg-dev \
+    zlib1g-dev \
     libgomp1 \
     libglib2.0-0 \
     libnss3 \

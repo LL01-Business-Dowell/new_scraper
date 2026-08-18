@@ -22,6 +22,9 @@ const KEYWORD_OPTIONS = [
   { group: "Food & Beverage", value: "Cafe" },
   { group: "Food & Beverage", value: "Restaurant" },
   { group: "Food & Beverage", value: "Bakery" },
+  { group: "Hospitality", value: "Hotel" },
+  { group: "Hospitality", value: "Resort" },
+  { group: "Hospitality", value: "Luxury Hotel" },
 ];
 
 const REPORT_TYPES = [

@@ -37,7 +37,7 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
     const [results, setResults] = useState([]);
     const [combined, setCombined] = useState(null);
     const [generatedAt, setGeneratedAt] = useState("");
-    
+
     const [activeTab, setActiveTab] = useState("combined");
     const [expandedIdx, setExpandedIdx] = useState(null);
     const [rankingCollapsed, setRankingCollapsed] = useState(false);
@@ -59,7 +59,7 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
             try {
                 setLoading(true);
                 const response = await axios.post(`${BASE}/api/hotel-sentiment/test-instant`);
-                
+
                 if (response.data) {
                     setResults(response.data.results || []);
                     setCombined(response.data.combined_report || {});
@@ -77,9 +77,33 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
         fetchTestData();
     }, [BASE]);
 
-    const downloadPdf = () => {
-        const encodedTime = encodeURIComponent(generatedAt || "");
-        window.open(`${BASE}/api/hotel-sentiment/report/pdf/${taskId}?client_time=${encodedTime}`, "_blank");
+    const downloadPdf = async () => {
+        try {
+            const encodedTime = encodeURIComponent(generatedAt || "");
+
+            // Fetch the PDF stream directly using Axios
+            const response = await axios.get(
+                `${BASE}/api/hotel-sentiment/report/pdf/${taskId}?client_time=${encodedTime}`,
+                { responseType: "blob" }
+            );
+
+            // Convert response data into a downloadable blob link
+            const blob = new Blob([response.data], { type: "application/pdf" });
+            const downloadUrl = window.URL.createObjectURL(blob);
+
+            const link = document.createElement("a");
+            link.href = downloadUrl;
+            link.setAttribute("download", `Sentiment_Report_${taskId}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+
+            // Cleanup memory
+            link.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (err) {
+            console.error("PDF download error:", err);
+            alert("Failed to download PDF report. Ensure your backend server is active.");
+        }
     };
 
     const modelEngine = combined?.model_engine || "Hugging Face Transformer (Mock)";
@@ -138,13 +162,13 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
             <h2 style={{ margin: "0 0 4px", fontSize: "1.4rem", fontWeight: 800, background: "linear-gradient(to right,#a78bfa,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                 Sentiment Analysis
             </h2>
-            
+
             {/* Dynamic Metadata Section */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 0 20px" }}>
                 <p style={{ margin: 0, color: "#6b7280", fontSize: "0.82rem" }}>
                     {results.length} hotels analysed · Last {daysBack} days
                 </p>
-                
+
                 {/* AI Engine Badge
                 <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: 6, padding: "2px 8px", fontSize: "0.75rem", color: "#34d399" }}>
                     <FaBrain style={{ fontSize: 10 }} />
@@ -169,6 +193,7 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
             {/* COMBINED REPORT */}
             {activeTab === "combined" && combined && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {/* KPI Grid */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
                         {[
                             { label: "Hotels Analysed", value: combined.total_analysed, color: "#a78bfa" },
@@ -185,6 +210,7 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                         ))}
                     </div>
 
+                    {/* Sentiment Distribution */}
                     <div style={{ background: "#1A1E2E", borderRadius: 12, padding: 20, border: "1px solid #374151" }}>
                         <p style={{ margin: "0 0 14px", fontSize: "0.72rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Overall Sentiment Distribution</p>
                         {[{ label: "Positive", pct: combined.positive_pct || 0, color: "#10b981" }, { label: "Neutral", pct: combined.neutral_pct || 0, color: "#f59e0b" }, { label: "Negative", pct: combined.negative_pct || 0, color: "#ef4444" }].map(({ label, pct, color }) => (
@@ -198,6 +224,7 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                         ))}
                     </div>
 
+                    {/* Sentiment Ranking */}
                     {combined.sentiment_ranking?.length > 0 && (
                         <div style={{ background: "#1A1E2E", borderRadius: 12, border: "1px solid #374151", overflow: "hidden" }}>
                             <div
@@ -234,34 +261,54 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                         </div>
                     )}
 
-                    {combined.combined_themes && Object.keys(combined.combined_themes).length > 0 && (
+                    {/* TOUCHPOINT ANALYSIS: Replaces Topic Frequency & Market Insights */}
+                    {combined.combined_journey && Object.keys(combined.combined_journey).length > 0 && (
                         <div style={{ background: "#1A1E2E", borderRadius: 12, padding: 20, border: "1px solid #374151" }}>
-                            <p style={{ margin: "0 0 14px", fontSize: "0.72rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Topic Frequency Across All Hotels</p>
-                            {Object.entries(combined.combined_themes).map(([topic, count]) => {
-                                const maxC = Math.max(...Object.values(combined.combined_themes), 1);
-                                return (
-                                    <div key={topic} style={{ marginBottom: 12 }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                                            <span style={{ fontSize: "0.82rem", color: "#d1d5db", fontWeight: 600 }}>{topic}</span>
-                                            <span style={{ fontSize: "0.78rem", color: "#a78bfa", fontWeight: 700 }}>{count}</span>
-                                        </div>
-                                        <Bar ratio={count / maxC} color="#818cf8" height={10} />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                            <p style={{ margin: "0 0 14px", fontSize: "0.72rem", color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>
+                                Customer Journey Touchpoint Analysis
+                            </p>
 
-                    {combined.insights?.length > 0 && (
-                        <div style={{ background: "rgba(147,51,234,0.06)", borderRadius: 12, padding: 18, border: "1px solid rgba(147,51,234,0.2)" }}>
-                            <p style={{ margin: "0 0 14px", fontSize: "0.72rem", color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Market Insights & Analysis</p>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                                {combined.insights.map((insight, i) => (
-                                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                                        <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, background: "linear-gradient(to right,#9333ea,#4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.62rem", fontWeight: 800, color: "#fff" }}>{i + 1}</div>
-                                        <p style={{ margin: 0, fontSize: "0.83rem", color: "#d1d5db", lineHeight: 1.6 }}>{insight}</p>
-                                    </div>
-                                ))}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                                {Object.entries(combined.combined_journey).map(([phaseName, subDict]) => {
+                                    const pos = Object.values(subDict).reduce((acc, curr) => acc + curr.pos, 0);
+                                    const neu = Object.values(subDict).reduce((acc, curr) => acc + curr.neu, 0);
+                                    const neg = Object.values(subDict).reduce((acc, curr) => acc + curr.neg, 0);
+                                    const total = pos + neu + neg;
+
+                                    if (total === 0) return null;
+
+                                    return (
+                                        <div key={phaseName} style={{ background: "#111827", padding: 14, borderRadius: 8, border: "1px solid #1f2937" }}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                                                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f3f4f6" }}>{phaseName}</span>
+                                                <div style={{ display: "flex", gap: 10, fontSize: "0.75rem", fontWeight: 600 }}>
+                                                    <span style={{ color: "#10b981" }}>+{pos}</span>
+                                                    <span style={{ color: "#f59e0b" }}>~{neu}</span>
+                                                    <span style={{ color: "#ef4444" }}>-{neg}</span>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                                {Object.entries(subDict).map(([subName, counts]) => {
+                                                    const subTotal = counts.pos + counts.neu + counts.neg;
+                                                    if (subTotal === 0) return null;
+
+                                                    return (
+                                                        <div key={subName} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#1A1E2E", padding: "6px 10px", borderRadius: 4, fontSize: "0.75rem" }}>
+                                                            <span style={{ color: "#9ca3af" }}>• {subName}</span>
+                                                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                                                <span style={{ color: "#10b981" }}>{counts.pos}</span>
+                                                                <span style={{ color: "#f59e0b" }}>{counts.neu}</span>
+                                                                <span style={{ color: "#ef4444" }}>{counts.neg}</span>
+                                                                <span style={{ color: "#6b7280", borderLeft: "1px solid #374151", paddingLeft: 6 }}>{subTotal}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -272,15 +319,15 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
             {activeTab === "individual" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {results.map((r, idx) => {
-                        const s = r.sentiment || {}; 
+                        const s = r.sentiment || {};
                         const score = s.overall_score;
                         const isUser = r.is_user_establishment;
                         const isExp = expandedIdx === idx;
-                        const pos = s.positive_count || 0; 
-                        const neu = s.neutral_count || 0; 
-                        const neg = s.negative_count || 0; 
+                        const pos = s.positive_count || 0;
+                        const neu = s.neutral_count || 0;
+                        const neg = s.negative_count || 0;
                         const total = pos + neu + neg || 1;
-                        
+
                         return (
                             <div key={idx} style={{ background: "#1A1E2E", borderRadius: 12, border: `1px solid ${isUser ? "rgba(245,158,11,0.4)" : "#374151"}`, overflow: "hidden" }}>
                                 <div onClick={() => setExpandedIdx(isExp ? null : idx)} style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", background: isExp ? "rgba(147,51,234,0.06)" : "transparent", transition: "background 0.15s" }}>
@@ -308,7 +355,6 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                                             <p style={{ color: "#4b5563", fontSize: "0.82rem", margin: 0 }}>No reviews found for this period.</p>
                                         ) : (
                                             <>
-                                                {/* Confidence metric indicator if available */}
                                                 {s.confidence_score && (
                                                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, background: "rgba(59, 130, 246, 0.1)", padding: "6px 10px", borderRadius: 6, fontSize: "0.72rem", color: "#60a5fa", border: "1px solid rgba(59, 130, 246, 0.2)" }}>
                                                         <FaInfoCircle />
@@ -327,19 +373,25 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                                                     ))}
                                                 </div>
 
-                                                {s.keyword_themes && (
+                                                {/* TOUCHPOINT BREAKDOWN: Replaces Topics Mentioned */}
+                                                {s.journey_breakdown && (
                                                     <div style={{ marginBottom: 16 }}>
-                                                        <p style={{ margin: "0 0 10px", fontSize: "0.7rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>Topics Mentioned</p>
-                                                        {Object.entries(s.keyword_themes).sort((a, b) => b[1] - a[1]).map(([topic, count]) => {
-                                                            const maxC = Math.max(...Object.values(s.keyword_themes), 1);
-                                                            return (
-                                                                <div key={topic} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                                                                    <span style={{ fontSize: "0.72rem", color: "#9ca3af", width: 120, flexShrink: 0 }}>{topic}</span>
-                                                                    <Bar ratio={count / maxC} color="#818cf8" height={7} />
-                                                                    <span style={{ fontSize: "0.7rem", color: "#a78bfa", fontWeight: 600, width: 40, textAlign: "right", flexShrink: 0 }}>{count}</span>
-                                                                </div>
-                                                            );
-                                                        })}
+                                                        <p style={{ margin: "0 0 10px", fontSize: "0.7rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
+                                                            Touchpoint Mentions
+                                                        </p>
+                                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                                            {Object.entries(s.journey_breakdown).map(([phaseName, subDict]) => {
+                                                                const totalMentions = Object.values(subDict).reduce((acc, c) => acc + c.pos + c.neu + c.neg, 0);
+                                                                if (totalMentions === 0) return null;
+
+                                                                return (
+                                                                    <div key={phaseName} style={{ background: "#111827", padding: 8, borderRadius: 6, fontSize: "0.72rem" }}>
+                                                                        <div style={{ fontWeight: 600, color: "#d1d5db", marginBottom: 4 }}>{phaseName}</div>
+                                                                        <div style={{ color: "#a78bfa" }}>{totalMentions} mention{totalMentions > 1 ? "s" : ""}</div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
                                                     </div>
                                                 )}
 
@@ -348,7 +400,7 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                                                         <p style={{ margin: "0 0 8px", fontSize: "0.7rem", color: "#10b981", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Most Positive Feedback</p>
                                                         {s.top_positive_phrases.slice(0, 2).map((p, i) => (
                                                             <div key={i} style={{ background: "rgba(16,185,129,0.05)", borderRadius: 6, padding: "8px 12px", marginBottom: 6, borderLeft: "2px solid #10b981" }}>
-                                                                <div style={{ fontSize: "0.7rem", color: "#6b7280", marginBottom: 3 }}>{p.author || "Guest"} · {p.date || "Recent"}</div>
+                                                                <div style={{ fontSize: "0.7rem", color: "#6b7280", marginBottom: 3 }}>{p.author} · {p.date}</div>
                                                                 <p style={{ margin: 0, fontSize: "0.8rem", color: "#9ca3af", fontStyle: "italic" }}>"{p.text}…"</p>
                                                             </div>
                                                         ))}
@@ -360,7 +412,7 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                                                         <p style={{ margin: "0 0 8px", fontSize: "0.7rem", color: "#ef4444", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Most Critical Feedback</p>
                                                         {s.top_negative_phrases.slice(0, 2).map((p, i) => (
                                                             <div key={i} style={{ background: "rgba(239,68,68,0.05)", borderRadius: 6, padding: "8px 12px", marginBottom: 6, borderLeft: "2px solid #ef4444" }}>
-                                                                <div style={{ fontSize: "0.7rem", color: "#6b7280", marginBottom: 3 }}>{p.author || "Guest"} · {p.date || "Recent"}</div>
+                                                                <div style={{ fontSize: "0.7rem", color: "#6b7280", marginBottom: 3 }}>{p.author} · {p.date}</div>
                                                                 <p style={{ margin: 0, fontSize: "0.8rem", color: "#9ca3af", fontStyle: "italic" }}>"{p.text}…"</p>
                                                             </div>
                                                         ))}

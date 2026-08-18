@@ -23,6 +23,102 @@
       "date": "3 weeks ago",
       "rating": 5,
       "text": "Incredible spa experience and brilliant concierge team. The room cleanliness was spotless, and the evening rooftop dining offered stunning city views."
+    },
+    {
+      "author": "Priya Sharma",
+      "date": "1 month ago",
+      "rating": 3,
+      "text": "The pool and fitness amenities were great, but the Wi-Fi speed was sluggish in the business center, which was frustrating for my remote meetings."
+    },
+    {
+      "author": "Oliver Bennett",
+      "date": "1 month ago",
+      "rating": 5,
+      "text": "Outstanding executive lounge options! Evening complimentary drinks and hors d'oeuvres were high quality, and staff went out of their way to make us comfortable."
+    },
+    {
+      "author": "Claire Sterling",
+      "date": "2 months ago",
+      "rating": 1,
+      "text": "Housekeeping completely missed our room on the second day. When called, it took them two hours to send fresh towels. Terrible service standards."
+    },
+    {
+      "author": "Rahul Nair",
+      "date": "2 months ago",
+      "rating": 4,
+      "text": "Great business travel hotel. The conference rooms were well-equipped and the airport shuttle was right on schedule."
+    },
+    {
+      "author": "Emma Watson",
+      "date": "3 months ago",
+      "rating": 5,
+      "text": "Loved the indoor heated pool and fitness center. Housekeeping left cute towel swans and handwritten notes every morning!"
+    },
+    {
+      "author": "George Rossi",
+      "date": "3 months ago",
+      "rating": 2,
+      "text": "Valet parking cost an exorbitant amount per night and took 25 minutes to retrieve my vehicle during morning checkout."
+    },
+    {
+      "author": "Anette Lindqvist",
+      "date": "3 months ago",
+      "rating": 5,
+      "text": "As a World of Hyatt Diamond member, I was upgraded to a corner suite with stunning harbor views. The Digital Key check-in on the mobile app worked without a single hitch."
+    },
+    {
+      "author": "Carlos Ruiz",
+      "date": "4 months ago",
+      "rating": 4,
+      "text": "The lobby scent and flower arrangements create a very welcoming atmosphere upon arrival. Front desk staff were polite, though check-out queue was long."
+    },
+    {
+      "author": "Tariq Mansoor",
+      "date": "4 months ago",
+      "rating": 3,
+      "text": "The bathroom fixtures felt slightly dated, and water pressure in the shower fluctuated between hot and cold during peak hours."
+    },
+    {
+      "author": "Helena Fischer",
+      "date": "4 months ago",
+      "rating": 5,
+      "text": "Wonderful pre-arrival communication! The guest relations manager emailed us ahead of time to confirm our anniversary requests and left champagne in the room."
+    },
+    {
+      "author": "Benjamin Hayes",
+      "date": "5 months ago",
+      "rating": 1,
+      "text": "Billing mistake upon check-out. I was charged for breakfast items that were included in my package rate, and service recovery took over a week of emails."
+    },
+    {
+      "author": "Samantha Cole",
+      "date": "5 months ago",
+      "rating": 5,
+      "text": "The bed bedding and blackout curtains provided the best night of sleep I've had in months. Highly recommend the executive club level."
+    },
+    {
+      "author": "Vikram Patel",
+      "date": "5 months ago",
+      "rating": 4,
+      "text": "Solid F&B options on-site. The sushi bar in the lobby lounge was surprisingly fresh and fast, perfect for a late late-night bite."
+    },
+    {
+      "author": "Laura Martinez",
+      "date": "6 months ago",
+      "rating": 2,
+      "text": "Air conditioning unit in the room was extremely noisy throughout the night, making it difficult to sleep peacefully."
+    },
+    {
+      "author": "Derek Thorne",
+      "date": "6 months ago",
+      "rating": 5,
+      "text": "Exceptional doorman and valet service. From the moment our taxi pulled up, our luggage was handled with utmost care."
+    },
+    {
+      "author": "Nils Gunnar",
+      "date": "6 months ago",
+      "rating": 3,
+      "text": "Nice property, but turn-down service was hit-or-miss. They only came on two out of four nights during our stay."
     }
   ],
   "Ritz-Carlton Plaza": [
@@ -49,6 +145,102 @@
       "date": "1 month ago",
       "rating": 1,
       "text": "Unacceptable wait times at the front desk check-in. Only one staff member was managing a queue of fifteen guests. Not worth the premium cost."
+    },
+    {
+      "author": "Chloe Dubois",
+      "date": "1 month ago",
+      "rating": 4,
+      "text": "Exceptional bar and cocktail lounge! The valet service was prompt and professional, though the room temperature was tricky to adjust initially."
+    },
+    {
+      "author": "Siddharth Verma",
+      "date": "2 months ago",
+      "rating": 5,
+      "text": "The afternoon tea service at the Plaza lobby is world-class. Impeccable sandwich selections and rich tea varieties."
+    },
+    {
+      "author": "Isabelle Laurent",
+      "date": "2 months ago",
+      "rating": 4,
+      "text": "Luxurious marble bathroom with high-end toiletries. Only minor complaint was that the room service menu lacked vegan options."
+    },
+    {
+      "author": "Daniel Kowalski",
+      "date": "3 months ago",
+      "rating": 2,
+      "text": "The hot tub was closed for unexpected maintenance throughout our weekend stay, which was one of the main reasons we booked."
+    },
+    {
+      "author": "Aisha Al-Mansoor",
+      "date": "3 months ago",
+      "rating": 5,
+      "text": "Top-tier concierge service. They managed to secure last-minute reservations at a Michelin-star restaurant for my family."
+    },
+    {
+      "author": "Brian Gallagher",
+      "date": "4 months ago",
+      "rating": 3,
+      "text": "Classic luxury aesthetic, but the furniture in our suite showed visible wear and scuffs on the wood frames."
+    },
+    {
+      "author": "Evelyn Reed",
+      "date": "4 months ago",
+      "rating": 5,
+      "text": "The Ritz-Carlton Club level is worth every penny. Personal club concierge team took care of all our daily tour bookings effortlessly."
+    },
+    {
+      "author": "Hiroshi Tanaka",
+      "date": "4 months ago",
+      "rating": 5,
+      "text": "Impeccable housekeeping. The room was refreshed twice daily, and the pillow menu ensured maximum sleep comfort."
+    },
+    {
+      "author": "Gavin MacLeod",
+      "date": "5 months ago",
+      "rating": 2,
+      "text": "The hotel gym was cramped and lacked sufficient free weights. For a five-star hotel, the fitness center needs serious renovation."
+    },
+    {
+      "author": "Monica Bellucci",
+      "date": "5 months ago",
+      "rating": 5,
+      "text": "Stunning floral displays in the entrance gallery. The doorman greeted us with genuine warmth every single morning."
+    },
+    {
+      "author": "Jonathan Swift",
+      "date": "5 months ago",
+      "rating": 1,
+      "text": "Extremely rude reception staff during check-out when I pointed out duplicate minibar charges. Poor service recovery."
+    },
+    {
+      "author": "Karen O'Reilly",
+      "date": "5 months ago",
+      "rating": 4,
+      "text": "The pool lounge chairs were comfortable and pool staff immediately brought out fresh towels, ice water, and sunblock."
+    },
+    {
+      "author": "Fabio Cannavaro",
+      "date": "6 months ago",
+      "rating": 5,
+      "text": "In-room dining trolley was elegantly laid out, and the food temperature was perfect upon delivery."
+    },
+    {
+      "author": "Zoe Kravitz",
+      "date": "6 months ago",
+      "rating": 3,
+      "text": "Central location for luxury shopping, but taxi retrieval during peak hours took over 20 minutes outside the main entrance."
+    },
+    {
+      "author": "Antoine Dupont",
+      "date": "6 months ago",
+      "rating": 5,
+      "text": "High-speed Wi-Fi worked flawlessly across all areas of the hotel, including the outdoor terrace."
+    },
+    {
+      "author": "Sienna Miller",
+      "date": "6 months ago",
+      "rating": 4,
+      "text": "Beautiful suite layout with high ceilings and velvet furnishings. Deep soaking tub was a major highlight."
     }
   ],
   "The St. Regis Downtown": [
@@ -69,6 +261,230 @@
       "date": "2 weeks ago",
       "rating": 2,
       "text": "The air conditioning in our room was noisy and malfunctioned twice during our stay. Maintenance resolved it eventually, but it disrupted our sleep."
+    },
+    {
+      "author": "Hannah Schmidt",
+      "date": "3 weeks ago",
+      "rating": 5,
+      "text": "World-class dining experience at the main restaurant. The concierge booked us last-minute theater tickets without any hassle. Pure luxury!"
+    },
+    {
+      "author": "Kenji Sato",
+      "date": "1 month ago",
+      "rating": 1,
+      "text": "Overcharged on our final checkout bill for minibar items we never consumed. Resolving it with customer support took over three days."
+    },
+    {
+      "author": "Victoria Sterling",
+      "date": "1 month ago",
+      "rating": 5,
+      "text": "The evening champagne sabering ritual in the main lobby was such a fantastic tradition. Exceptional attention to detail throughout."
+    },
+    {
+      "author": "Noah Martinez",
+      "date": "2 months ago",
+      "rating": 4,
+      "text": "Very quiet and soundproof rooms despite being in the heart of downtown. Bed mattress was extremely supportive and comfortable."
+    },
+    {
+      "author": "Fatima Hassan",
+      "date": "2 months ago",
+      "rating": 2,
+      "text": "Breakfast buffet selection was very limited compared to other St. Regis locations I have visited globally."
+    },
+    {
+      "author": "Lucas Fischer",
+      "date": "3 months ago",
+      "rating": 5,
+      "text": "Unbelievable service! My butler pressed two suits free of charge upon arrival and unpacked my luggage seamlessly."
+    },
+    {
+      "author": "Emily Crawford",
+      "date": "3 months ago",
+      "rating": 3,
+      "text": "Beautiful interior aesthetics, but the elevators were constantly busy and had long wait times during morning check-out hours."
+    },
+    {
+      "author": "Julian Vance",
+      "date": "3 months ago",
+      "rating": 5,
+      "text": "Pre-arrival email communication was spot on. My dietary preferences were noted and reflected in every meal I ordered."
+    },
+    {
+      "author": "Charlotte Webb",
+      "date": "4 months ago",
+      "rating": 4,
+      "text": "The spa treatment room was tranquil and massage therapists were elite professionals. Highly relaxing afternoon."
+    },
+    {
+      "author": "Giacomo Puccini",
+      "date": "4 months ago",
+      "rating": 1,
+      "text": "Key card digital reader stopped working three separate times, forcing me to walk down to reception repeatedly."
+    },
+    {
+      "author": "Yasmine Al-Fassi",
+      "date": "4 months ago",
+      "rating": 5,
+      "text": "St. Regis Bloody Mary cocktail at the lounge bar was sublime! Great atmosphere with live jazz in the evening."
+    },
+    {
+      "author": "Oliver Queen",
+      "date": "5 months ago",
+      "rating": 3,
+      "text": "Valet parking service was decent, but $75 per night feels steep even for a downtown luxury establishment."
+    },
+    {
+      "author": "Naomi Watts",
+      "date": "5 months ago",
+      "rating": 5,
+      "text": "Flawless check-in process. Reception staff offered us welcome drinks and walked us personally to our suite."
+    },
+    {
+      "author": "Sebastian Bach",
+      "date": "5 months ago",
+      "rating": 2,
+      "text": "Housekeeping left used room service dishes in the hallway outside our door for nearly 12 hours."
+    },
+    {
+      "author": "Frederik Lind",
+      "date": "6 months ago",
+      "rating": 4,
+      "text": "Comfortable work desk and international plug adapters in the room made working remotely very convenient."
+    },
+    {
+      "author": "Chloe Zhao",
+      "date": "6 months ago",
+      "rating": 5,
+      "text": "The turn-down service included lavender pillow mist and gourmet chocolates. Wonderful personalized touch!"
+    },
+    {
+      "author": "Arthur Pendelton",
+      "date": "6 months ago",
+      "rating": 3,
+      "text": "Good gym hardware, but the space lacked fresh towels during peak morning workout hours."
+    }
+  ],
+  "Four Seasons Resort & Spa": [
+    {
+      "author": "Amara Okafor",
+      "date": "3 days ago",
+      "rating": 5,
+      "text": "An absolute oasis! The infinity pool views and outdoor spa treatments were unmatched. Staff was incredibly polite and attentive."
+    },
+    {
+      "author": "Dmitri Ivanov",
+      "date": "2 weeks ago",
+      "rating": 2,
+      "text": "Overpriced for what it offers. The room decor felt outdated, and key card readers in the elevators repeatedly failed."
+    },
+    {
+      "author": "Grace Montgomery",
+      "date": "3 weeks ago",
+      "rating": 5,
+      "text": "The oceanfront villa was spectacular. Private plunge pool was clean, and room service arrived within 20 minutes every time."
+    },
+    {
+      "author": "Tyler Brooks",
+      "date": "1 month ago",
+      "rating": 4,
+      "text": "Superb family-friendly resort. Kids club kept our children entertained all day, allowing us to relax at the adult-only pool."
+    },
+    {
+      "author": "Nadia Patel",
+      "date": "1 month ago",
+      "rating": 5,
+      "text": "Massage therapists at the spa are true professionals. Left feeling completely rejuvenated. Worth every single penny."
+    },
+    {
+      "author": "Sean Reynolds",
+      "date": "2 months ago",
+      "rating": 1,
+      "text": "Horrible experience with food poisoning from the poolside grill. Spent half our vacation sick in the bathroom."
+    },
+    {
+      "author": "Yuki Tanaka",
+      "date": "2 months ago",
+      "rating": 5,
+      "text": "Stunning landscaped gardens and private beach access. The staff provided complimentary ice water and sunblock at the beach chairs."
+    },
+    {
+      "author": "Megan Sullivan",
+      "date": "3 months ago",
+      "rating": 3,
+      "text": "The grounds are gorgeous, but service at the beach bar was painfully slow. Waited nearly 40 minutes for two cocktails."
+    },
+    {
+      "author": "Arthur Pendelton",
+      "date": "3 months ago",
+      "rating": 4,
+      "text": "Great golf course facilities on-site. Pro shop staff were knowledgeable and gear rentals were in pristine condition."
+    },
+    {
+      "author": "Zoe Kravitz",
+      "date": "4 months ago",
+      "rating": 5,
+      "text": "Extremely romantic setting for a honeymoon. Private candlelight beach dinner organized by the team was the highlight of our trip."
+    },
+    {
+      "author": "Lars Ulrich",
+      "date": "4 months ago",
+      "rating": 5,
+      "text": "The breakfast buffet overlooking the ocean was breath-taking. Wide selection of fresh tropical fruits, pastries, and custom egg stations."
+    },
+    {
+      "author": "Penelope Cruz",
+      "date": "4 months ago",
+      "rating": 2,
+      "text": "Check-in took over 45 minutes because our villa was not ready at the official check-in time of 3:00 PM."
+    },
+    {
+      "author": "Xavier Hernandez",
+      "date": "5 months ago",
+      "rating": 5,
+      "text": "Staff remembered our children's names and brought complimentary toys and kid-sized bathrobes to the room."
+    },
+    {
+      "author": "Brigitte Bardot",
+      "date": "5 months ago",
+      "rating": 4,
+      "text": "Spacious bathroom with double vanity and outdoor rainfall shower. Cleanliness was maintained to perfection."
+    },
+    {
+      "author": "Klaus Meine",
+      "date": "5 months ago",
+      "rating": 1,
+      "text": "The noise from ongoing beach club expansion construction ruined our daytime relaxation by the main pool."
+    },
+    {
+      "author": "Ingrid Bergman",
+      "date": "5 months ago",
+      "rating": 5,
+      "text": "Yoga classes on the beach at sunrise were amazing. The wellness facilities here are top notch."
+    },
+    {
+      "author": "Benoit Blanc",
+      "date": "6 months ago",
+      "rating": 3,
+      "text": "Gorgeous property, but food and drink prices at the main restaurant feel inflated even for Four Seasons standards."
+    },
+    {
+      "author": "Astrid Lindgren",
+      "date": "6 months ago",
+      "rating": 5,
+      "text": "Fast shuttle service around the resort grounds via golf carts whenever we requested transport."
+    },
+    {
+      "author": "Ken Follett",
+      "date": "6 months ago",
+      "rating": 4,
+      "text": "The bed and pillow comfort was outstanding. Slept like a log every night of our stay."
+    },
+    {
+      "author": "Giselle Bundchen",
+      "date": "6 months ago",
+      "rating": 5,
+      "text": "Service recovery was remarkable. When our initial room had a minor AC drain leak, we were instantly moved to a higher-tier ocean suite with complimentary champagne."
     }
   ]
 }

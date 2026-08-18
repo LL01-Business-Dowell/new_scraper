@@ -1,3 +1,17 @@
+import sys
+
+try:
+    import google.genai._api_client as genai_client
+
+    async def _safe_aclose(self):
+        client = getattr(self, "_async_httpx_client", None)
+        if client is not None:
+            await client.aclose()
+
+    genai_client.BaseApiClient.aclose = _safe_aclose
+except (ImportError, AttributeError):
+    pass
+
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 import pandas as pd
@@ -35,6 +49,7 @@ from threading import Thread
 from fastapi import Form
 from fastapi.responses import FileResponse
 import io
+
 
 from .gemini_routes import router as gemini_router
 from .raw_gemini_routes import router as raw_gemini_router

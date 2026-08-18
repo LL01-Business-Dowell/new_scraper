@@ -3,9 +3,11 @@ google_maps_scraper.py
 ----------------------
 Google Places API (New) integration for finding competitor businesses.
 Uses dynamic category expansion, spatial sub-grids, and Nearby/Text searches.
+Includes structural competitor filtering (types, ratings, keywords, and volume).
 """
 
 import os
+import re
 import time
 import math
 import logging
@@ -17,6 +19,30 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("GOOGLE_PLACES_API_KEY")
+
+# ── LOGICAL COMPETITOR FILTERING CONFIGURATION ────────────────────────────────
+
+# Strict Place Types Allowed (Google Places API New)
+ALLOWED_PRIMARY_TYPES = {
+    "hotel", "resort_hotel"
+}
+
+# Excluded Place Types (Filters out malls, apartments, B&Bs, etc.)
+DISALLOWED_TYPES = {
+    "shopping_mall", "serviced_apartment", "extended_stay_lodging", 
+    "bed_and_breakfast", "guest_house", "hostel", "motel"
+}
+
+# Regex patterns for non-competitor / budget / transit / non-hotel stays
+EXCLUDED_NAME_PATTERNS = [
+    r"\boyo\b", r"\btreebo\b", r"\bfabhotel\b", r"\bhostel\b", 
+    r"\bpg\b", r"\btransit\b", r"\bapartment\b", r"\bsuites\b",
+    r"\borb\b", r"\bmall\b", r"\bresidency\b", r"\bhomestay\b",
+    r"\bpod\b", r"\bcapsule\b", r"\bguesthouse\b", r"\bguest house\b",
+    r"\bdorm\b", r"\bmotel\b", r"\bbed & breakfast\b",r"\bginger\b", 
+    r"\bibis\b", r"\bbeacon\b", r"\bhotel mumbai house\b",
+    r"\boyo\b", r"\btreebo\b", r"\bfabhotel\b", r"\bhostel\b"
+]
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -49,6 +75,45 @@ def _generate_subgrid_centers(lat: float, lng: float, radius_km: float) -> List[
     ]
 
 
+def _is_logical_competitor(
+    place: Dict,
+    target_rating: float = 4.8,
+    min_reviews: int = 1500
+) -> bool:
+    """
+    Logically evaluates if a place is a true luxury/upscale competitor.
+    Filters out budget stays, non-hotels, malls, and small guesthouses.
+    """
+    name = place.get("displayName", {}).get("text", "") or place.get("name", "")
+    name_lower = name.lower()
+    primary_type = place.get("primaryType", "")
+    place_types = set(place.get("types", []))
+    rating = place.get("rating") or 0.0
+    reviews = place.get("userRatingCount") or place.get("reviews") or 0
+
+    # 1. Type Check: Disallow explicit non-hotel categories
+    if primary_type in DISALLOWED_TYPES or any(t in DISALLOWED_TYPES for t in place_types):
+        logger.debug(f"[COMPETITOR FILTER] Excluded '{name}' — Disallowed type: {primary_type}")
+        return False
+
+    # 2. Keyword Exclusion Check
+    if any(re.search(pattern, name_lower, re.IGNORECASE) for pattern in EXCLUDED_NAME_PATTERNS):
+        logger.debug(f"[COMPETITOR FILTER] Excluded '{name}' — Keyword pattern match")
+        return False
+
+    # 3. Minimum Review Volume Threshold (Eliminates tiny bed & breakfasts / low footprint)
+    if reviews < min_reviews:
+        logger.debug(f"[COMPETITOR FILTER] Excluded '{name}' — Low review count: {reviews} < {min_reviews}")
+        return False
+
+    # 4. Rating Quality Threshold (Keep comparable tier)
+    if rating < 3.8 or abs(rating - target_rating) > 1.2:
+        logger.debug(f"[COMPETITOR FILTER] Excluded '{name}' — Rating outlier: {rating}")
+        return False
+
+    return True
+
+
 def _fetch_nearby_places(
     lat: float,
     lng: float,
@@ -65,13 +130,12 @@ def _fetch_nearby_places(
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
         "X-Goog-FieldMask": (
             "places.id,places.displayName,places.formattedAddress,"
-            "places.rating,places.userRatingCount,places.location,places.googleMapsUri"
+            "places.rating,places.userRatingCount,places.location,places.googleMapsUri,"
+            "places.primaryType,places.types,places.priceLevel"
         )
     }
 
-    types = included_types or ["hotel", "lodging", "resort_hotel"]
-    
-    # Radius in meters (Max 50000)
+    types = included_types or ["hotel", "resort_hotel"]
     radius_m = min(float(radius_km * 1000.0), 50000.0)
 
     payload = {
@@ -114,7 +178,8 @@ def _fetch_places_text_search(
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
         "X-Goog-FieldMask": (
             "places.id,places.displayName,places.formattedAddress,"
-            "places.rating,places.userRatingCount,places.location,places.googleMapsUri,nextPageToken"
+            "places.rating,places.userRatingCount,places.location,places.googleMapsUri,"
+            "places.primaryType,places.types,places.priceLevel,nextPageToken"
         )
     }
 
@@ -122,21 +187,23 @@ def _fetch_places_text_search(
     page_token = None
 
     while len(fetched) < 60:
+        # Payload retains textQuery across pagination calls to comply with API v1
+        payload = {
+            "textQuery": text_query,
+            "pageSize": 20
+        }
+
         if page_token:
-            payload = {"pageToken": page_token}
-        else:
-            payload = {
-                "textQuery": text_query,
-                "pageSize": 20
-            }
-            if lat is not None and lng is not None:
-                radius_m = min(float(radius_km * 1000.0), 50000.0)
-                payload["locationBias"] = {
-                    "circle": {
-                        "center": {"latitude": lat, "longitude": lng},
-                        "radius": radius_m
-                    }
+            payload["pageToken"] = page_token
+
+        if lat is not None and lng is not None:
+            radius_m = min(float(radius_km * 1000.0), 50000.0)
+            payload["locationBias"] = {
+                "circle": {
+                    "center": {"latitude": lat, "longitude": lng},
+                    "radius": radius_m
                 }
+            }
 
         try:
             res = requests.post(url, json=payload, headers=headers, timeout=15)
@@ -171,7 +238,7 @@ def search_google_maps_competitors(
     origin_lng: float = None,
     progress_callback: Optional[Callable] = None,
 ) -> List[Dict]:
-    """Fetches up to `limit` unique competitor establishments."""
+    """Fetches up to `limit` unique, logically-filtered competitor establishments."""
     all_places = []
     seen_place_ids = set()
 
@@ -183,8 +250,12 @@ def search_google_maps_competitors(
 
             display_name = p.get("displayName", {}).get("text", "Unknown")
 
-            # Filter out target hotel itself
+            # Exclude target hotel itself from competitors list
             if establishment_name and establishment_name.lower() in display_name.lower():
+                continue
+
+            # Apply Logical Competitor Filter
+            if not _is_logical_competitor(p):
                 continue
 
             seen_place_ids.add(place_id)
@@ -192,20 +263,28 @@ def search_google_maps_competitors(
             location = p.get("location", {})
             plat = location.get("latitude")
             plng = location.get("longitude")
+            rating = p.get("rating")
+            reviews = p.get("userRatingCount", 0)
 
             maps_url = p.get("googleMapsUri") or (
                 f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(display_name)}"
             )
 
+            # Assign Competitor Tier based on review volume and rating standard
+            tier = "Tier 1 (Direct Primary)" if (reviews >= 10000 and rating and rating >= 4.3) else "Tier 2 (Secondary)"
+
             all_places.append({
                 "name": display_name,
                 "address": p.get("formattedAddress", ""),
-                "rating": p.get("rating"),
-                "reviews": p.get("userRatingCount", 0),
+                "rating": rating,
+                "reviews": reviews,
                 "url": maps_url,
                 "lat": plat,
                 "lng": plng,
                 "place_id": place_id,
+                "primary_type": p.get("primaryType", "hotel"),
+                "price_level": p.get("priceLevel", "UNKNOWN"),
+                "competitor_tier": tier,
                 "selected": True,
             })
 
@@ -217,21 +296,19 @@ def search_google_maps_competitors(
                 progress_callback(
                     min(50, int((idx / len(grid)) * 50)),
                     limit,
-                    "Discovering nearby hotels..."
+                    "Discovering nearby luxury hotels..."
                 )
 
             nearby_raw = _fetch_nearby_places(pt["lat"], pt["lng"], radius_km)
             process_and_add(nearby_raw)
 
-    # Strategy 2: Expanded Area Search
+    # Strategy 2: Expanded Area Search targeting luxury/upscale categories
     search_terms = [
-        f"Hotels in {city}",
         f"Luxury Hotels in {city}",
-        f"Boutique hotels in {city}",
-        f"Resorts in {city}",
         f"5 star hotels in {city}",
         f"4 star hotels in {city}",
-        f"Lodging in {city}",
+        f"Boutique hotels in {city}",
+        f"Resorts in {city}",
     ]
 
     for idx, term in enumerate(search_terms):
@@ -240,7 +317,7 @@ def search_google_maps_competitors(
             progress_callback(
                 pct,
                 limit,
-                "Expanding search radius and gathering additional hotels..."
+                "Expanding search radius for direct competitors..."
             )
 
         text_raw = _fetch_places_text_search(term, origin_lat, origin_lng, radius_km)
@@ -264,9 +341,9 @@ def search_google_maps_competitors(
             place["within_radius"] = True
             filtered_places.append(place)
 
-    logger.info(f"[PLACES API] Search finished. Yielded {len(filtered_places)} places within {radius_km} km.")
+    logger.info(f"[PLACES API] Competitor filtering complete. Yielded {len(filtered_places)} true competitors within {radius_km} km.")
 
     if progress_callback:
-        progress_callback(100, limit, f"Found {len(filtered_places[:limit])} hotels matching your criteria.")
+        progress_callback(100, limit, f"Found {len(filtered_places[:limit])} direct competitors matching your criteria.")
 
     return filtered_places[:limit]

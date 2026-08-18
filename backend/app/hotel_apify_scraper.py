@@ -1,24 +1,3 @@
-"""
-hotel_apify_scraper.py
-----------------------
-Apify Google Maps Reviews Scraper integration for hotel sentiment route.
-Replaces hotel_review_scraper.py (Selenium) for the hotel sentiment flow only.
-
-Actor: compass/google-maps-reviews-scraper (Xb8osYTtOjlsgI6k9)
-Docs: https://apify.com/compass/google-maps-reviews-scraper/input-schema
-
-Flow:
-1. POST to Apify API to start the actor run
-2. Poll run status until finished
-3. Fetch dataset items (reviews)
-4. Parse and return in the same format as hotel_review_scraper.py
-
-Env vars required:
-- APIFY_API_TOKEN
-
-Review cutoff: 90 days from today (passed as reviewsStartDate)
-"""
-
 import os
 import time
 import datetime
@@ -31,16 +10,16 @@ logger = logging.getLogger(__name__)
 APIFY_TOKEN    = os.getenv("APIFY_API_TOKEN", "")
 ACTOR_ID       = "Xb8osYTtOjlsgI6k9"  # compass/google-maps-reviews-scraper
 BASE_URL       = "https://api.apify.com/v2"
-DAYS_BACK      = 90  # cutoff — 90 days from today
+DAYS_BACK      = 30  # strict cutoff — 30 days from today
 
 
 def _cutoff_date() -> str:
-    """Returns ISO date string 90 days ago, e.g. '2025-04-18'"""
+    """Returns ISO date string 30 days ago, e.g. '2026-07-12'"""
     d = datetime.date.today() - datetime.timedelta(days=DAYS_BACK)
     return d.isoformat()
 
 
-def _start_run(place_url: str, max_reviews: int) -> Optional[str]:
+def _start_run(place_url: str, max_reviews: Optional[int] = None) -> Optional[str]:
     """Start an Apify actor run and return the run ID."""
     if not APIFY_TOKEN:
         logger.error("[APIFY] APIFY_API_TOKEN not set")
@@ -49,13 +28,16 @@ def _start_run(place_url: str, max_reviews: int) -> Optional[str]:
     cutoff = _cutoff_date()
     payload = {
         "startUrls":          [{"url": place_url}],
-        "maxReviews":         max_reviews,
         "reviewsSort":        "newest",
         "reviewsStartDate":   cutoff,
         "language":           "en",
         "reviewsOrigin":      "google",
         "personalData":       False,   # GDPR — no reviewer personal data
     }
+
+    # Only set maxReviews in payload if explicitly requested (> 0)
+    if max_reviews and max_reviews > 0:
+        payload["maxReviews"] = max_reviews
 
     url = f"{BASE_URL}/acts/{ACTOR_ID}/runs?token={APIFY_TOKEN}"
     try:
@@ -64,7 +46,7 @@ def _start_run(place_url: str, max_reviews: int) -> Optional[str]:
             logger.error(f"[APIFY] Failed to start run: {resp.status_code} {resp.text[:300]}")
             return None
         run_id = resp.json().get("data", {}).get("id")
-        logger.info(f"[APIFY] Started run {run_id} for {place_url}")
+        logger.info(f"[APIFY] Started run {run_id} for {place_url} (Cutoff: {cutoff})")
         return run_id
     except Exception as e:
         logger.error(f"[APIFY] Start run error: {e}")
@@ -156,7 +138,7 @@ def _parse_reviews(items: List[Dict]) -> List[Dict]:
 
 def scrape_hotel_reviews_apify(
     url: str,
-    max_reviews: int = 200,
+    max_reviews: Optional[int] = None,
     progress_callback: Optional[Callable] = None,
 ) -> Dict:
     """
@@ -183,7 +165,7 @@ def scrape_hotel_reviews_apify(
     if progress_callback:
         progress_callback(5, 100, "Starting review finder...")
 
-    # 1. Start run
+    # 1. Start run (max_reviews default is now None so Apify relies on 30-day cutoff)
     run_id = _start_run(url, max_reviews)
     if not run_id:
         result["error"] = "Failed to start Apify run"
