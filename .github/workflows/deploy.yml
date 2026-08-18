@@ -72,13 +72,14 @@ jobs:
             set -e
             cd /home/SamantaScraper
 
+            echo "=== Aggressively freeing disk space on VPS ==="
+            docker system prune -a --volumes -f || true
+            docker builder prune --all -f || true
+
             echo "=== Enabling Single-Threaded Sequential BuildKit ==="
             export DOCKER_BUILDKIT=1
             export COMPOSE_DOCKER_CLI_BUILD=1
             export BUILDKIT_PARALLEL_LIMIT=1
-
-            echo "=== Pruning previous build cache to free memory ==="
-            docker builder prune -f || true
 
             echo "=== Building Heavy Python Services Sequentially ==="
             docker compose build --parallel=false audio-analysis
@@ -90,9 +91,8 @@ jobs:
             echo "=== Restarting containers ==="
             docker compose up -d
 
-            echo "=== Cleaning build cache and dangling images ==="
-            docker builder prune -f || true
-            docker image prune -f || true
+            echo "=== Post-build cleanup ==="
+            docker system prune -f || true
 
             echo "=== Running containers ==="
             docker compose ps
