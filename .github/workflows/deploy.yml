@@ -25,6 +25,14 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
 
+          # Configure SSH KeepAlive to prevent "Broken pipe" connection drops
+          cat << 'EOF' >> ~/.ssh/config
+          Host *
+            ServerAliveInterval 15
+            ServerAliveCountMax 20
+            TCPKeepAlive yes
+          EOF
+
       - name: Pull latest code
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST "bash -s" << 'ENDSSH'
@@ -82,11 +90,11 @@ jobs:
             export BUILDKIT_PARALLEL_LIMIT=1
 
             echo "=== Building Heavy Python Services Sequentially ==="
-            docker compose build --parallel=false audio-analysis
-            docker compose build --parallel=false backend
+            docker compose build --progress=plain --parallel=false audio-analysis
+            docker compose build --progress=plain --parallel=false backend
 
             echo "=== Building Remaining Services ==="
-            docker compose build inscriber frontend nginx
+            docker compose build --progress=plain inscriber frontend nginx
 
             echo "=== Restarting containers ==="
             docker compose up -d
