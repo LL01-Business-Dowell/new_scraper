@@ -218,6 +218,7 @@ def _save_to_datacube(
     room_number: str,
     description: str,
     file_id: str,
+    client_name: str = "",
     emotion_metrics: dict = None,
     raw_emotion_distribution: dict = None,
     fused_metrics: dict = None,
@@ -234,6 +235,7 @@ def _save_to_datacube(
         doc_data = {
             "type": "feedback",
             "qr_id": id_param,
+            "client_name": client_name,
             "room_number": room_number,
             "description": description,
             "transcript": transcript,
@@ -354,10 +356,16 @@ async def submit_feedback(
     audio: UploadFile = File(...),
     room_number: str = Form(default=""),
     description: str = Form(default=""),
+    client_name: str = Form(default=""),
     file_id: str = Form(default=""),
 ):
     try:
         id_param = request.query_params.get("id", "")
+
+        if not client_name:
+            client_name = request.query_params.get("client_name", "") or request.query_params.get("client", "")
+            if not client_name and "-" in id_param:
+                client_name = id_param.split("-")[0]
 
         webm_bytes = await audio.read()
         if not webm_bytes:
@@ -396,6 +404,7 @@ async def submit_feedback(
             id_param=id_param,
             room_number=room_number,
             description=description,
+            client_name=client_name,
             file_id=final_file_id,
             emotion_metrics=emotion_data,
             raw_emotion_distribution=raw_emotions,

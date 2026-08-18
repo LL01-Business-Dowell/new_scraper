@@ -252,6 +252,21 @@ export default function FeedbackPage() {
     const [theme, setTheme] = useState("dark");
     const isLight = theme === "light";
 
+    const [clientName, setClientName] = useState("");
+
+    useEffect(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const paramClient = searchParams.get("client_name") || searchParams.get("client");
+        if (paramClient) {
+            setClientName(paramClient);
+        } else {
+            const idParam = searchParams.get("id") || "";
+            if (idParam.includes("-")) {
+                setClientName(idParam.split("-")[0]);
+            }
+        }
+    }, []);
+
     const toggleTheme = () => {
         setTheme(prev => prev === "dark" ? "light" : "dark");
     };
@@ -329,6 +344,7 @@ export default function FeedbackPage() {
             form.append("audio", audioBlob, "recording.webm");
             form.append("room_number", roomNumber);
             form.append("description", description);
+            form.append("client_name", clientName);
 
             const resp = await axios.post(`${BASE}/api/feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
