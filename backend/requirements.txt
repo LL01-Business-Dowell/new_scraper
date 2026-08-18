@@ -15,7 +15,8 @@ nltk==3.8.1
 textblob==0.17.1
 python-dateutil
 reportlab
-transformers==4.34.0
-torch==2.7.1
+pillow>=10.0.0
+transformers>=4.34.0
+torch==2.6.0+cpu
 google-generativeai>=0.8.0
 matplotlib>=3.7.0
