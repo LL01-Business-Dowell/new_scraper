@@ -238,6 +238,7 @@ async def create_qr_code(req: CreateQrRequest):
     Inserts a new QR document into the client's DataCube collection.
     """
     client_col = req.client_name.lower().strip()
+    client_name = req.client_name.strip()
     
     logger.info(f"Creating new QR code record for client '{client_col}'")
 
@@ -247,7 +248,7 @@ async def create_qr_code(req: CreateQrRequest):
         
         # 2. Combine user alphanumeric ID with sequence ID
         full_id = f"{req.user_id.strip()}-{next_seq}"
-        target_url = f"https://reviewanalysis.uxlivinglab.org/feedback?id={full_id}"
+        target_url = f"https://reviewanalysis.uxlivinglab.org/feedback?client={client_name}&id={full_id}"
         
         doc = {
             "name": req.name,

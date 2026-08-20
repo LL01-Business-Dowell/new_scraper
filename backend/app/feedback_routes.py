@@ -363,7 +363,7 @@ async def submit_feedback(
         id_param = request.query_params.get("id", "")
 
         if not client_name:
-            client_name = request.query_params.get("client_name", "") or request.query_params.get("client", "")
+            client_name = request.query_params.get("client", "") or request.query_params.get("client_name", "")
             if not client_name and "-" in id_param:
                 client_name = id_param.split("-")[0]
 

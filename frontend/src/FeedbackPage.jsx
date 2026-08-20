@@ -256,7 +256,7 @@ export default function FeedbackPage() {
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
-        const paramClient = searchParams.get("client_name") || searchParams.get("client");
+        const paramClient = searchParams.get("client") || searchParams.get("client_name");
         if (paramClient) {
             setClientName(paramClient);
         } else {
@@ -344,7 +344,7 @@ export default function FeedbackPage() {
             form.append("audio", audioBlob, "recording.webm");
             form.append("room_number", roomNumber);
             form.append("description", description);
-            form.append("client_name", clientName);
+            form.append("client", clientName);
 
             const resp = await axios.post(`${BASE}/api/feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },

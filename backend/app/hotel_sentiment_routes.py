@@ -123,102 +123,59 @@ def _is_valid_competitor(place: dict) -> bool:
 
 def _fetch_static_map_image(results: list, width: int = 600, height: int = 280) -> Optional[io.BytesIO]:
     """
-    Generates a Static Map image using OpenStreetMap static tiles,
-    drawing pin markers accurately on top using Pillow (PIL).
+    Fetches a static map image directly from the Google Maps Static API 
+    with custom pins pre-rendered on the server.
     """
-    # 1. Collect valid lat/lng coordinates from properties
-    valid_places = []
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
+    
+    # Base URL for Google Maps Static API
+    base_url = "https://maps.googleapis.com/maps/api/staticmap"
+    
+    markers = []
+    
+    # Build marker parameters for Google Maps
     for place in results:
         lat = place.get("lat") or place.get("latitude")
         lng = place.get("lng") or place.get("longitude")
-        if lat and lng:
-            valid_places.append({
-                "lat": float(lat),
-                "lng": float(lng),
-                "is_user": place.get("is_user_establishment", False)
-            })
+        
+        if lat is not None and lng is not None:
+            is_user = place.get("is_user_establishment", False)
+            
+            # Format: markers=color:red|label:S|lat,lng
+            if is_user:
+                # Subject Hotel: Red marker with label 'S'
+                markers.append(f"markers=color:red|label:S|{lat},{lng}")
+            else:
+                # Competitor Hotels: Blue markers
+                markers.append(f"markers=color:blue|size:mid|{lat},{lng}")
 
-    if not valid_places:
-        logger.warning("[PDF MAP] No geographic coordinates found in results.")
+    if not markers:
+        logger.warning("[PDF MAP] No geographic coordinates found.")
         return None
 
-    # 2. Calculate center coordinates of all properties
-    lats = [p["lat"] for p in valid_places]
-    lngs = [p["lng"] for p in valid_places]
-    avg_lat = sum(lats) / len(valid_places)
-    avg_lng = sum(lngs) / len(valid_places)
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lng, max_lng = min(lngs), max(lngs)
-
-    lat_span = max(max_lat - min_lat, 0.005)
-    lng_span = max(max_lng - min_lng, 0.005)
-
-    # 3. Fetch base tile map image from OpenStreetMap
-    osm_static_url = "https://staticmap.openstreetmap.de/staticmap.php"
+    # Construct request parameters
     params = {
-        "center": f"{avg_lat},{avg_lng}",
-        "zoom": 13,
         "size": f"{width}x{height}",
-        "maptype": "mapnik"
+        "scale": "2",  # Crisp display for print/PDF (Retina resolution)
+        "maptype": "roadmap",
+        "key": api_key,
     }
 
-    base_image_bytes = None
+    # Join base URL and marker query params
+    query_string = "&".join(markers)
+    full_url = f"{base_url}?{'&'.join([f'{k}={v}' for k, v in params.items()])}&{query_string}"
+
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
-        res = requests.get(osm_static_url, params=params, headers=headers, timeout=10)
-        if res.status_code == 200 and len(res.content) > 1000:
-            base_image_bytes = res.content
-    except Exception as err:
-        logger.warning(f"[PDF MAP] Could not fetch base OSM map: {err}")
-
-    # Load base map or fallback blank canvas
-    if base_image_bytes:
-        img = PILImage.open(io.BytesIO(base_image_bytes)).convert("RGB")
-    else:
-        img = PILImage.new("RGB", (width, height), color="#F1F5F9")
-
-    draw = ImageDraw.Draw(img)
-
-    # 4. Draw markers accurately onto the map canvas
-    padding = 35
-    plot_w = width - (padding * 2)
-    plot_h = height - (padding * 2)
-
-    for p in valid_places:
-        # Calculate pixel position relative to center/span
-        if lng_span > 0:
-            x = padding + int(((p["lng"] - (avg_lng - lng_span / 2)) / lng_span) * plot_w)
+        response = requests.get(full_url, timeout=10)
+        if response.status_code == 200:
+            logger.info("[PDF MAP] Google Static Map successfully fetched.")
+            return io.BytesIO(response.content)
         else:
-            x = width // 2
-
-        if lat_span > 0:
-            y = height - padding - int(((p["lat"] - (avg_lat - lat_span / 2)) / lat_span) * plot_h)
-        else:
-            y = height // 2
-
-        # Constrain coordinates inside visible canvas
-        x = max(20, min(width - 20, x))
-        y = max(20, min(height - 20, y))
-
-        r = 8
-        if p["is_user"]:
-            # Subject Hotel: Red pin with white border
-            draw.ellipse([x - r - 2, y - r - 2, x + r + 2, y + r + 2], fill="#FFFFFF", outline="#7F1D1D")
-            draw.ellipse([x - r, y - r, x + r, y + r], fill="#DC2626", outline="#991B1B")
-            draw.text((x + 12, y - 6), "★ Subject Hotel", fill="#991B1B")
-        else:
-            # Competitor: Blue pin
-            draw.ellipse([x - r + 2, y - r + 2, x + r - 2, y + r - 2], fill="#FFFFFF", outline="#1E3A8A")
-            draw.ellipse([x - (r - 3), y - (r - 3), x + (r - 3), y + (r - 3)], fill="#2563EB", outline="#1E40AF")
-
-    out_buf = io.BytesIO()
-    img.save(out_buf, format="PNG")
-    out_buf.seek(0)
-    logger.info("[PDF MAP] Generated static map with custom PIL pins.")
-    return out_buf
+            logger.error(f"[PDF MAP] Google Maps API error {response.status_code}: {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"[PDF MAP] Request failed: {e}")
+        return None
 
 
 def _generate_offline_map_diagram(places: list, width: int = 600, height: int = 280) -> Optional[io.BytesIO]:
@@ -449,7 +406,21 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
 
     for item, results in zip(sentence_map, pipeline_results):
         sentence_text = item["sentence"]
-        scores = {res['label'].lower(): res['score'] for res in results}
+
+        # Flatten nested list if returned as a batched list of lists: [[{...}, {...}]]
+        if isinstance(results, list) and len(results) > 0 and isinstance(results[0], list):
+            results = results[0]
+
+        # Wrap single prediction dict into a list if needed: {'label': '...', 'score': ...}
+        if isinstance(results, dict):
+            results = [results]
+
+        # Safely extract scores
+        scores = {}
+        if isinstance(results, list):
+            for res in results:
+                if isinstance(res, dict) and 'label' in res and 'score' in res:
+                    scores[res['label'].lower()] = res['score']
 
         pos_score = scores.get('positive', 0.0)
         neg_score = scores.get('negative', 0.0)
@@ -686,46 +657,6 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
     })
 
 
-def _generate_competitor_map_image(results: list) -> Optional[io.BytesIO]:
-    """Generates a static map image showing the input hotel and competitors."""
-    try:
-        import matplotlib.pyplot as plt
-        
-        lats = [r.get("lat") for r in results if r.get("lat") is not None]
-        lngs = [r.get("lng") for r in results if r.get("lng") is not None]
-        
-        if not lats or not lngs:
-            return None
-
-        fig, ax = plt.subplots(figsize=(6, 2.5), dpi=150)
-        
-        # Plot competitors
-        comp_lats = [r.get("lat") for r in results if not r.get("is_user_establishment") and r.get("lat")]
-        comp_lngs = [r.get("lng") for r in results if not r.get("is_user_establishment") and r.get("lng")]
-        if comp_lats:
-            ax.scatter(comp_lngs, comp_lats, c='#7C3AED', label='Competitors', s=60, alpha=0.8)
-
-        # Plot user establishment (Input Hotel / Hilton)
-        user_lats = [r.get("lat") for r in results if r.get("is_user_establishment") and r.get("lat")]
-        user_lngs = [r.get("lng") for r in results if r.get("is_user_establishment") and r.get("lng")]
-        if user_lats:
-            ax.scatter(user_lngs, user_lats, c='#D97706', label='Hilton (Input Property)', s=120, marker='*', zorder=5)
-
-        ax.set_title("Property & Competitor Location Map", fontsize=9, fontweight='bold', pad=6)
-        ax.axis('off')
-        ax.legend(loc='upper right', fontsize=7)
-        plt.tight_layout()
-
-        img_buf = io.BytesIO()
-        plt.savefig(img_buf, format='png', bbox_inches='tight')
-        plt.close(fig)
-        img_buf.seek(0)
-        return img_buf
-    except Exception as e:
-        logger.error(f"Failed to generate map image: {e}")
-        return None
-
-
 def _build_combined_sentiment_report(results: List[dict]) -> dict:
     with_sentiment = [r for r in results if r.get("sentiment", {}).get("overall_score") is not None]
     with_rating    = [r for r in results if r.get("rating")]
@@ -803,6 +734,13 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
     ranked = sorted(
         results,
         key=lambda r: r.get("bayesian_sentiment_score", -999.0),
+        reverse=True,
+    )
+
+    # --- Explicitly sort by raw overall score for table rendering ---
+    ranked_by_raw_score = sorted(
+        results,
+        key=lambda r: r.get("sentiment", {}).get("overall_score") if r.get("sentiment", {}).get("overall_score") is not None else -999.0,
         reverse=True,
     )
 
@@ -885,7 +823,7 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
                 "isUser": r.get("is_user_establishment", False),
                 "adr": r.get("adr"),
                 "revpar": r.get("revpar")
-            } for r in ranked
+            } for r in ranked_by_raw_score  # Uses raw overall score ordering
         ],
         "best_sentiment":         {"name": best["name"], "score": best["sentiment"].get("overall_score")} if best else None,
         "worst_sentiment":        {"name": worst["name"], "score": worst["sentiment"].get("overall_score")} if worst else None,
@@ -1310,8 +1248,13 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
         story.append(Paragraph("Sentiment Ranking Across Competitors", style_section))
         story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
         story.append(Spacer(1, 0.2*cm))
+        ranking_sorted = sorted(
+            ranking,
+            key=lambda item: item.get("score") if item.get("score") is not None else -999.0,
+            reverse=True
+        )
         rank_rows = [["#","Hotel","Sentiment","Score","Rating"]]
-        for i, r in enumerate(ranking):
+        for i, r in enumerate(ranking_sorted):
             sc = r.get("score")
             sc_color = "#059669" if sc and sc>0.2 else ("#DC2626" if sc and sc<-0.2 else "#B45309")
             hotel_name_markup = f"<b>[YOU] {r.get('name')}</b>" if r.get("isUser") else r.get("name","")
