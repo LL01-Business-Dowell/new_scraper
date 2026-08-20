@@ -80,18 +80,23 @@ jobs:
             set -e
             cd /home/SamantaScraper
 
-            echo "=== Aggressively freeing disk space on VPS ==="
-            docker system prune -a --volumes -f || true
-            docker builder prune --all -f || true
+            echo "=== Deep cleaning VPS disk before build ==="
+            docker system prune -af --volumes || true
+            docker builder prune -af || true
+            truncate -s 0 /var/lib/docker/containers/*/*-json.log 2>/dev/null || true
 
-            echo "=== Enabling Single-Threaded Sequential BuildKit ==="
+            echo "=== Setting BuildKit Limits ==="
             export DOCKER_BUILDKIT=1
             export COMPOSE_DOCKER_CLI_BUILD=1
             export BUILDKIT_PARALLEL_LIMIT=1
 
-            echo "=== Building Heavy Python Services Sequentially ==="
-            docker compose build --progress=plain --parallel=false audio-analysis
-            docker compose build --progress=plain --parallel=false backend
+            echo "=== Building Heavy Audio Analysis Service ==="
+            docker compose build --progress=plain audio-analysis
+            docker builder prune -af || true  # Free build cache before next heavy image
+
+            echo "=== Building Backend Service ==="
+            docker compose build --progress=plain backend
+            docker builder prune -af || true  # Free build cache before remaining images
 
             echo "=== Building Remaining Services ==="
             docker compose build --progress=plain inscriber frontend nginx
