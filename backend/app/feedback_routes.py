@@ -8,6 +8,7 @@ import requests as http_requests
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 import torch
 import json
+from .gemini_sentiment_analysis import analyze_sentiment
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -86,65 +87,65 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
                 pass
 
 
-def _load_huggingface_model(model_id: str):
-    try:
-        tokenizer = DistilBertTokenizer.from_pretrained(model_id)
-        model = DistilBertForSequenceClassification.from_pretrained(model_id)
-        model.to(DEVICE)
-        model.eval()
-        logger.info(f"[FEEDBACK] HuggingFace model '{model_id}' successfully pre-loaded on {DEVICE}.")
-        return tokenizer, model
-    except Exception as e:
-        logger.error(f"[FEEDBACK] Error loading HuggingFace model {model_id}: {e}")
-        return None, None
+# def _load_huggingface_model(model_id: str):
+#     try:
+#         tokenizer = DistilBertTokenizer.from_pretrained(model_id)
+#         model = DistilBertForSequenceClassification.from_pretrained(model_id)
+#         model.to(DEVICE)
+#         model.eval()
+#         logger.info(f"[FEEDBACK] HuggingFace model '{model_id}' successfully pre-loaded on {DEVICE}.")
+#         return tokenizer, model
+#     except Exception as e:
+#         logger.error(f"[FEEDBACK] Error loading HuggingFace model {model_id}: {e}")
+#         return None, None
 
-TOKENIZER, MODEL = _load_huggingface_model(MODEL_ID)
+# TOKENIZER, MODEL = _load_huggingface_model(MODEL_ID)
 
 
-def _distilbert_sentiment_analysis(transcript: str) -> dict:
-    if MODEL is None or TOKENIZER is None or not transcript.strip():
-        logger.warning("[FEEDBACK] Model uninitialized or empty transcript received.")
-        return {"label": "neutral", "confidence_score": 0.0, "predicted_class": -1, "detected_emotion": "neutral", "text": transcript}
+# def _distilbert_sentiment_analysis(transcript: str) -> dict:
+#     if MODEL is None or TOKENIZER is None or not transcript.strip():
+#         logger.warning("[FEEDBACK] Model uninitialized or empty transcript received.")
+#         return {"label": "neutral", "confidence_score": 0.0, "predicted_class": -1, "detected_emotion": "neutral", "text": transcript}
 
-    try:
-        tokenize = TOKENIZER(
-            transcript,
-            return_tensors="pt",
-            truncation=True,
-            max_length=TOKENIZER.model_max_length,
-            padding=True
-        )
+#     try:
+#         tokenize = TOKENIZER(
+#             transcript,
+#             return_tensors="pt",
+#             truncation=True,
+#             max_length=TOKENIZER.model_max_length,
+#             padding=True
+#         )
 
-        inputs = {key: value.to(DEVICE) for key, value in tokenize.items()}
+#         inputs = {key: value.to(DEVICE) for key, value in tokenize.items()}
 
-        with torch.no_grad():
-            output = MODEL(**inputs)
+#         with torch.no_grad():
+#             output = MODEL(**inputs)
 
-        logits = output.logits
-        probabilities = torch.softmax(logits, dim=-1)
+#         logits = output.logits
+#         probabilities = torch.softmax(logits, dim=-1)
 
-        predicted_class = torch.argmax(probabilities, dim=-1).item()
-        confidence_score = probabilities[0][predicted_class].item()
+#         predicted_class = torch.argmax(probabilities, dim=-1).item()
+#         confidence_score = probabilities[0][predicted_class].item()
 
-        emotion_name = GO_EMOTIONS_LABELS[predicted_class] if predicted_class < len(GO_EMOTIONS_LABELS) else "neutral"
+#         emotion_name = GO_EMOTIONS_LABELS[predicted_class] if predicted_class < len(GO_EMOTIONS_LABELS) else "neutral"
 
-        if emotion_name in POSITIVE_EMOTIONS:
-            sentiment_label = "positive"
-        elif emotion_name in NEGATIVE_EMOTIONS:
-            sentiment_label = "negative"
-        else:
-            sentiment_label = "neutral"
+#         if emotion_name in POSITIVE_EMOTIONS:
+#             sentiment_label = "positive"
+#         elif emotion_name in NEGATIVE_EMOTIONS:
+#             sentiment_label = "negative"
+#         else:
+#             sentiment_label = "neutral"
 
-        return {
-            "predicted_class": predicted_class,
-            "detected_emotion": emotion_name,
-            "label": sentiment_label,
-            "confidence_score": confidence_score,
-            "text": transcript
-        }
-    except Exception as e:
-        logger.warning(f"[FEEDBACK] Inference error: {e}")
-        return {"label": "neutral", "confidence_score": 0.0, "predicted_class": -1, "detected_emotion": "neutral", "text": transcript}
+#         return {
+#             "predicted_class": predicted_class,
+#             "detected_emotion": emotion_name,
+#             "label": sentiment_label,
+#             "confidence_score": confidence_score,
+#             "text": transcript
+#         }
+#     except Exception as e:
+#         logger.warning(f"[FEEDBACK] Inference error: {e}")
+#         return {"label": "neutral", "confidence_score": 0.0, "predicted_class": -1, "detected_emotion": "neutral", "text": transcript}
 
 
 def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_score):
@@ -164,8 +165,25 @@ def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_sco
         except (ValueError, TypeError):
             audio_score = 0.0
             
-        high_urgency_audio = ["angry", "fearful"]
-        medium_urgency_audio = ["sad", "disgust"]
+        high_urgency_audio = [
+                # Anger & Aggression
+                "angry", "anger", "furious", "rage", "frustrated", "frustration", "annoyed", "irritated",
+                # Panic & Distress
+                "fearful", "fear", "panic", "panicked", "distressed", "terrified", "alarmed",
+                # Active Sarcasm & Mocking
+                "sarcastic", "sarcasm", "mocking", "cynical", "snarky", "scornful", "taunting", "derisive"
+            ]
+        
+        medium_urgency_audio = [
+                # Sadness & Disappointment
+                "sad", "sadness", "disappointed", "disappointment", "grief", "despair",
+                # Disgust & Aversion
+                "disgust", "disgusted", "contempt",
+                # Tension & Anxiety
+                "anxious", "anxiety", "nervous", "hesitant", "surprised", "shocked",
+                # Subtle Irony & Passive Aggression
+                "ironic", "irony", "smug", "passive_aggressive", "dismissive", "condescending"
+            ]
         
         dashboard_color = "green"
         severity_level = "low"
@@ -244,7 +262,7 @@ def _save_to_datacube(
             "audio_analysis": emotion_metrics or {},
             "raw_emotion_distribution": raw_emotion_distribution or {},
             "dashboard_metrics": fused_metrics,
-            "submitted_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "submitted_at": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
         }
 
         target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
@@ -471,7 +489,7 @@ async def transcribe_on_demand(
         except Exception as e:
             logger.warning(f"[FEEDBACK] Transcription error: {e}")
 
-        transcript_analysis = _distilbert_sentiment_analysis(transcript)
+        transcript_analysis = analyze_sentiment(os.getenv("GEMINI_KEY_3"), transcript)
 
         doc_data = _get_datacube_doc(id_param, doc_id) if doc_id else {}
         audio_analysis = doc_data.get("audio_analysis", {})
