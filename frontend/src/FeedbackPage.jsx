@@ -221,9 +221,9 @@ function useTimer(running, maxSeconds, onLimitReached) {
     const [secondsLeft, setSecondsLeft] = useState(maxSeconds);
 
     useEffect(() => {
-        if (!running) { 
-            setSecondsLeft(maxSeconds); 
-            return; 
+        if (!running) {
+            setSecondsLeft(maxSeconds);
+            return;
         }
 
         const id = setInterval(() => {
@@ -249,21 +249,32 @@ function useTimer(running, maxSeconds, onLimitReached) {
 }
 
 export default function FeedbackPage() {
-    const [theme, setTheme] = useState("dark");
+    const [theme, setTheme] = useState("light");
     const isLight = theme === "light";
 
     const [clientName, setClientName] = useState("");
+    const [qrId, setQrId] = useState("");
+    const [qrName, setQrName] = useState("");
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
+
+        // 1. Get Client Name
         const paramClient = searchParams.get("client") || searchParams.get("client_name");
+
+        // 2. Get QR ID
+        const idParam = searchParams.get("id") || "";
+        setQrId(idParam);
+
+        // 3. Get QR Name
+        const nameParam = searchParams.get("name") || searchParams.get("qr_name") || "";
+        setQrName(nameParam);
+
+        // Client fallback logic
         if (paramClient) {
             setClientName(paramClient);
-        } else {
-            const idParam = searchParams.get("id") || "";
-            if (idParam.includes("-")) {
-                setClientName(idParam.split("-")[0]);
-            }
+        } else if (idParam.includes("-")) {
+            setClientName(idParam.split("-")[0]);
         }
     }, []);
 
@@ -429,8 +440,16 @@ export default function FeedbackPage() {
                             border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
                             borderRadius: 12, padding: "14px 16px", textAlign: "center", marginBottom: 20
                         }}>
-                            <div style={{ fontSize: "0.85rem", color: isLight ? "#0f172a" : "#f1f5f9" }}>
-                                Room <strong>{roomNumber}</strong> · {new Date().toLocaleDateString("en-US", { dateStyle: "long" })}
+                            <div style={{ fontSize: "0.85rem", color: isLight ? "#0f172a" : "#f1f5f9", display: "flex", flexDirection: "column", gap: 4 }}>
+                                <div>
+                                    Room <strong>{roomNumber}</strong>
+                                    {qrName && <span> · <strong>{qrName}</strong></span>}
+                                </div>
+                                <div style={{ fontSize: "0.78rem", opacity: 0.8 }}>
+                                    {/* {clientName && <span style={{ textTransform: "uppercase" }}>{clientName}</span>}
+                                    {qrId && <span> ({qrId})</span>} */}
+                                    <span> · {new Date().toLocaleDateString("en-US", { dateStyle: "long" })}</span>
+                                </div>
                             </div>
                         </div>
 
@@ -440,14 +459,14 @@ export default function FeedbackPage() {
                                     Would you like to view the transcript of your voice feedback?
                                 </p>
                                 <div style={{ display: "flex", gap: 12 }}>
-                                    <button 
-                                        onClick={handleRequestTranscript} 
+                                    <button
+                                        onClick={handleRequestTranscript}
                                         style={styles.primaryBtn}
                                     >
                                         Yes, View Transcript
                                     </button>
-                                    <button 
-                                        onClick={handleCloseTab} 
+                                    <button
+                                        onClick={handleCloseTab}
                                         style={styles.secondaryBtn(isLight)}
                                     >
                                         No, Close
@@ -509,6 +528,33 @@ export default function FeedbackPage() {
                     <div style={styles.logoIcon}>🏨</div>
                     <h1 style={styles.title(isLight)}>Guest Feedback</h1>
                     <p style={styles.subtitle(isLight)}>We value your experience</p>
+                    {/* QR & Client Info Banner */}
+                    {(clientName || qrId || qrName) && (
+                        <div style={{
+                            background: isLight ? "rgba(109,40,217,0.06)" : "rgba(255,255,255,0.06)",
+                            border: isLight ? "1px solid rgba(109,40,217,0.18)" : "1px solid rgba(255,255,255,0.15)",
+                            borderRadius: 12,
+                            padding: "10px 14px",
+                            marginBottom: 20,
+                            fontSize: "0.8rem",
+                            color: isLight ? "#4c1d95" : "#c4b5fd",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                            textAlign: "center"
+                        }}>
+                            <div style={{ fontWeight: 700, fontSize: "0.85rem" }}>
+                                {/* {clientName && <span style={{ textTransform: "uppercase" }}>{clientName}</span>} */}
+                                {clientName && qrName && <span> </span>}
+                                {qrName && <span>{qrName}</span>}
+                            </div>
+                            {qrId && (
+                                <div style={{ fontSize: "0.75rem", opacity: 0.85, fontFamily: "monospace" }}>
+                                    ID: <strong>{qrId}</strong>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
@@ -526,8 +572,8 @@ export default function FeedbackPage() {
                                 <li>Used solely to improve our services</li>
                                 <li>Stored securely and handled confidentially</li>
                             </ul>
-                            <label 
-                                style={styles.consentCheck} 
+                            <label
+                                style={styles.consentCheck}
                                 onClick={() => setConsentGiven(v => !v)}
                             >
                                 <div style={{
@@ -543,7 +589,7 @@ export default function FeedbackPage() {
                             </label>
                         </div>
 
-                        <button 
+                        <button
                             disabled={!consentGiven}
                             onClick={() => setPhase("form")}
                             style={{
@@ -559,6 +605,38 @@ export default function FeedbackPage() {
 
                 {phase !== "privacy" && (
                     <>
+                        <div style={{
+                            marginBottom: "1.5rem",
+                            background: isLight ? "rgba(109,40,217,0.06)" : "rgba(109,40,217,0.15)",
+                            padding: "16px",
+                            borderRadius: 12,
+                            border: isLight ? "1.5px solid rgba(109,40,217,0.3)" : "1.5px solid rgba(109,40,217,0.5)",
+                        }}>
+                            <label style={{
+                                ...styles.label(isLight),
+                                fontSize: "0.85rem",
+                                fontWeight: 700,
+                                color: isLight ? "#6d28d9" : "#c4b5fd",
+                                marginBottom: 8
+                            }}>
+                                Room Number *
+                            </label>
+                            <input
+                                type="text"
+                                value={roomNumber}
+                                onChange={e => setRoomNumber(e.target.value)}
+                                placeholder="e.g. 412"
+                                disabled={recording || phase === "submitting"}
+                                style={{
+                                    ...styles.input(isLight),
+                                    fontSize: "1.05rem",
+                                    fontWeight: 600,
+                                    padding: "12px 14px",
+                                }}
+                                required
+                            />
+                        </div>
+
                         {phase === "form" && (
                             <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
                                 <label style={{ ...styles.label(isLight), textAlign: "center", marginBottom: 10 }}>
@@ -620,19 +698,6 @@ export default function FeedbackPage() {
                                 placeholder="e.g. Feedback about housekeeping, restaurant, or facilities..."
                                 disabled={recording || phase === "submitting"}
                                 style={styles.textarea(isLight)}
-                            />
-                        </div>
-
-                        <div style={{ marginBottom: "1.25rem" }}>
-                            <label style={styles.label(isLight)}>Room Number *</label>
-                            <input
-                                type="text"
-                                value={roomNumber}
-                                onChange={e => setRoomNumber(e.target.value)}
-                                placeholder="e.g. 412"
-                                disabled={recording || phase === "submitting"}
-                                style={styles.input(isLight)}
-                                required
                             />
                         </div>
 

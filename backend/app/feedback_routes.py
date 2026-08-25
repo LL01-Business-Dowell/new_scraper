@@ -8,6 +8,7 @@ import requests as http_requests
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 import torch
 import json
+import re
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -18,6 +19,7 @@ router = APIRouter()
 CRUD_BASE_URL = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
 CRUD_API_KEY = os.getenv("FEEDBACK_CRUD_API_KEY", "")
 MASTER_DATABASE_ID = "695ce92eff84eaf663c457c2"
+QR_DATABASE_ID = "6a69cbefff5146ff3f2b568a"
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
@@ -39,11 +41,51 @@ POSITIVE_EMOTIONS = {"admiration", "amusement", "approval", "caring", "excitemen
 NEGATIVE_EMOTIONS = {"anger", "annoyance", "disappointment", "disapproval", "disgust", "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness"}
 
 
-def _get_collection_name(id_param: str) -> str:
-    clean_id = "".join(filter(str.isdigit, str(id_param or "")))
-    if len(clean_id) >= 4:
-        return clean_id[-4:]
-    return "0000"
+def _get_collection_name(id_param: str, client_name: str = "") -> str:
+    """
+    Look up the QR document from DataCube using client_name and id_param,
+    and return the stored 'collection_name' field.
+    Fallback: Extract last 4 digits from ID if DB fetch fails.
+    """
+    if not CRUD_API_KEY or not id_param:
+        return "0000"
+
+    # Infer client name if missing
+    clean_client = str(client_name or "").lower().strip()
+    if not clean_client and "-" in id_param:
+        clean_client = id_param.split("-")[0].lower().strip()
+
+    if clean_client:
+        url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
+        params = {
+            "database_id": QR_DATABASE_ID,
+            "collection_name": clean_client,
+            "filters": json.dumps({"full_id": id_param}),
+            "page": 1,
+            "page_size": 1
+        }
+        try:
+            resp = http_requests.get(
+                url,
+                headers={
+                    "Authorization": f"Api-Key {CRUD_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                params=params,
+                timeout=5
+            )
+            if resp.status_code == 200:
+                docs = resp.json().get("data", [])
+                if docs and isinstance(docs, list):
+                    stored_col = docs[0].get("collection_name")
+                    if stored_col:
+                        return str(stored_col)
+        except Exception as e:
+            logger.error(f"[FEEDBACK] Failed to fetch collection_name from DataCube: {e}")
+
+    # Regex fallback if fetch fails
+    match = re.search(r'(\d{4})$', str(id_param))
+    return match.group(1) if match else "0000"
 
 
 def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
@@ -229,7 +271,7 @@ def _save_to_datacube(
         logger.warning("[FEEDBACK] Datacube credentials missing, skipping save")
         return ""
 
-    collection_name = _get_collection_name(id_param)
+    collection_name = _get_collection_name(id_param, client_name)
 
     try:
         doc_data = {
@@ -280,13 +322,14 @@ def _update_datacube_transcription(
     doc_id: str,
     transcript: str,
     transcript_analysis: dict,
-    fused_metrics: dict = None
+    fused_metrics: dict = None,
+    client_name: str = ""
 ) -> bool:
     if not CRUD_API_KEY or not MASTER_DATABASE_ID or not doc_id:
         logger.warning("[FEEDBACK] Missing parameters for Datacube update")
         return False
 
-    collection_name = _get_collection_name(id_param)
+    collection_name = _get_collection_name(id_param, client_name)
 
     try:
         target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
@@ -322,10 +365,10 @@ def _update_datacube_transcription(
         return False
 
 
-def _get_datacube_doc(id_param: str, doc_id: str) -> dict:
+def _get_datacube_doc(id_param: str, doc_id: str, client_name: str = "") -> dict:
     if not CRUD_API_KEY or not MASTER_DATABASE_ID or not doc_id:
         return {}
-    collection_name = _get_collection_name(id_param)
+    collection_name = _get_collection_name(id_param,client_name)
     try:
         target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
         payload = {
@@ -471,6 +514,10 @@ async def transcribe_on_demand(
         except Exception as e:
             logger.warning(f"[FEEDBACK] Transcription error: {e}")
 
+        client_name = request.query_params.get("client", "") or request.query_params.get("client_name", "")
+        if not client_name and "-" in id_param:
+            client_name = id_param.split("-")[0]
+
         transcript_analysis = _distilbert_sentiment_analysis(transcript)
 
         doc_data = _get_datacube_doc(id_param, doc_id) if doc_id else {}
@@ -489,7 +536,8 @@ async def transcribe_on_demand(
                 doc_id=doc_id,
                 transcript=transcript,
                 transcript_analysis=transcript_analysis,
-                fused_metrics=fused_metrics
+                fused_metrics=fused_metrics,
+                client_name=client_name
             )
 
         return JSONResponse({

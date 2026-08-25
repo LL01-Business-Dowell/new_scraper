@@ -1,4 +1,4 @@
-
+from urllib.parse import quote
 import os
 import re
 import logging
@@ -155,6 +155,7 @@ async def add_client(req: CreateClientRequest):
                     {"name": "room_number", "type": "string"},
                     {"name": "user_id", "type": "string"},
                     {"name": "sequence_number", "type": "number"},
+                    {"name": "collection_name", "type": "string"},
                     {"name": "full_id", "type": "string"},
                     {"name": "target_url", "type": "string"},
                     {"name": "created_at", "type": "string"}
@@ -239,22 +240,33 @@ async def create_qr_code(req: CreateQrRequest):
     """
     client_col = req.client_name.lower().strip()
     client_name = req.client_name.strip()
+    qr_name = req.name.strip()
     
     logger.info(f"Creating new QR code record for client '{client_col}'")
 
     try:
         # 1. Compute next sequential 4-digit ID
         next_seq = _get_next_sequence_id(client_col)
+
+        collection_name_val = str(next_seq)
         
         # 2. Combine user alphanumeric ID with sequence ID
         full_id = f"{req.user_id.strip()}-{next_seq}"
-        target_url = f"https://reviewanalysis.uxlivinglab.org/feedback?client={client_name}&id={full_id}"
+
+        # URL-encode parameters safely
+        safe_client = quote(client_name)
+        safe_id = quote(full_id)
+        safe_name = quote(qr_name)
+
+        # Updated target_url with name parameter
+        target_url = f"https://reviewanalysis.uxlivinglab.org/feedback?client={safe_client}&id={safe_id}&name={safe_name}"
         
         doc = {
             "name": req.name,
             "room_number": req.room_number,
             "user_id": req.user_id,
             "sequence_number": next_seq,
+            "collection_name": collection_name_val,
             "full_id": full_id,
             "target_url": target_url,
             "created_at": datetime.datetime.utcnow().isoformat()
