@@ -18,7 +18,9 @@ router = APIRouter()
 
 CRUD_BASE_URL = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
 CRUD_API_KEY = os.getenv("FEEDBACK_CRUD_API_KEY", "")
+CRUD_KEY = os.getenv("FEEDBACK_QR_API_KEY", "")
 MASTER_DATABASE_ID = "695ce92eff84eaf663c457c2"
+QR_DATABASE_ID = "6a69cbefff5146ff3f2b568a"  # Collection mapping database
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
@@ -40,10 +42,42 @@ POSITIVE_EMOTIONS = {"admiration", "amusement", "approval", "caring", "excitemen
 NEGATIVE_EMOTIONS = {"anger", "annoyance", "disappointment", "disapproval", "disgust", "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness"}
 
 
-def _get_collection_name(id_param: str) -> str:
-    clean_id = "".join(filter(str.isdigit, str(id_param or "")))
-    if len(clean_id) >= 4:
-        return clean_id[-4:]
+def _resolve_collection_by_qr_id(qr_id: str, default_client: str = "") -> str:
+    """
+    Dynamically resolves the target collection name.
+    If default_client is provided, sanitizes and returns it.
+    Otherwise, queries DataCube using the unique `id` to find its client/collection.
+    """
+    if default_client and default_client.strip():
+        return default_client.lower().strip().replace(" ", "_")
+
+    if not qr_id:
+        return "0000"
+
+    url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
+    headers = {
+        "Authorization": f"Api-Key {CRUD_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    params = {
+        "database_id": QR_DATABASE_ID,
+        "collection_name": "default",
+        "filters": json.dumps({"id": qr_id}),
+        "page": 1,
+        "page_size": 1
+    }
+
+    try:
+        response = http_requests.get(url, headers=headers, params=params, timeout=5)
+        if response.status_code == 200:
+            res_data = response.json()
+            docs = res_data.get("data", [])
+            if docs and docs[0].get("collection_name"):
+                return docs[0]["collection_name"]
+    except Exception as e:
+        logger.warning(f"[FEEDBACK] Failed to lookup collection for QR ID {qr_id}: {e}")
+
     return "0000"
 
 
@@ -87,67 +121,6 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
                 pass
 
 
-# def _load_huggingface_model(model_id: str):
-#     try:
-#         tokenizer = DistilBertTokenizer.from_pretrained(model_id)
-#         model = DistilBertForSequenceClassification.from_pretrained(model_id)
-#         model.to(DEVICE)
-#         model.eval()
-#         logger.info(f"[FEEDBACK] HuggingFace model '{model_id}' successfully pre-loaded on {DEVICE}.")
-#         return tokenizer, model
-#     except Exception as e:
-#         logger.error(f"[FEEDBACK] Error loading HuggingFace model {model_id}: {e}")
-#         return None, None
-
-# TOKENIZER, MODEL = _load_huggingface_model(MODEL_ID)
-
-
-# def _distilbert_sentiment_analysis(transcript: str) -> dict:
-#     if MODEL is None or TOKENIZER is None or not transcript.strip():
-#         logger.warning("[FEEDBACK] Model uninitialized or empty transcript received.")
-#         return {"label": "neutral", "confidence_score": 0.0, "predicted_class": -1, "detected_emotion": "neutral", "text": transcript}
-
-#     try:
-#         tokenize = TOKENIZER(
-#             transcript,
-#             return_tensors="pt",
-#             truncation=True,
-#             max_length=TOKENIZER.model_max_length,
-#             padding=True
-#         )
-
-#         inputs = {key: value.to(DEVICE) for key, value in tokenize.items()}
-
-#         with torch.no_grad():
-#             output = MODEL(**inputs)
-
-#         logits = output.logits
-#         probabilities = torch.softmax(logits, dim=-1)
-
-#         predicted_class = torch.argmax(probabilities, dim=-1).item()
-#         confidence_score = probabilities[0][predicted_class].item()
-
-#         emotion_name = GO_EMOTIONS_LABELS[predicted_class] if predicted_class < len(GO_EMOTIONS_LABELS) else "neutral"
-
-#         if emotion_name in POSITIVE_EMOTIONS:
-#             sentiment_label = "positive"
-#         elif emotion_name in NEGATIVE_EMOTIONS:
-#             sentiment_label = "negative"
-#         else:
-#             sentiment_label = "neutral"
-
-#         return {
-#             "predicted_class": predicted_class,
-#             "detected_emotion": emotion_name,
-#             "label": sentiment_label,
-#             "confidence_score": confidence_score,
-#             "text": transcript
-#         }
-#     except Exception as e:
-#         logger.warning(f"[FEEDBACK] Inference error: {e}")
-#         return {"label": "neutral", "confidence_score": 0.0, "predicted_class": -1, "detected_emotion": "neutral", "text": transcript}
-
-
 def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_score):
     logger.info(f"[FUSED METRICS] Input raw values -> sentiment: {text_sentiment}, text_score: {text_score}, audio_emotion: {audio_emotion}, audio_score: {audio_score}")
 
@@ -166,22 +139,15 @@ def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_sco
             audio_score = 0.0
             
         high_urgency_audio = [
-                # Anger & Aggression
                 "angry", "anger", "furious", "rage", "frustrated", "frustration", "annoyed", "irritated",
-                # Panic & Distress
                 "fearful", "fear", "panic", "panicked", "distressed", "terrified", "alarmed",
-                # Active Sarcasm & Mocking
                 "sarcastic", "sarcasm", "mocking", "cynical", "snarky", "scornful", "taunting", "derisive"
             ]
         
         medium_urgency_audio = [
-                # Sadness & Disappointment
                 "sad", "sadness", "disappointed", "disappointment", "grief", "despair",
-                # Disgust & Aversion
                 "disgust", "disgusted", "contempt",
-                # Tension & Anxiety
                 "anxious", "anxiety", "nervous", "hesitant", "surprised", "shocked",
-                # Subtle Irony & Passive Aggression
                 "ironic", "irony", "smug", "passive_aggressive", "dismissive", "condescending"
             ]
         
@@ -247,7 +213,7 @@ def _save_to_datacube(
         logger.warning("[FEEDBACK] Datacube credentials missing, skipping save")
         return ""
 
-    collection_name = _get_collection_name(id_param)
+    collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
 
     try:
         doc_data = {
@@ -298,13 +264,14 @@ def _update_datacube_transcription(
     doc_id: str,
     transcript: str,
     transcript_analysis: dict,
+    client_name: str = "",
     fused_metrics: dict = None
 ) -> bool:
     if not CRUD_API_KEY or not MASTER_DATABASE_ID or not doc_id:
         logger.warning("[FEEDBACK] Missing parameters for Datacube update")
         return False
 
-    collection_name = _get_collection_name(id_param)
+    collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
 
     try:
         target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
@@ -340,10 +307,10 @@ def _update_datacube_transcription(
         return False
 
 
-def _get_datacube_doc(id_param: str, doc_id: str) -> dict:
+def _get_datacube_doc(id_param: str, doc_id: str, client_name: str = "") -> dict:
     if not CRUD_API_KEY or not MASTER_DATABASE_ID or not doc_id:
         return {}
-    collection_name = _get_collection_name(id_param)
+    collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
     try:
         target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
         payload = {
@@ -382,8 +349,6 @@ async def submit_feedback(
 
         if not client_name:
             client_name = request.query_params.get("client", "") or request.query_params.get("client_name", "")
-            if not client_name and "-" in id_param:
-                client_name = id_param.split("-")[0]
 
         webm_bytes = await audio.read()
         if not webm_bytes:
@@ -452,9 +417,12 @@ async def transcribe_on_demand(
     doc_id: str = Form(default=""),
     description: str = Form(default=""),
     file_id: str = Form(default=""),
+    client_name: str = Form(default=""),
 ):
     try:
         id_param = request.query_params.get("id", "")
+        if not client_name:
+            client_name = request.query_params.get("client", "") or request.query_params.get("client_name", "")
 
         webm_bytes = await audio.read()
         if not webm_bytes:
@@ -491,7 +459,7 @@ async def transcribe_on_demand(
 
         transcript_analysis = analyze_sentiment(os.getenv("GEMINI_KEY_3"), transcript)
 
-        doc_data = _get_datacube_doc(id_param, doc_id) if doc_id else {}
+        doc_data = _get_datacube_doc(id_param, doc_id, client_name=client_name) if doc_id else {}
         audio_analysis = doc_data.get("audio_analysis", {})
 
         fused_metrics = calculate_fused_metrics(
@@ -507,6 +475,7 @@ async def transcribe_on_demand(
                 doc_id=doc_id,
                 transcript=transcript,
                 transcript_analysis=transcript_analysis,
+                client_name=client_name,
                 fused_metrics=fused_metrics
             )
 

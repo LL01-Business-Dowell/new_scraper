@@ -4,11 +4,11 @@ import re
 import logging
 import datetime
 import requests
+import uuid
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-# Initialize logger
 logger = logging.getLogger("qr_datacube")
 logger.setLevel(logging.INFO)
 
@@ -16,7 +16,6 @@ router = APIRouter(prefix="/api/feedback-qr", tags=["Feedback QR DataCube"])
 
 DATACUBE_BASE_URL = "https://datacube.uxlivinglab.online"
 
-# Reads FEEDBACK_QR_API_KEY directly from environment/.env
 CRUD_API_KEY = os.getenv("FEEDBACK_QR_API_KEY", "")
 DATABASE_ID = "6a69cbefff5146ff3f2b568a"
 
@@ -31,23 +30,19 @@ def get_headers():
 # ─────────────────────────────────────────────────────────────────────────────
 
 class CreateQrRequest(BaseModel):
-    client_name: str       # Collection name (e.g., hyatt, hilton)
-    name: str              # e.g., "Main Lobby Desk"
-    room_number: str       # e.g., "404"
-    user_id: str           # Alphanumeric ID input (e.g. "hyatt-suite")
+    client_name: str       
+    name: str             
+    room_number: str       
+    user_id: str           
 
 class CreateClientRequest(BaseModel):
-    client_name: str       # New collection name (e.g., marriott)
+    client_name: str       
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_next_sequence_id(client_name: str) -> int:
-    """
-    Fetches existing QR records using GET /api/v2/crud/ 
-    and calculates the next 4-digit sequence integer (starting at 1000).
-    """
     url = f"{DATACUBE_BASE_URL}/api/v2/crud/"
     params = {
         "database_id": DATABASE_ID,
@@ -89,10 +84,6 @@ def _get_next_sequence_id(client_name: str) -> int:
 
 @router.get("/clients")
 async def list_clients():
-    """
-    GET /api/v2/list_collections/?database_id=...
-    Retrieves the list of client collections inside the database.
-    """
     url = f"{DATACUBE_BASE_URL}/api/v2/list_collections/"
     params = {"database_id": DATABASE_ID}
     
@@ -136,10 +127,6 @@ async def list_clients():
 
 @router.post("/add-client")
 async def add_client(req: CreateClientRequest):
-    """
-    POST /api/v2/add_collection/
-    Creates a new client collection inside DataCube database.
-    """
     client_name = req.client_name.lower().strip().replace(" ", "_")
     if not client_name:
         raise HTTPException(status_code=400, detail="Client name cannot be empty.")
@@ -151,6 +138,8 @@ async def add_client(req: CreateClientRequest):
             {
                 "name": client_name,
                 "fields": [
+                    {"name": "id", "type": "string"},
+                    {"name": "unique_id", "type": "string"},
                     {"name": "name", "type": "string"},
                     {"name": "room_number", "type": "string"},
                     {"name": "user_id", "type": "string"},
@@ -192,10 +181,6 @@ async def add_client(req: CreateClientRequest):
 
 @router.get("/qrs/{client_name}")
 async def get_client_qrs(client_name: str):
-    """
-    GET /api/v2/crud/?database_id=...&collection_name=...
-    Retrieves all QR documents for the selected client collection.
-    """
     url = f"{DATACUBE_BASE_URL}/api/v2/crud/"
     clean_client = client_name.lower().strip()
     params = {
@@ -234,10 +219,6 @@ async def get_client_qrs(client_name: str):
 
 @router.post("/create")
 async def create_qr_code(req: CreateQrRequest):
-    """
-    POST /api/v2/crud/
-    Inserts a new QR document into the client's DataCube collection.
-    """
     client_col = req.client_name.lower().strip()
     client_name = req.client_name.strip()
     qr_name = req.name.strip()
@@ -245,34 +226,34 @@ async def create_qr_code(req: CreateQrRequest):
     logger.info(f"Creating new QR code record for client '{client_col}'")
 
     try:
-        # 1. Compute next sequential 4-digit ID
+        # 1. Get the next 4-digit sequence number (e.g. 1000, 1001, 1002)
         next_seq = _get_next_sequence_id(client_col)
 
-        collection_name_val = str(next_seq)
-        
-        # 2. Combine user alphanumeric ID with sequence ID
-        full_id = f"{req.user_id.strip()}-{next_seq}"
+        # 2. Format as a 4-digit string
+        seq_prefix = f"{next_seq:04d}"
 
-        # URL-encode parameters safely
+        # 3. Combine sequence prefix with random UUID string
+        unique_qr_id = f"{seq_prefix}{uuid.uuid4().hex[:12]}" 
+
         safe_client = quote(client_name)
-        safe_id = quote(full_id)
+        safe_id = quote(unique_qr_id)
         safe_name = quote(qr_name)
 
-        # Updated target_url with name parameter
+        # 4. Target URL now contains the sequence number as the first 4 digits of the ID
         target_url = f"https://reviewanalysis.uxlivinglab.org/feedback?client={safe_client}&id={safe_id}&name={safe_name}"
         
         doc = {
+            "id": unique_qr_id,                 
+            "unique_id": unique_qr_id,           
             "name": req.name,
             "room_number": req.room_number,
-            "user_id": req.user_id,
-            "sequence_number": next_seq,
-            "collection_name": collection_name_val,
-            "full_id": full_id,
+            "user_id": req.user_id.strip(),       
+            "sequence_number": next_seq,         
+            "collection_name": client_col,       
             "target_url": target_url,
             "created_at": datetime.datetime.utcnow().isoformat()
         }
         
-        # 3. Format per DataCube v2 API specification
         payload = {
             "database_id": DATABASE_ID,
             "collection_name": client_col,
@@ -288,7 +269,7 @@ async def create_qr_code(req: CreateQrRequest):
         if response.status_code in (200, 201):
             return {
                 "status": "success",
-                "message": f"QR code {full_id} stored in DataCube.",
+                "message": f"QR code {unique_qr_id} stored in DataCube.",
                 "record": doc,
                 "datacube_response": response.json()
             }

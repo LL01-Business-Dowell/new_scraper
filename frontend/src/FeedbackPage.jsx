@@ -32,187 +32,262 @@ const RefreshIcon = () => (
     </svg>
 );
 
-const SunIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="5"></circle>
-        <line x1="12" y1="1" x2="12" y2="3"></line>
-        <line x1="12" y1="21" x2="12" y2="23"></line>
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-        <line x1="1" y1="12" x2="3" y2="12"></line>
-        <line x1="21" y1="12" x2="23" y2="12"></line>
-        <line x1="4.22" y1="19.22" x2="5.64" y2="17.84"></line>
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-    </svg>
-);
-
-const MoonIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-    </svg>
-);
-
 const styles = {
-    page: (isLight) => ({
+    page: {
         minHeight: "100vh",
-        background: isLight
-            ? "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%)"
-            : "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)",
-        display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "flex-start", padding: "2rem 1rem", fontFamily: "'Segoe UI', system-ui, sans-serif",
-        transition: "background 0.3s ease",
-    }),
-    card: (isLight) => ({
-        background: isLight ? "rgba(255, 255, 255, 0.7)" : "rgba(255,255,255,0.04)",
-        backdropFilter: "blur(20px)",
-        border: isLight ? "1px solid rgba(0, 0, 0, 0.06)" : "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 20,
-        padding: "2rem 1.75rem", width: "100%", maxWidth: 480,
-        boxShadow: isLight ? "0 25px 50px rgba(0,0,0,0.06)" : "0 25px 50px rgba(0,0,0,0.4)",
+        background: "linear-gradient(135deg, #FAF7F2 0%, #F3EDE2 50%, #EFE7D8 100%)",
+        display: "flex", 
+        flexDirection: "column", 
+        alignItems: "center",
+        justifyContent: "flex-start", 
+        padding: "2.5rem 1rem", 
+        fontFamily: "'Playfair Display', Georgia, 'Segoe UI', serif",
+    },
+    card: {
+        background: "rgba(255, 255, 255, 0.88)",
+        backdropFilter: "blur(16px)",
+        border: "1px solid rgba(212, 175, 55, 0.3)",
+        borderRadius: 16,
+        padding: "2.5rem 2rem", 
+        width: "100%", 
+        maxWidth: 480,
+        boxShadow: "0 20px 40px rgba(44, 36, 32, 0.08)",
         position: "relative",
-        transition: "background 0.3s ease, border 0.3s ease, box-shadow 0.3s ease",
-    }),
+    },
     logo: {
-        textAlign: "center", marginBottom: "1.75rem",
+        textAlign: "center", 
+        marginBottom: "1.75rem",
     },
     logoIcon: {
-        width: 56, height: 56, borderRadius: "50%",
-        background: "linear-gradient(135deg, #6d28d9, #4338ca)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        margin: "0 auto 12px", fontSize: 26,
+        width: 60, 
+        height: 60, 
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, #C5A059 0%, #9E7938 100%)",
+        color: "#FFF",
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "center",
+        margin: "0 auto 14px", 
+        fontSize: 26,
+        boxShadow: "0 6px 16px rgba(197, 160, 89, 0.3)",
     },
-    title: (isLight) => ({
-        fontSize: "1.4rem", fontWeight: 700, color: isLight ? "#0f172a" : "#f1f5f9",
-        margin: "0 0 4px", textAlign: "center",
-        transition: "color 0.3s ease",
-    }),
-    subtitle: (isLight) => ({
-        fontSize: "0.82rem", color: isLight ? "#475569" : "#94a3b8", textAlign: "center", margin: 0,
-        transition: "color 0.3s ease",
-    }),
-    label: (isLight) => ({
-        display: "block", fontSize: "0.75rem", fontWeight: 600,
-        color: isLight ? "#475569" : "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em",
-        marginBottom: 6,
-        transition: "color 0.3s ease",
-    }),
-    input: (isLight) => ({
-        width: "100%", padding: "11px 14px", borderRadius: 10,
-        background: isLight ? "rgba(0, 0, 0, 0.03)" : "rgba(255,255,255,0.06)",
-        border: isLight ? "1px solid rgba(0, 0, 0, 0.12)" : "1px solid rgba(255,255,255,0.12)",
-        color: isLight ? "#0f172a" : "#f1f5f9", fontSize: "0.9rem", outline: "none",
-        boxSizing: "border-box", transition: "border-color 0.2s, background 0.3s, color 0.3s",
-    }),
-    textarea: (isLight) => ({
-        width: "100%", padding: "11px 14px", borderRadius: 10,
-        background: isLight ? "rgba(0, 0, 0, 0.03)" : "rgba(255,255,255,0.06)",
-        border: isLight ? "1px solid rgba(0, 0, 0, 0.12)" : "1px solid rgba(255,255,255,0.12)",
-        color: isLight ? "#0f172a" : "#f1f5f9", fontSize: "0.9rem", outline: "none",
-        boxSizing: "border-box", resize: "vertical", minHeight: 90,
-        fontFamily: "inherit", transition: "border-color 0.2s, background 0.3s, color 0.3s",
-    }),
-    consentBox: (isLight) => ({
-        background: isLight ? "rgba(109,40,217,0.04)" : "rgba(109,40,217,0.1)",
-        border: isLight ? "1px solid rgba(109,40,217,0.2)" : "1px solid rgba(109,40,217,0.3)",
-        borderRadius: 12, padding: "16px", marginBottom: "1.5rem",
-        transition: "background 0.3s ease, border 0.3s ease",
-    }),
-    consentTitle: (isLight) => ({
-        fontSize: "0.85rem", fontWeight: 700, color: isLight ? "#5b21b6" : "#a78bfa",
-        textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10,
-        transition: "color 0.3s ease",
-    }),
-    consentText: (isLight) => ({
-        fontSize: "0.82rem", color: isLight ? "#334155" : "#94a3b8", lineHeight: 1.6, margin: 0,
-        transition: "color 0.3s ease",
-    }),
+    title: {
+        fontSize: "1.55rem", 
+        fontWeight: 700, 
+        color: "#1A1A1A",
+        margin: "0 0 4px", 
+        textAlign: "center",
+        letterSpacing: "0.02em",
+    },
+    subtitle: {
+        fontSize: "0.85rem", 
+        color: "#6B5E54", 
+        textAlign: "center", 
+        margin: 0,
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        fontStyle: "italic",
+    },
+    label: {
+        display: "block", 
+        fontSize: "0.75rem", 
+        fontWeight: 700,
+        color: "#54463A", 
+        textTransform: "uppercase", 
+        letterSpacing: "0.08em",
+        marginBottom: 8,
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+    },
+    input: {
+        width: "100%", 
+        padding: "12px 14px", 
+        borderRadius: 8,
+        background: "#FDFCFA",
+        border: "1px solid #D6C7B2",
+        color: "#1A1A1A", 
+        fontSize: "0.95rem", 
+        outline: "none",
+        boxSizing: "border-box",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        transition: "border-color 0.2s, box-shadow 0.2s",
+    },
+    textarea: {
+        width: "100%", 
+        padding: "12px 14px", 
+        borderRadius: 8,
+        background: "#FDFCFA",
+        border: "1px solid #D6C7B2",
+        color: "#1A1A1A", 
+        fontSize: "0.9rem", 
+        outline: "none",
+        boxSizing: "border-box", 
+        resize: "vertical", 
+        minHeight: 90,
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        transition: "border-color 0.2s, box-shadow 0.2s",
+    },
+    consentBox: {
+        background: "#FAF5ED",
+        border: "1px solid #E2D2B8",
+        borderRadius: 12, 
+        padding: "18px", 
+        marginBottom: "1.5rem",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+    },
+    consentTitle: {
+        fontSize: "0.82rem", 
+        fontWeight: 700, 
+        color: "#8C6D37",
+        textTransform: "uppercase", 
+        letterSpacing: "0.06em", 
+        marginBottom: 10,
+    },
+    consentText: {
+        fontSize: "0.83rem", 
+        color: "#4A3E35", 
+        lineHeight: 1.6, 
+        margin: 0,
+    },
     consentCheck: {
-        display: "flex", alignItems: "flex-start", gap: 10, marginTop: 14, cursor: "pointer",
+        display: "flex", 
+        alignItems: "flex-start", 
+        gap: 12, 
+        marginTop: 14, 
+        cursor: "pointer",
     },
     checkbox: {
-        width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-        border: "2px solid rgba(109,40,217,0.6)", marginTop: 1,
-        display: "flex", alignItems: "center", justifyContent: "center",
+        width: 18, 
+        height: 18, 
+        borderRadius: 4, 
+        flexShrink: 0,
+        border: "2px solid #C5A059", 
+        marginTop: 1,
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "center",
         transition: "all 0.2s",
     },
     micBtn: (recording) => ({
-        width: 80, height: 80, borderRadius: "50%", border: "none",
+        width: 80, 
+        height: 80, 
+        borderRadius: "50%", 
+        border: "none",
         background: recording
-            ? "linear-gradient(135deg, #dc2626, #b91c1c)"
-            : "linear-gradient(135deg, #6d28d9, #4338ca)",
-        color: "#fff", cursor: "pointer", display: "flex",
-        alignItems: "center", justifyContent: "center",
+            ? "linear-gradient(135deg, #A83232, #852121)"
+            : "linear-gradient(135deg, #C5A059, #9E7938)",
+        color: "#FFF", 
+        cursor: "pointer", 
+        display: "flex",
+        alignItems: "center", 
+        justifyContent: "center",
         boxShadow: recording
-            ? "0 0 0 8px rgba(220,38,38,0.2), 0 8px 24px rgba(220,38,38,0.4)"
-            : "0 8px 24px rgba(109,40,217,0.4)",
-        transition: "all 0.3s", transform: recording ? "scale(1.08)" : "scale(1)",
+            ? "0 0 0 8px rgba(168, 50, 50, 0.2), 0 8px 24px rgba(168, 50, 50, 0.3)"
+            : "0 8px 24px rgba(197, 160, 89, 0.35)",
+        transition: "all 0.3s", 
+        transform: recording ? "scale(1.08)" : "scale(1)",
     }),
     pulseRing: {
-        position: "absolute", width: 80, height: 80, borderRadius: "50%",
-        border: "2px solid rgba(220,38,38,0.5)",
+        position: "absolute", 
+        width: 80, 
+        height: 80, 
+        borderRadius: "50%",
+        border: "2px solid rgba(168, 50, 50, 0.5)",
         animation: "pulse 1.5s ease-out infinite",
     },
     timer: {
-        fontSize: "0.85rem", color: "#ef4444", fontWeight: 700,
-        marginTop: 8, fontVariantNumeric: "tabular-nums",
+        fontSize: "0.85rem", 
+        color: "#A83232", 
+        fontWeight: 700,
+        marginTop: 8, 
+        fontVariantNumeric: "tabular-nums",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
     },
     primaryBtn: {
-        width: "100%", padding: "13px", borderRadius: 10, border: "none",
-        background: "linear-gradient(to right, #6d28d9, #4338ca)",
-        color: "#fff", fontSize: "0.9rem", fontWeight: 700, cursor: "pointer",
-        transition: "opacity 0.2s",
+        width: "100%", 
+        padding: "14px", 
+        borderRadius: 8, 
+        border: "none",
+        background: "linear-gradient(135deg, #C5A059 0%, #A37E3E 100%)",
+        color: "#FFFFFF", 
+        fontSize: "0.9rem", 
+        fontWeight: 700, 
+        letterSpacing: "0.04em",
+        cursor: "pointer",
+        boxShadow: "0 4px 14px rgba(163, 126, 62, 0.25)",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        transition: "opacity 0.2s, transform 0.1s",
     },
-    secondaryBtn: (isLight) => ({
-        width: "100%", padding: "11px", borderRadius: 10,
-        border: isLight ? "1px solid rgba(0,0,0,0.12)" : "1px solid rgba(255,255,255,0.12)",
-        background: "transparent", color: isLight ? "#475569" : "#94a3b8",
-        fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-        transition: "border-color 0.2s, color 0.3s",
-    }),
-    transcriptBox: (isLight) => ({
-        background: isLight ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.04)",
-        border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 10, padding: "14px 16px", marginTop: 12, textAlign: "left",
-        transition: "background 0.3s ease, border 0.3s ease",
-    }),
-    transcriptText: (isLight) => ({
-        fontSize: "0.9rem", color: isLight ? "#1e293b" : "#e2e8f0", lineHeight: 1.7, margin: 0,
-        fontStyle: "italic", transition: "color 0.3s ease",
-    }),
+    secondaryBtn: {
+        width: "100%", 
+        padding: "12px", 
+        borderRadius: 8,
+        border: "1px solid #C5A059",
+        background: "transparent", 
+        color: "#8C6D37",
+        fontSize: "0.85rem", 
+        fontWeight: 600, 
+        cursor: "pointer",
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "center", 
+        gap: 8,
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        transition: "background 0.2s, color 0.2s",
+    },
+    transcriptBox: {
+        background: "#FAF6F0",
+        border: "1px solid #E8DCBE",
+        borderRadius: 8, 
+        padding: "14px 16px", 
+        marginTop: 12, 
+        textAlign: "left",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+    },
+    transcriptText: {
+        fontSize: "0.9rem", 
+        color: "#2C2420", 
+        lineHeight: 1.7, 
+        margin: 0,
+        fontStyle: "italic",
+    },
     success: {
-        textAlign: "center", padding: "1rem 0",
+        textAlign: "center", 
+        padding: "1rem 0",
     },
     successIcon: {
-        width: 64, height: 64, borderRadius: "50%",
-        background: "linear-gradient(135deg, #059669, #10b981)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        margin: "0 auto 16px", fontSize: 28,
+        width: 64, 
+        height: 64, 
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, #8C6D37, #C5A059)",
+        color: "#FFF",
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "center",
+        margin: "0 auto 16px", 
+        fontSize: 28,
+        boxShadow: "0 6px 18px rgba(140, 109, 55, 0.25)",
     },
     errorBox: {
-        background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
-        borderRadius: 8, padding: "10px 14px", marginBottom: 12,
-        color: "#ef4444", fontSize: "0.82rem",
+        background: "rgba(168, 50, 50, 0.08)", 
+        border: "1px solid rgba(168, 50, 50, 0.25)",
+        borderRadius: 8, 
+        padding: "10px 14px", 
+        marginBottom: 14,
+        color: "#A83232", 
+        fontSize: "0.82rem",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
     },
-    themeToggle: (isLight) => ({
-        position: "absolute", top: "1.25rem", right: "1.25rem",
-        background: "none", border: "none",
-        color: isLight ? "#64748b" : "#94a3b8", cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "6px", borderRadius: "50%",
-        transition: "color 0.2s ease, background-color 0.2s ease",
-    }),
 };
 
 const PulseStyle = () => (
     <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap');
     @keyframes pulse {
       0% { transform: scale(1); opacity: 1; }
       100% { transform: scale(1.8); opacity: 0; }
     }
     input:focus, textarea:focus {
-      border-color: rgba(109,40,217,0.6) !important;
-      box-shadow: 0 0 0 3px rgba(109,40,217,0.15);
+      border-color: #C5A059 !important;
+      box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.18) !important;
     }
   `}</style>
 );
@@ -249,9 +324,6 @@ function useTimer(running, maxSeconds, onLimitReached) {
 }
 
 export default function FeedbackPage() {
-    const [theme, setTheme] = useState("light");
-    const isLight = theme === "light";
-
     const [clientName, setClientName] = useState("");
     const [qrId, setQrId] = useState("");
     const [qrName, setQrName] = useState("");
@@ -259,28 +331,19 @@ export default function FeedbackPage() {
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
 
-        // 1. Get Client Name
         const paramClient = searchParams.get("client") || searchParams.get("client_name");
-
-        // 2. Get QR ID
         const idParam = searchParams.get("id") || "";
         setQrId(idParam);
 
-        // 3. Get QR Name
         const nameParam = searchParams.get("name") || searchParams.get("qr_name") || "";
         setQrName(nameParam);
 
-        // Client fallback logic
         if (paramClient) {
             setClientName(paramClient);
         } else if (idParam.includes("-")) {
             setClientName(idParam.split("-")[0]);
         }
     }, []);
-
-    const toggleTheme = () => {
-        setTheme(prev => prev === "dark" ? "light" : "dark");
-    };
 
     const [roomNumber, setRoomNumber] = useState("");
     const [description, setDescription] = useState("");
@@ -339,7 +402,6 @@ export default function FeedbackPage() {
         setRecording(false);
     };
 
-    // Submits feedback and automatically triggers backend transcription/analysis in background
     const handleSubmit = async () => {
         if (!isRoomNumberValid) {
             setErrorMsg("Please enter your room number.");
@@ -366,8 +428,6 @@ export default function FeedbackPage() {
             const fileId = resp.data?.file_id;
 
             setPhase("done");
-
-            // Execute transcription & analysis via Hugging Face on the backend immediately
             runBackgroundTranscription(docId, fileId);
 
         } catch (err) {
@@ -416,46 +476,39 @@ export default function FeedbackPage() {
 
     if (phase === "done") {
         return (
-            <div style={styles.page(isLight)}>
+            <div style={styles.page}>
                 <PulseStyle />
-                <div style={styles.card(isLight)}>
-                    <button
-                        type="button"
-                        onClick={toggleTheme}
-                        style={styles.themeToggle(isLight)}
-                        aria-label="Toggle theme"
-                    >
-                        {isLight ? <MoonIcon /> : <SunIcon />}
-                    </button>
-
+                <div style={styles.card}>
                     <div style={styles.success}>
                         <div style={styles.successIcon}>✓</div>
-                        <h2 style={{ ...styles.title(isLight), marginBottom: 8 }}>Thank You!</h2>
-                        <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.9rem", lineHeight: 1.6, marginBottom: 20 }}>
-                            Your feedback has been received. We appreciate you taking the time to share your experience with us!
+                        <h2 style={{ ...styles.title, marginBottom: 8 }}>Thank You</h2>
+                        <p style={{ color: "#6B5E54", fontSize: "0.9rem", lineHeight: 1.6, marginBottom: 20, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+                            Your feedback has been received. We appreciate you taking the time to share your experience with us.
                         </p>
 
                         <div style={{
-                            background: isLight ? "rgba(0,0,0,0.03)" : "rgba(255,255,255,0.04)",
-                            border: isLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.1)",
-                            borderRadius: 12, padding: "14px 16px", textAlign: "center", marginBottom: 20
+                            background: "#FAF6F0",
+                            border: "1px solid #E8DCBE",
+                            borderRadius: 10, 
+                            padding: "14px 16px", 
+                            textAlign: "center", 
+                            marginBottom: 20,
+                            fontFamily: "'Segoe UI', system-ui, sans-serif"
                         }}>
-                            <div style={{ fontSize: "0.85rem", color: isLight ? "#0f172a" : "#f1f5f9", display: "flex", flexDirection: "column", gap: 4 }}>
+                            <div style={{ fontSize: "0.85rem", color: "#1A1A1A", display: "flex", flexDirection: "column", gap: 4 }}>
                                 <div>
                                     Room <strong>{roomNumber}</strong>
                                     {qrName && <span> · <strong>{qrName}</strong></span>}
                                 </div>
-                                <div style={{ fontSize: "0.78rem", opacity: 0.8 }}>
-                                    {/* {clientName && <span style={{ textTransform: "uppercase" }}>{clientName}</span>}
-                                    {qrId && <span> ({qrId})</span>} */}
-                                    <span> · {new Date().toLocaleDateString("en-US", { dateStyle: "long" })}</span>
+                                <div style={{ fontSize: "0.78rem", color: "#6B5E54" }}>
+                                    <span>{new Date().toLocaleDateString("en-US", { dateStyle: "long" })}</span>
                                 </div>
                             </div>
                         </div>
 
                         {!transcribeChoiceMade ? (
-                            <div style={{ marginTop: 24, paddingTop: 16, borderTop: isLight ? "1px solid #e2e8f0" : "1px solid rgba(255,255,255,0.1)" }}>
-                                <p style={{ fontSize: "0.88rem", fontWeight: 600, color: isLight ? "#0f172a" : "#f1f5f9", marginBottom: 14 }}>
+                            <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #E8DCBE", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+                                <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>
                                     Would you like to view the transcript of your voice feedback?
                                 </p>
                                 <div style={{ display: "flex", gap: 12 }}>
@@ -467,7 +520,7 @@ export default function FeedbackPage() {
                                     </button>
                                     <button
                                         onClick={handleCloseTab}
-                                        style={styles.secondaryBtn(isLight)}
+                                        style={styles.secondaryBtn}
                                     >
                                         No, Close
                                     </button>
@@ -476,7 +529,7 @@ export default function FeedbackPage() {
                         ) : (
                             <div style={{ marginTop: 16 }}>
                                 {loadingTranscript && (
-                                    <p style={{ fontSize: "0.85rem", color: isLight ? "#475569" : "#94a3b8" }}>
+                                    <p style={{ fontSize: "0.85rem", color: "#6B5E54", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
                                         Generating audio transcript...
                                     </p>
                                 )}
@@ -484,14 +537,14 @@ export default function FeedbackPage() {
                                 {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
 
                                 {!loadingTranscript && transcriptText && (
-                                    <div style={styles.transcriptBox(isLight)}>
-                                        <label style={styles.label(isLight)}>Your Audio Transcript</label>
-                                        <p style={styles.transcriptText(isLight)}>"{transcriptText}"</p>
+                                    <div style={styles.transcriptBox}>
+                                        <label style={styles.label}>Your Audio Transcript</label>
+                                        <p style={styles.transcriptText}>"{transcriptText}"</p>
                                     </div>
                                 )}
 
                                 <div style={{ marginTop: 16 }}>
-                                    <button onClick={handleCloseTab} style={styles.secondaryBtn(isLight)}>
+                                    <button onClick={handleCloseTab} style={styles.secondaryBtn}>
                                         Close Page
                                     </button>
                                 </div>
@@ -499,7 +552,7 @@ export default function FeedbackPage() {
                         )}
 
                         {tabClosed && (
-                            <p style={{ fontSize: "0.8rem", color: "#ef4444", marginTop: 12 }}>
+                            <p style={{ fontSize: "0.8rem", color: "#A83232", marginTop: 12, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
                                 Tab close requested. If the tab stays open, you may safely close it manually.
                             </p>
                         )}
@@ -510,46 +563,36 @@ export default function FeedbackPage() {
     }
 
     return (
-        <div style={styles.page(isLight)}>
+        <div style={styles.page}>
             <PulseStyle />
 
-            <div style={styles.card(isLight)}>
-
-                <button
-                    type="button"
-                    onClick={toggleTheme}
-                    style={styles.themeToggle(isLight)}
-                    aria-label="Toggle theme"
-                >
-                    {isLight ? <MoonIcon /> : <SunIcon />}
-                </button>
-
+            <div style={styles.card}>
                 <div style={styles.logo}>
                     <div style={styles.logoIcon}>🏨</div>
-                    <h1 style={styles.title(isLight)}>Guest Feedback</h1>
-                    <p style={styles.subtitle(isLight)}>We value your experience</p>
-                    {/* QR & Client Info Banner */}
+                    <h1 style={styles.title}>Guest Feedback</h1>
+                    <p style={styles.subtitle}>We value your experience</p>
+                    
                     {(clientName || qrId || qrName) && (
                         <div style={{
-                            background: isLight ? "rgba(109,40,217,0.06)" : "rgba(255,255,255,0.06)",
-                            border: isLight ? "1px solid rgba(109,40,217,0.18)" : "1px solid rgba(255,255,255,0.15)",
-                            borderRadius: 12,
+                            background: "#FAF5ED",
+                            border: "1px solid #E2D2B8",
+                            borderRadius: 10,
                             padding: "10px 14px",
-                            marginBottom: 20,
+                            marginTop: 16,
+                            marginBottom: 8,
                             fontSize: "0.8rem",
-                            color: isLight ? "#4c1d95" : "#c4b5fd",
+                            color: "#8C6D37",
                             display: "flex",
                             flexDirection: "column",
                             gap: 4,
-                            textAlign: "center"
+                            textAlign: "center",
+                            fontFamily: "'Segoe UI', system-ui, sans-serif"
                         }}>
                             <div style={{ fontWeight: 700, fontSize: "0.85rem" }}>
-                                {/* {clientName && <span style={{ textTransform: "uppercase" }}>{clientName}</span>} */}
-                                {clientName && qrName && <span> </span>}
                                 {qrName && <span>{qrName}</span>}
                             </div>
                             {qrId && (
-                                <div style={{ fontSize: "0.75rem", opacity: 0.85, fontFamily: "monospace" }}>
+                                <div style={{ fontSize: "0.75rem", color: "#6B5E54", fontFamily: "monospace" }}>
                                     ID: <strong>{qrId}</strong>
                                 </div>
                             )}
@@ -561,13 +604,13 @@ export default function FeedbackPage() {
 
                 {phase === "privacy" && (
                     <div>
-                        <div style={styles.consentBox(isLight)}>
-                            <div style={styles.consentTitle(isLight)}>🔒 Privacy Notice — Voice Recording</div>
-                            <p style={styles.consentText(isLight)}>
+                        <div style={styles.consentBox}>
+                            <div style={styles.consentTitle}>🔒 Privacy Notice — Voice Recording</div>
+                            <p style={styles.consentText}>
                                 By proceeding, you consent to the recording of your voice for the
                                 purpose of collecting guest feedback. Your voice recording will be:
                             </p>
-                            <ul style={{ ...styles.consentText(isLight), paddingLeft: 16, margin: "8px 0 0" }}>
+                            <ul style={{ ...styles.consentText, paddingLeft: 16, margin: "8px 0 0" }}>
                                 <li>Processed to collect guest feedback securely</li>
                                 <li>Used solely to improve our services</li>
                                 <li>Stored securely and handled confidentially</li>
@@ -578,12 +621,13 @@ export default function FeedbackPage() {
                             >
                                 <div style={{
                                     ...styles.checkbox,
-                                    background: consentGiven ? "linear-gradient(to right, #6d28d9, #4338ca)" : "transparent",
-                                    borderColor: consentGiven ? "#6d28d9" : "rgba(109,40,217,0.6)",
+                                    background: consentGiven ? "linear-gradient(135deg, #C5A059, #9E7938)" : "transparent",
+                                    borderColor: consentGiven ? "#C5A059" : "#C5A059",
+                                    color: "#FFF"
                                 }}>
                                     {consentGiven && <CheckIcon />}
                                 </div>
-                                <span style={{ fontSize: "0.8rem", color: isLight ? "#4c1d95" : "#c4b5fd", lineHeight: 1.5 }}>
+                                <span style={{ fontSize: "0.8rem", color: "#4A3E35", lineHeight: 1.5 }}>
                                     I understand and consent to the voice recording and processing.
                                 </span>
                             </label>
@@ -594,7 +638,7 @@ export default function FeedbackPage() {
                             onClick={() => setPhase("form")}
                             style={{
                                 ...styles.primaryBtn,
-                                opacity: consentGiven ? 1 : 0.4,
+                                opacity: consentGiven ? 1 : 0.45,
                                 cursor: consentGiven ? "pointer" : "not-allowed"
                             }}
                         >
@@ -607,16 +651,14 @@ export default function FeedbackPage() {
                     <>
                         <div style={{
                             marginBottom: "1.5rem",
-                            background: isLight ? "rgba(109,40,217,0.06)" : "rgba(109,40,217,0.15)",
+                            background: "#FAF6F0",
                             padding: "16px",
-                            borderRadius: 12,
-                            border: isLight ? "1.5px solid rgba(109,40,217,0.3)" : "1.5px solid rgba(109,40,217,0.5)",
+                            borderRadius: 10,
+                            border: "1px solid #E8DCBE",
                         }}>
                             <label style={{
-                                ...styles.label(isLight),
-                                fontSize: "0.85rem",
-                                fontWeight: 700,
-                                color: isLight ? "#6d28d9" : "#c4b5fd",
+                                ...styles.label,
+                                color: "#8C6D37",
                                 marginBottom: 8
                             }}>
                                 Room Number *
@@ -628,10 +670,9 @@ export default function FeedbackPage() {
                                 placeholder="e.g. 412"
                                 disabled={recording || phase === "submitting"}
                                 style={{
-                                    ...styles.input(isLight),
+                                    ...styles.input,
                                     fontSize: "1.05rem",
                                     fontWeight: 600,
-                                    padding: "12px 14px",
                                 }}
                                 required
                             />
@@ -639,10 +680,10 @@ export default function FeedbackPage() {
 
                         {phase === "form" && (
                             <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-                                <label style={{ ...styles.label(isLight), textAlign: "center", marginBottom: 10 }}>
+                                <label style={{ ...styles.label, textAlign: "center", marginBottom: 6 }}>
                                     Record Voice Feedback
                                 </label>
-                                <p style={{ color: "#64748b", fontSize: "0.8rem", marginBottom: 16 }}>
+                                <p style={{ color: "#6B5E54", fontSize: "0.8rem", marginBottom: 16, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
                                     Press the button below to start recording your feedback
                                 </p>
                                 <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
@@ -658,7 +699,7 @@ export default function FeedbackPage() {
 
                         {phase === "recording" && (
                             <div style={{ textAlign: "center", padding: "1rem 0", marginBottom: "1.5rem" }}>
-                                <p style={{ color: "#ef4444", fontSize: "0.85rem", marginBottom: 16, fontWeight: 600 }}>
+                                <p style={{ color: "#A83232", fontSize: "0.85rem", marginBottom: 16, fontWeight: 600, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
                                     🔴 Recording in progress — speak clearly
                                 </p>
                                 <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
@@ -669,9 +710,7 @@ export default function FeedbackPage() {
                                 </div>
                                 <div style={{
                                     ...styles.timer,
-                                    color: isNearLimit ? "#f97316" : "#ef4444",
-                                    fontSize: isNearLimit ? "0.95rem" : "0.85rem",
-                                    fontWeight: 800,
+                                    color: isNearLimit ? "#C55900" : "#A83232",
                                 }}>
                                     Time Left: {timer}
                                 </div>
@@ -680,24 +719,24 @@ export default function FeedbackPage() {
 
                         {phase === "recorded" && audioUrl && (
                             <div style={{ marginBottom: "1.5rem", textAlign: "center" }}>
-                                <label style={{ ...styles.label(isLight), marginBottom: 8 }}>Listen Back To Recording</label>
+                                <label style={{ ...styles.label, marginBottom: 8 }}>Listen Back To Recording</label>
                                 <audio src={audioUrl} controls style={{ width: "100%", borderRadius: 8, marginBottom: 12 }} />
-                                <button onClick={handleReRecord} style={styles.secondaryBtn(isLight)}>
+                                <button onClick={handleReRecord} style={styles.secondaryBtn}>
                                     <RefreshIcon /> Re-record Audio
                                 </button>
                             </div>
                         )}
 
                         <div style={{ marginBottom: "1.25rem" }}>
-                            <label style={styles.label(isLight)}>
-                                Brief Description <span style={{ color: "#475569", fontWeight: 400 }}>(optional)</span>
+                            <label style={styles.label}>
+                                Brief Description <span style={{ color: "#6B5E54", fontWeight: 400 }}>(optional)</span>
                             </label>
                             <textarea
                                 value={description}
                                 onChange={e => setDescription(e.target.value)}
                                 placeholder="e.g. Feedback about housekeeping, restaurant, or facilities..."
                                 disabled={recording || phase === "submitting"}
-                                style={styles.textarea(isLight)}
+                                style={styles.textarea}
                             />
                         </div>
 
@@ -711,11 +750,11 @@ export default function FeedbackPage() {
 
                 {phase === "submitting" && (
                     <div style={{ textAlign: "center", padding: "2rem 0" }}>
-                        <p style={{ color: isLight ? "#475569" : "#94a3b8", fontSize: "0.88rem" }}>Finalizing submission...</p>
+                        <p style={{ color: "#6B5E54", fontSize: "0.88rem", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>Finalizing submission...</p>
                     </div>
                 )}
 
-                <p style={{ textAlign: "center", color: "#334155", fontSize: "0.7rem", marginTop: "1.5rem", marginBottom: 0 }}>
+                <p style={{ textAlign: "center", color: "#6B5E54", fontSize: "0.72rem", marginTop: "1.5rem", marginBottom: 0, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
                     Your privacy is protected · Data processed securely
                 </p>
 
