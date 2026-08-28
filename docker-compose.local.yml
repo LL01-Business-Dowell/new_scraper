@@ -23,6 +23,15 @@ services:
     networks:
       - queue-net
 
+  text-analysis:
+      build: ./text_analysis
+      volumes:
+        - ./text_analysis:/usr/src/app
+      ports:
+        - "8004:8004"
+      networks:
+        - queue-net
+        
   frontend:
     build:
       context: ./frontend

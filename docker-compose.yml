@@ -51,6 +51,20 @@ services:
     networks:
       - queue-net
 
+  text-analysis:
+    build:
+      context: ./text_analysis
+    container_name: text_analysis_container
+    ports:
+      - "8004:8004"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+    networks:
+      - queue-net
+
   frontend:
     build:
       context: ./frontend
