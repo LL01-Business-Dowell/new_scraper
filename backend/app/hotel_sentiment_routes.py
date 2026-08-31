@@ -12,7 +12,7 @@ from typing import List, Optional, Dict, Any
 import requests
 import numpy as np
 from scipy import stats
-
+from fastapi.concurrency import run_in_threadpool
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -910,7 +910,9 @@ async def test_instant_sentiment():
 
     results = []
     for idx, (place_name, reviews) in enumerate(mock_data.items()):
-        sentiment = _run_huggingface_sentiment_analysis(reviews)
+        # Offload CPU-bound HuggingFace model pipeline to background threadpool
+        sentiment = await run_in_threadpool(_run_huggingface_sentiment_analysis, reviews)
+        
         results.append({
             "name": place_name,
             "address": "Mock Test Address",
@@ -920,7 +922,7 @@ async def test_instant_sentiment():
             "url": "https://maps.google.com",
             "lat": 25.2048 + (idx * 0.01),
             "lng": 55.2708 + (idx * 0.01), 
-            "is_user_establishment": True if "Regency" in place_name else False,
+            "is_user_establishment": True if "Regency" in place_name or idx == 0 else False,
             "distance_km": 0.0,
             "sentiment": sentiment,
             "adr": None,
@@ -929,6 +931,21 @@ async def test_instant_sentiment():
         })
 
     combined_report = _build_combined_sentiment_report(results)
+
+    # Offload Map Generation to threadpool as well
+    places_coords = [
+        {"lat": r["lat"], "lng": r["lng"], "is_user": r["is_user_establishment"]} 
+        for r in results if r.get("lat") and r.get("lng")
+    ]
+    
+    map_buffer = None
+    if os.getenv("GOOGLE_MAPS_API_KEY"):
+        map_buffer = await run_in_threadpool(_fetch_static_map_image, results)
+    
+    if not map_buffer and places_coords:
+        map_buffer = await run_in_threadpool(_generate_offline_map_diagram, places_coords)
+
+    combined_report["map_buffer"] = map_buffer
 
     test_task_id = "instant-test-task"
     hotel_sentiment_tasks[test_task_id] = {
@@ -939,6 +956,7 @@ async def test_instant_sentiment():
         "combined_report": combined_report,
         "city": "Test City",
         "days_back": 30,
+        "establishment_name": results[0]["name"] if results else "Test Establishment",
         "created_at": datetime.datetime.now()
     }
 
@@ -1031,8 +1049,15 @@ async def download_sentiment_pdf(task_id: str, client_time: Optional[str] = None
 
 
 def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwargs) -> bytes:
+    import io
+    import os
+    import datetime
+    import logging
+    import numpy as np
+    from scipy import stats
+
     from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
     from reportlab.lib import colors
     from reportlab.platypus import (
@@ -1040,6 +1065,8 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
         HRFlowable, PageBreak, KeepTogether, Image
     )
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+
+    logger = logging.getLogger(__name__)
 
     results   = task.get("results", [])
     combined  = task.get("combined_report", {})
@@ -1063,12 +1090,7 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
     SLATE       = colors.HexColor("#1E293B")
     SLATE_MID   = colors.HexColor("#475569")
     SLATE_LITE  = colors.HexColor("#F8FAFC")
-    GREEN       = colors.HexColor("#059669")
-    RED         = colors.HexColor("#DC2626")
-    AMBER       = colors.HexColor("#D97706")
     WHITE       = colors.white
-
-    score = combined.get("avg_sentiment_score", 0) or 0
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -1076,21 +1098,22 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
         pagesize=A4, 
         rightMargin=2*cm, 
         leftMargin=2*cm, 
-        topMargin=2.5*cm, 
-        bottomMargin=2.5*cm,
+        topMargin=2.0*cm, 
+        bottomMargin=2.0*cm,
         title="Sentiment Analysis Report"
     )
     W = A4[0] - 4*cm
 
     def S(name, **kw): return ParagraphStyle(name, **kw)
-    style_body       = S("Body",    fontSize=9,  leading=14, textColor=SLATE_MID,   fontName="Helvetica",      spaceAfter=4)
-    style_body_bold  = S("BB",      fontSize=9,  leading=14, textColor=SLATE,       fontName="Helvetica-Bold")
-    style_section    = S("Sect",    fontSize=13, leading=18, textColor=PURPLE_DARK, fontName="Helvetica-Bold", spaceBefore=18, spaceAfter=6)
-    style_small      = S("Small",   fontSize=8,  leading=12, textColor=SLATE_MID,   fontName="Helvetica")
-    style_cover_h1   = S("CH1",     fontSize=24, leading=28, textColor=PURPLE_DARK, fontName="Helvetica-Bold", alignment=TA_CENTER)
-    style_cover_est  = S("CEst",    fontSize=16, leading=20, textColor=PURPLE,      fontName="Helvetica-Bold", alignment=TA_CENTER)
-    style_cover_sub  = S("CSub",    fontSize=11, leading=15, textColor=SLATE_MID,   fontName="Helvetica",      alignment=TA_CENTER)
-    style_italic     = S("It",      fontSize=8,  leading=13, textColor=SLATE_MID,   fontName="Helvetica-Oblique")
+    style_body       = S("Body",    fontSize=8.5, leading=11, textColor=SLATE_MID,   fontName="Helvetica")
+    style_body_bold  = S("BB",      fontSize=8.5, leading=11, textColor=SLATE,       fontName="Helvetica-Bold")
+    style_section    = S("Sect",    fontSize=12,  leading=15, textColor=PURPLE_DARK, fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
+    style_small      = S("Small",   fontSize=7.5, leading=10, textColor=SLATE_MID,   fontName="Helvetica")
+    style_th         = S("TH",      fontSize=8,   leading=10, textColor=WHITE,       fontName="Helvetica-Bold", alignment=TA_CENTER)
+    style_cover_h1   = S("CH1",     fontSize=22,  leading=26, textColor=PURPLE_DARK, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    style_cover_est  = S("CEst",    fontSize=15,  leading=18, textColor=PURPLE,      fontName="Helvetica-Bold", alignment=TA_CENTER)
+    style_cover_sub  = S("CSub",    fontSize=10,  leading=13, textColor=SLATE_MID,   fontName="Helvetica",      alignment=TA_CENTER)
+    style_italic     = S("It",      fontSize=7.5, leading=10, textColor=SLATE_MID,   fontName="Helvetica-Oblique")
 
     logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
     has_logo = os.path.exists(logo_path)
@@ -1099,24 +1122,24 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
         canvas.saveState()
         canvas.setStrokeColor(colors.HexColor("#CBD5E1"))
         canvas.setLineWidth(0.5)
-        canvas.line(2*cm, 2*cm, A4[0] - 2*cm, 2*cm)
+        canvas.line(2*cm, 1.8*cm, A4[0] - 2*cm, 1.8*cm)
         
         if has_logo:
             try:
-                canvas.drawImage(logo_path, 2*cm, 1.1*cm, width=1.8*cm, height=0.7*cm, preserveAspectRatio=True, mask='auto')
+                canvas.drawImage(logo_path, 2*cm, 1.0*cm, width=1.8*cm, height=0.7*cm, preserveAspectRatio=True, mask='auto')
             except Exception:
                 pass
 
         canvas.setFont("Helvetica-Bold", 8)
         canvas.setFillColor(SLATE)
-        canvas.drawString(4*cm if has_logo else 2*cm, 1.4*cm, "DoWell Research")
+        canvas.drawString(4*cm if has_logo else 2*cm, 1.3*cm, "DoWell Research")
         
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(SLATE_MID)
         footer_date = client_time if client_time else datetime.date.today().strftime('%d %B %Y')
-        canvas.drawString(4*cm if has_logo else 2*cm, 1.1*cm, f"Generated: {footer_date}  ·  Sentiment Analysis Report")
+        canvas.drawString(4*cm if has_logo else 2*cm, 1.0*cm, f"Generated: {footer_date}  ·  Sentiment Analysis Report")
         
-        canvas.drawRightString(A4[0] - 2*cm, 1.2*cm, f"Page {doc.page}")
+        canvas.drawRightString(A4[0] - 2*cm, 1.1*cm, f"Page {doc.page}")
         canvas.restoreState()
 
     def draw_cover_footer(canvas, doc):
@@ -1126,7 +1149,6 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
 
     # COVER PAGE
     story.append(Spacer(1, 0.5*cm))
-
     if has_logo:
         try:
             story.append(Image(logo_path, width=4*cm, height=1.5*cm, kind='proportional'))
@@ -1148,7 +1170,6 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
     meta_table_data = [
         [Paragraph("<b>Report Date:</b>", style_small), Paragraph(report_date, style_small)],
         [Paragraph("<b>Sample Footprint:</b>", style_small), Paragraph(f"{len(results)} properties | {combined.get('total_reviews_analyzed', 0):,} reviews | {days_back} days", style_small)],
-        [Paragraph("<b>Baseline Metrics:</b>", style_small), Paragraph(f"Market Sentiment Score: {score:+.3f} | Avg Rating: ★ {combined.get('avg_rating','—')}", style_small)],
         [Paragraph("<b>Prepared By:</b>", style_body_bold), Paragraph("DoWell Research", style_body_bold)],
     ]
     meta_table = Table(meta_table_data, colWidths=[W*0.35, W*0.45])
@@ -1158,61 +1179,95 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
         ("BACKGROUND", (0, 0), (-1, -1), SLATE_LITE),
         ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
         ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ("LEFTPADDING", (0, 0), (-1, -1), 10),
     ]))
     story.append(meta_table)
     story.append(Spacer(1, 0.5*cm))
+
+    # Geographic Distribution Section
+    story.append(Paragraph("Geographic Distribution & Competitors", style_section))
+    story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
+    story.append(Spacer(1, 0.2 * cm))
+
+    map_buffer = kwargs.get("map_buffer") or combined.get("map_buffer")
+    if map_buffer:
+        try:
+            map_img = Image(map_buffer, width=W, height=6.0 * cm, kind='proportional')
+            story.append(map_img)
+        except Exception as err:
+            logger.error(f"[PDF MAP] Failed to render image flowable: {err}")
 
     story.append(PageBreak())
 
     # ==============================================================================
     # PAGE 2: SECTOR ANALYSIS
     # ==============================================================================
-
     story.append(Paragraph("Sector Analysis", style_section))
     story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-    story.append(Spacer(1, 0.25*cm))
+    story.append(Spacer(1, 0.2*cm))
 
-    # Fetch structured side-by-side analysis data
     sector_tbl = combined.get("sector_analysis_table", {})
+    input_hotel_name = user_est or "Input Hotel"
+
+    # Calculate Market Median & Mode directly if missing in payload
+    all_scores = [
+        r.get("sentiment", {}).get("overall_score") 
+        for r in results 
+        if r.get("sentiment", {}).get("overall_score") is not None
+    ]
+    
+    market_median_val = sector_tbl.get('median', {}).get('market')
+    if market_median_val is None and all_scores:
+        market_median_val = float(np.median(all_scores))
+        
+    market_mode_val = sector_tbl.get('mode', {}).get('market')
+    if market_mode_val is None and len(all_scores) > 2:
+        market_mode_val = float(stats.mode(np.round(all_scores, 2), keepdims=False).mode)
+
+    def format_mode(val):
+        if val is None:
+            return "—"
+        sign = "-" if val < 0 else ""
+        # Formats the mode value to 1 decimal place and appends 'X'
+        return f"{sign}{abs(val):.1f}X"
 
     market_stats_data = [
         [
             Paragraph("<b>Statistical Indicator</b>", style_body_bold), 
-            Paragraph(f"<b>{user_est or 'Hilton'} Value</b>", style_body_bold), 
+            Paragraph(f"<b>{input_hotel_name} Value</b>", style_body_bold), 
             Paragraph("<b>Combined Market Value</b>", style_body_bold)
         ],
         [
-            Paragraph("Mean (Average) Score", style_small), 
+            Paragraph("Mean (Average)", style_small), 
             Paragraph(f"{sector_tbl.get('mean', {}).get('hilton', 0.0):+.3f}", style_small),
             Paragraph(f"{sector_tbl.get('mean', {}).get('market', 0.0):+.3f}", style_small)
         ],
         [
-            Paragraph("Median Score", style_small), 
+            Paragraph("Median", style_small), 
             Paragraph(f"{sector_tbl.get('median', {}).get('hilton', 0.0):+.3f}", style_small),
-            Paragraph("—", style_small)
+            Paragraph(f"{market_median_val:+.3f}" if market_median_val is not None else "—", style_small)
         ],
         [
-            Paragraph("Mode Score", style_small), 
-            Paragraph(f"{sector_tbl.get('mode', {}).get('hilton', 0.0):+.3f}", style_small),
-            Paragraph("—", style_small)
+            Paragraph("Mode", style_small), 
+            Paragraph(f"{format_mode(sector_tbl.get('mode', {}).get('hilton'))}", style_small),
+            Paragraph(f"{format_mode(market_mode_val)}", style_small)
         ],
         [
             Paragraph("Positive Sentiment %", style_small), 
-            Paragraph(f"{sector_tbl.get('positive_pct', {}).get('hilton', 0.0)}%", style_small),
-            Paragraph(f"{sector_tbl.get('positive_pct', {}).get('market', 0.0)}%", style_small)
+            Paragraph(f"{sector_tbl.get('positive_pct', {}).get('hilton', 0.0):.1f}%", style_small),
+            Paragraph(f"{sector_tbl.get('positive_pct', {}).get('market', 0.0):.1f}%", style_small)
         ],
         [
             Paragraph("Neutral Sentiment %", style_small), 
-            Paragraph(f"{sector_tbl.get('neutral_pct', {}).get('hilton', 0.0)}%", style_small),
-            Paragraph(f"{sector_tbl.get('neutral_pct', {}).get('market', 0.0)}%", style_small)
+            Paragraph(f"{sector_tbl.get('neutral_pct', {}).get('hilton', 0.0):.1f}%", style_small),
+            Paragraph(f"{sector_tbl.get('neutral_pct', {}).get('market', 0.0):.1f}%", style_small)
         ],
         [
             Paragraph("Negative Sentiment %", style_small), 
-            Paragraph(f"{sector_tbl.get('negative_pct', {}).get('hilton', 0.0)}%", style_small),
-            Paragraph(f"{sector_tbl.get('negative_pct', {}).get('market', 0.0)}%", style_small)
+            Paragraph(f"{sector_tbl.get('negative_pct', {}).get('hilton', 0.0):.1f}%", style_small),
+            Paragraph(f"{sector_tbl.get('negative_pct', {}).get('market', 0.0):.1f}%", style_small)
         ]
     ]
 
@@ -1220,41 +1275,37 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
     market_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), SLATE_LITE),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ('LEFTPADDING', (0, 0), (-1, -1), 8),
         ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
     ]))
     story.append(market_table)
-    story.append(Spacer(1, 0.5*cm))
+    story.append(Spacer(1, 0.4*cm))
 
     est_label = user_est if user_est else "Hilton Baseline"
-
     story.append(Paragraph(f"{est_label} — Key Performance Snapshot", style_section))
     story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-    story.append(Spacer(1, 0.25*cm))
+    story.append(Spacer(1, 0.2*cm))
 
-    PURPLE_BASE = colors.HexColor("#4F46E5")
     styles = getSampleStyleSheet()
-
     style_kpi_num = ParagraphStyle(
         "KpiNum",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=16,
-        leading=18,
+        fontSize=15,
+        leading=17,
         alignment=1,
-        textColor=PURPLE_BASE
     )
 
     style_kpi_label = ParagraphStyle(
         "KpiLabel",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=8,
-        leading=10,
+        fontSize=7.5,
+        leading=9,
         alignment=1,
-        textColor=colors.HexColor("#475569")
+        textColor=SLATE_MID
     )
 
     score_val = hilton_stats.get('score', 0.0)
@@ -1263,9 +1314,9 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
     kpi_card_data = [
         [
             Paragraph(f'<font color="{score_color}">{score_val:+.3f}</font>', style_kpi_num),
-            Paragraph(f"{hilton_stats.get('pos_pct', 0.0)}%", style_kpi_num),
-            Paragraph(f"{hilton_stats.get('neu_pct', 0.0)}%", style_kpi_num),
-            Paragraph(f"{hilton_stats.get('neg_pct', 0.0)}%", style_kpi_num),
+            Paragraph(f"{hilton_stats.get('pos_pct', 0.0):.1f}%", style_kpi_num),
+            Paragraph(f"{hilton_stats.get('neu_pct', 0.0):.1f}%", style_kpi_num),
+            Paragraph(f"{hilton_stats.get('neg_pct', 0.0):.1f}%", style_kpi_num),
         ],
         [
             Paragraph("OVERALL SCORE", style_kpi_label),
@@ -1278,39 +1329,23 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
     col_w = W / 4.0
     kpi_card_table = Table(kpi_card_data, colWidths=[col_w, col_w, col_w, col_w])
     kpi_card_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+        ('BACKGROUND', (0, 0), (-1, -1), SLATE_LITE),
         ('BOX', (0, 0), (-1, -1), 1, PURPLE_LITE),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ('TOPPADDING', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, -1), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]))
-
     story.append(kpi_card_table)
-    story.append(Spacer(1, 0.4*cm))
-
-    # ── Geographic Distribution Section ─────────────────────────────────────────
-    story.append(Paragraph("Geographic Distribution & Competitors", style_section))
-    story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-    story.append(Spacer(1, 0.25 * cm))
-
-    map_buffer = _fetch_static_map_image(results)
-    if map_buffer:
-        try:
-            map_img = Image(map_buffer, width=W, height=6.5 * cm, kind='proportional')
-            story.append(map_img)
-            story.append(Spacer(1, 0.4 * cm))
-        except Exception as err:
-            logger.error(f"[PDF MAP] Failed to render image flowable: {err}")
 
     # PAGE 3: SENTIMENT RANKING
     ranking = combined.get("sentiment_ranking", [])
     if ranking:
         story.append(PageBreak())
-        story.append(Spacer(1, 0.4*cm))
         story.append(Paragraph("Sentiment Ranking Across Competitors", style_section))
         story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
         story.append(Spacer(1, 0.2*cm))
+
         ranking_sorted = sorted(
             ranking,
             key=lambda item: item.get("score") if item.get("score") is not None else -999.0,
@@ -1328,54 +1363,85 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
                 Paragraph(f'<font color="{sc_color}">{f"{sc:+.3f}" if sc is not None else "—"}</font>', style_body_bold),
                 f"★ {r['rating']}" if r.get("rating") else "—",
             ])
-        rt = Table(rank_rows, colWidths=[W*0.06,W*0.38,W*0.25,W*0.15,W*0.16])
-        rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),PURPLE_DARK),("TEXTCOLOR",(0,0),(-1,0),WHITE),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),("ALIGN",(0,0),(0,-1),"CENTER"),("ALIGN",(3,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,SLATE_LITE]),("INNERGRID",(0,0),(-1,-1),0.3,colors.HexColor("#E2E8F0")),("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#CBD5E1")),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),8)]))
+        rt = Table(rank_rows, colWidths=[W*0.06,W*0.42,W*0.21,W*0.15,W*0.16])
+        rt.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,0),PURPLE_DARK),
+            ("TEXTCOLOR",(0,0),(-1,0),WHITE),
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+            ("FONTSIZE",(0,0),(-1,-1),8),
+            ("ALIGN",(0,0),(0,-1),"CENTER"),
+            ("ALIGN",(3,0),(-1,-1),"CENTER"),
+            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,SLATE_LITE]),
+            ("INNERGRID",(0,0),(-1,-1),0.3,colors.HexColor("#E2E8F0")),
+            ("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#CBD5E1")),
+            ("TOPPADDING",(0,0),(-1,-1),4),
+            ("BOTTOMPADDING",(0,0),(-1,-1),4),
+            ("LEFTPADDING",(0,0),(-1,-1),6)
+        ]))
         story.append(rt)
 
     # PAGE 4: TOUCHPOINT SENTIMENT COMPARISON
     cj_data = combined.get("combined_journey", {})
     hilton_cj_data = hilton_stats.get("journey", {})
+    total_properties = max(1, len(results))
 
     if cj_data:
         story.append(PageBreak())
         story.append(Paragraph("Touchpoint Sentiment Comparison", style_section))
         story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-        story.append(Spacer(1, 0.2*cm))
+        story.append(Spacer(1, 0.15*cm))
 
-        cj_rows = [["Operational Phase / Touchpoint", "Combined Market (+ / -)", "Hilton (+ / -)"]]
+        cj_rows = [[
+            Paragraph("<b>Operational Phase / Touchpoint</b>", style_th), 
+            Paragraph("<b>Combined Market Avg<br/>(+ / -)</b>", style_th), 
+            Paragraph(f"<b>{input_hotel_name}<br/>(+ / -)</b>", style_th)
+        ]]
         
         for phase_name, sub_dict in cj_data.items():
             cj_rows.append([Paragraph(f"<b>{phase_name}</b>", style_body_bold), "", ""])
 
             for sub_name, counts in sub_dict.items():
-                comb_pos, comb_neg = counts["pos"], counts["neg"]
+                comb_pos, comb_neg = counts.get("pos", 0), counts.get("neg", 0)
                 
+                # Average Pos/Neg counts across market per property
+                avg_comb_pos = comb_pos / total_properties
+                avg_comb_neg = comb_neg / total_properties
+                
+                c_pos_str = f"+{avg_comb_pos:.1f}" if avg_comb_pos > 0 else "0.0"
+                c_neg_str = f"-{avg_comb_neg:.1f}" if avg_comb_neg > 0 else "0.0"
+                comb_display = f"<font color='#059669'>{c_pos_str}</font> / <font color='#DC2626'>{c_neg_str}</font>"
+
+                # Target Hotel Pos/Neg counts
                 hilton_sub = hilton_cj_data.get(phase_name, {}).get(sub_name, {"pos": 0, "neg": 0})
-                h_pos, h_neg = hilton_sub["pos"], hilton_sub["neg"]
+                h_pos, h_neg = hilton_sub.get("pos", 0), hilton_sub.get("neg", 0)
+
+                pos_str = f"+{h_pos}" if h_pos > 0 else "0"
+                neg_str = f"-{h_neg}" if h_neg > 0 else "0"
+                hilton_display = f"<font color='#059669'>{pos_str}</font> / <font color='#DC2626'>{neg_str}</font>"
 
                 if (comb_pos + comb_neg) > 0 or (h_pos + h_neg) > 0:
                     cj_rows.append([
                         Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;• {sub_name}", style_small),
-                        Paragraph(f"<font color='#059669'>+{comb_pos}</font> / <font color='#DC2626'>-{comb_neg}</font>", style_small),
-                        Paragraph(f"<font color='#059669'>+{h_pos}</font> / <font color='#DC2626'>-{h_neg}</font>", style_small)
+                        Paragraph(comb_display, style_small),
+                        Paragraph(hilton_display, style_small)
                     ])
 
         cjt = Table(cj_rows, colWidths=[W*0.50, W*0.25, W*0.25])
         cjt.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), PURPLE_DARK),
-            ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, SLATE_LITE]),
             ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
             ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E2E8F0")),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4)
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
         ]))
         story.append(cjt)
 
-    # INDIVIDUAL PROPERTY REPORT PAGES
+    # INDIVIDUAL PROPERTY BREAKDOWN
     hilton_items = [r for r in results if r.get("is_user_establishment")]
     competitor_items = [r for r in results if not r.get("is_user_establishment")]
 
@@ -1391,6 +1457,7 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
     story.append(Spacer(1, 0.2*cm))
 
     for i, r in enumerate(hilton_items + competitor_items_sorted):
+        hotel_block = []
         s = r.get("sentiment", {})
         sc = s.get("overall_score")
         pos = s.get("positive_count", 0)
@@ -1399,14 +1466,21 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
         total = pos + neu + neg or 1
 
         header = Table([[
-            Paragraph(f"{'★ ' if r.get('is_user_establishment') else ''}{r.get('name','')}", ParagraphStyle("HN",fontSize=10,leading=14,textColor=WHITE if not r.get('is_user_establishment') else AMBER,fontName="Helvetica-Bold")),
-            Paragraph(f"{s.get('overall_label','No Data')} · {f'{sc:+.3f}' if sc is not None else '—'}" + (f" · ★ {r['rating']}" if r.get('rating') else ""), ParagraphStyle("HS",fontSize=8,leading=12,textColor=PURPLE_LITE,fontName="Helvetica",alignment=TA_RIGHT)),
+            Paragraph(f"{'★ ' if r.get('is_user_establishment') else ''}{r.get('name','')}", ParagraphStyle("HN",fontSize=9.5,leading=12,textColor=WHITE if not r.get('is_user_establishment') else colors.HexColor("#FDE047"),fontName="Helvetica-Bold")),
+            Paragraph(f"{s.get('overall_label','No Data')} · {f'{sc:+.3f}' if sc is not None else '—'}" + (f" · ★ {r['rating']}" if r.get('rating') else ""), ParagraphStyle("HS",fontSize=8,leading=10,textColor=PURPLE_LITE,fontName="Helvetica",alignment=TA_RIGHT)),
         ]], colWidths=[W*0.6, W*0.4])
-        header.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),PURPLE_DARK),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),10),("RIGHTPADDING",(0,0),(-1,-1),10),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
-        story.append(header)
+        header.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,-1),PURPLE_DARK),
+            ("TOPPADDING",(0,0),(-1,-1),4),
+            ("BOTTOMPADDING",(0,0),(-1,-1),4),
+            ("LEFTPADDING",(0,0),(-1,-1),8),
+            ("RIGHTPADDING",(0,0),(-1,-1),8),
+            ("VALIGN",(0,0),(-1,-1),"MIDDLE")
+        ]))
+        hotel_block.append(header)
 
         if r.get("scraped_review_count", 0) == 0:
-            story.append(Table([[Paragraph("No reviews found for this period.",style_small)]],colWidths=[W],style=TableStyle([("BACKGROUND",(0,0),(-1,-1),SLATE_LITE),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),10)])))
+            hotel_block.append(Table([[Paragraph("No reviews found for this period.",style_small)]],colWidths=[W],style=TableStyle([("BACKGROUND",(0,0),(-1,-1),SLATE_LITE),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),("LEFTPADDING",(0,0),(-1,-1),8)])))
         else:
             body_rows = [
                 [Paragraph(f"Reviews found: {r.get('scraped_review_count',0)}  ·  Positive: {pos} ({pos/total*100:.0f}%)  ·  Neutral: {neu} ({neu/total*100:.0f}%)  ·  Negative: {neg} ({neg/total*100:.0f}%)", style_small)],
@@ -1419,10 +1493,19 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
                 body_rows.append([Paragraph(f'<font color="#DC2626">✗ {n0.get("author","")} ({n0.get("date","")}):</font> "{n0.get("text","")}"', style_italic)])
 
             body = Table(body_rows, colWidths=[W])
-            body.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),WHITE),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),10),("RIGHTPADDING",(0,0),(-1,-1),10),("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#E2E8F0"))]))
-            story.append(body)
+            body.setStyle(TableStyle([
+                ("BACKGROUND",(0,0),(-1,-1),WHITE),
+                ("TOPPADDING",(0,0),(-1,-1),4),
+                ("BOTTOMPADDING",(0,0),(-1,-1),4),
+                ("LEFTPADDING",(0,0),(-1,-1),8),
+                ("RIGHTPADDING",(0,0),(-1,-1),8),
+                ("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#E2E8F0"))
+            ]))
+            hotel_block.append(body)
 
-        story.append(Spacer(1, 0.3*cm))
+        hotel_block.append(Spacer(1, 0.2*cm))
+        # Keep entire hotel card intact to avoid single line page bleeds
+        story.append(KeepTogether(hotel_block))
 
     doc.build(story, onFirstPage=draw_cover_footer, onLaterPages=draw_later_page_footer)
     return buf.getvalue()

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { FaArrowLeft, FaStar, FaChartBar, FaClock, FaBrain, FaInfoCircle } from "react-icons/fa";
+import { FaArrowLeft, FaClock, FaInfoCircle } from "react-icons/fa";
 
-// ── Helpers (Identical to Production) ──────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 const sentColor = (score) => {
     if (score == null) return "#6b7280";
     if (score > 0.25) return "#10b981";  // Positive
@@ -29,11 +29,12 @@ function Bar({ ratio, color, height = 8 }) {
 }
 
 // ── Main Test Component ──────────────────────────────────────────────────────
-export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Market", daysBack = 30 }) {
-    const BASE = (baseUrl || "").replace(/\/+$/, "");
+export default function TestSentimentAnalysis({ baseUrl = "", onBack, daysBack = 30 }) {
+    const cleanBaseUrl = (baseUrl || "").replace(/\/+$/, "");
+    
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [taskId, setTaskId] = useState("mock-task-id");
+    const [taskId, setTaskId] = useState("instant-test-task");
     const [results, setResults] = useState([]);
     const [combined, setCombined] = useState(null);
     const [generatedAt, setGeneratedAt] = useState("");
@@ -41,6 +42,9 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
     const [activeTab, setActiveTab] = useState("combined");
     const [expandedIdx, setExpandedIdx] = useState(null);
     const [rankingCollapsed, setRankingCollapsed] = useState(false);
+
+    // Track fetch execution to prevent duplicate calls in React StrictMode
+    const hasFetched = useRef(false);
 
     const createClientTimestamp = () => {
         return new Date().toLocaleString("en-US", {
@@ -53,41 +57,57 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
         });
     };
 
-    // Load mock test data instantly on component mount
+    // ── Fetch Mock Data on Component Mount ──────────────────────────────────
     useEffect(() => {
-        const fetchTestData = async () => {
-            try {
-                setLoading(true);
-                const response = await axios.post(`${BASE}/api/hotel-sentiment/test-instant`);
+        let isMounted = true;
 
-                if (response.data) {
+        const fetchTestData = async () => {
+            // Prevent duplicate triggers if data was already fetched
+            if (hasFetched.current) return;
+            hasFetched.current = true;
+
+            try {
+                if (isMounted) {
+                    setLoading(true);
+                    setError(null);
+                }
+
+                const endpoint = `${cleanBaseUrl}/api/hotel-sentiment/test-instant`;
+                const response = await axios.post(endpoint, {}, { timeout: 60000 });
+
+                if (isMounted && response.data) {
                     setResults(response.data.results || []);
-                    setCombined(response.data.combined_report || {});
+                    setCombined(response.data.combined_report || null);
                     if (response.data.task_id) setTaskId(response.data.task_id);
                     setGeneratedAt(createClientTimestamp());
                 }
             } catch (err) {
                 console.error("Failed to load test mock data:", err);
-                setError(err.message || "Failed to load mock report data");
+                if (isMounted) {
+                    setError(err.response?.data?.detail || err.message || "Failed to load report data");
+                }
             } finally {
-                setLoading(false);
+                if (isMounted) {
+                    setLoading(false); // Guarantees loading state clears on 200 OK or Error
+                }
             }
         };
 
         fetchTestData();
-    }, [BASE]);
 
+        return () => {
+            isMounted = false;
+        };
+    }, [cleanBaseUrl]);
+
+    // ── PDF Download Handler ─────────────────────────────────────────────────
     const downloadPdf = async () => {
         try {
             const encodedTime = encodeURIComponent(generatedAt || "");
+            const endpoint = `${cleanBaseUrl}/api/hotel-sentiment/report/pdf/${taskId}?client_time=${encodedTime}`;
 
-            // Fetch the PDF stream directly using Axios
-            const response = await axios.get(
-                `${BASE}/api/hotel-sentiment/report/pdf/${taskId}?client_time=${encodedTime}`,
-                { responseType: "blob" }
-            );
+            const response = await axios.get(endpoint, { responseType: "blob" });
 
-            // Convert response data into a downloadable blob link
             const blob = new Blob([response.data], { type: "application/pdf" });
             const downloadUrl = window.URL.createObjectURL(blob);
 
@@ -97,16 +117,13 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
             document.body.appendChild(link);
             link.click();
 
-            // Cleanup memory
             link.remove();
             window.URL.revokeObjectURL(downloadUrl);
         } catch (err) {
             console.error("PDF download error:", err);
-            alert("Failed to download PDF report. Ensure your backend server is active.");
+            alert("Failed to download PDF report. Ensure backend PDF endpoint is active.");
         }
     };
-
-    const modelEngine = combined?.model_engine || "Hugging Face Transformer (Mock)";
 
     const Shell = ({ children }) => (
         <div className="app-container">
@@ -163,17 +180,10 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                 Sentiment Analysis
             </h2>
 
-            {/* Dynamic Metadata Section */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 0 20px" }}>
                 <p style={{ margin: 0, color: "#6b7280", fontSize: "0.82rem" }}>
                     {results.length} hotels analysed · Last {daysBack} days
                 </p>
-
-                {/* AI Engine Badge
-                <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: 6, padding: "2px 8px", fontSize: "0.75rem", color: "#34d399" }}>
-                    <FaBrain style={{ fontSize: 10 }} />
-                    <span>Engine: {modelEngine}</span>
-                </div> */}
 
                 {generatedAt && (
                     <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(147, 51, 234, 0.12)", border: "1px solid rgba(147, 51, 234, 0.3)", borderRadius: 6, padding: "2px 8px", fontSize: "0.75rem", color: "#c084fc" }}>
@@ -183,17 +193,15 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                 )}
             </div>
 
-            {/* Navigation Tabs */}
             <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
                 {[{ key: "combined", label: "Combined Executive Report" }, { key: "individual", label: `Individual Hotels (${results.length})` }].map(t => (
                     <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ padding: "7px 18px", borderRadius: 20, fontSize: "0.78rem", fontWeight: 600, border: `1px solid ${activeTab === t.key ? "#9333ea" : "#374151"}`, background: activeTab === t.key ? "linear-gradient(to right,#9333ea,#4f46e5)" : "transparent", color: activeTab === t.key ? "#fff" : "#6b7280", cursor: "pointer" }}>{t.label}</button>
                 ))}
             </div>
 
-            {/* COMBINED REPORT */}
+            {/* COMBINED EXECUTIVE REPORT */}
             {activeTab === "combined" && combined && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    {/* KPI Grid */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
                         {[
                             { label: "Hotels Analysed", value: combined.total_analysed, color: "#a78bfa" },
@@ -210,7 +218,6 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                         ))}
                     </div>
 
-                    {/* Sentiment Distribution */}
                     <div style={{ background: "#1A1E2E", borderRadius: 12, padding: 20, border: "1px solid #374151" }}>
                         <p style={{ margin: "0 0 14px", fontSize: "0.72rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Overall Sentiment Distribution</p>
                         {[{ label: "Positive", pct: combined.positive_pct || 0, color: "#10b981" }, { label: "Neutral", pct: combined.neutral_pct || 0, color: "#f59e0b" }, { label: "Negative", pct: combined.negative_pct || 0, color: "#ef4444" }].map(({ label, pct, color }) => (
@@ -224,7 +231,6 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                         ))}
                     </div>
 
-                    {/* Sentiment Ranking */}
                     {combined.sentiment_ranking?.length > 0 && (
                         <div style={{ background: "#1A1E2E", borderRadius: 12, border: "1px solid #374151", overflow: "hidden" }}>
                             <div
@@ -261,7 +267,6 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                         </div>
                     )}
 
-                    {/* TOUCHPOINT ANALYSIS: Replaces Topic Frequency & Market Insights */}
                     {combined.combined_journey && Object.keys(combined.combined_journey).length > 0 && (
                         <div style={{ background: "#1A1E2E", borderRadius: 12, padding: 20, border: "1px solid #374151" }}>
                             <p style={{ margin: "0 0 14px", fontSize: "0.72rem", color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>
@@ -373,7 +378,6 @@ export default function TestSentimentAnalysis({ baseUrl, onBack, city = "Test Ma
                                                     ))}
                                                 </div>
 
-                                                {/* TOUCHPOINT BREAKDOWN: Replaces Topics Mentioned */}
                                                 {s.journey_breakdown && (
                                                     <div style={{ marginBottom: 16 }}>
                                                         <p style={{ margin: "0 0 10px", fontSize: "0.7rem", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
