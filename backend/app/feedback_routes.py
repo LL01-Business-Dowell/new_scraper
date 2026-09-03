@@ -8,7 +8,6 @@ import subprocess
 import requests as http_requests
 import torch
 from .gemini_sentiment_analysis import analyze_sentiment, calculate_fused_metrics
-# from helper.fusion import calculate_fused_metrics
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -24,7 +23,7 @@ QR_DATABASE_ID = "6a69cbefff5146ff3f2b568a"  # Collection mapping database
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
-TEXT_ANALYSIS_API_URL = "http://text-analysis:8004/api/analyze-sentiment/"
+TEXT_ANALYSIS_API_URL = os.getenv("TEXT_ANALYSIS_API_URL")
 
 # Hugging Face Configuration
 MODEL_ID = "joeddav/distilbert-base-uncased-go-emotions-student"
@@ -163,7 +162,7 @@ def _save_to_datacube(
             target_url,
             json={
                 "database_id": MASTER_DATABASE_ID,
-                "collection_name": collection_name,
+                "collection_name": id_param,
                 "documents": [doc_data],
             },
             headers={
@@ -204,7 +203,7 @@ def _update_datacube_transcription(
 
         payload = {
             "database_id": MASTER_DATABASE_ID,
-            "collection_name": collection_name,
+            "collection_name": id_param,
             "filters": {"_id": doc_id},
             "update_data": {
                 "transcript": transcript,
