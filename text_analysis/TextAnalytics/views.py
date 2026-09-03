@@ -103,6 +103,7 @@ class FeedbackMetaDataView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         qrId = serializer.validated_data.get("qrId")
+        feedback_id = serializer.validated_data.get("feedback_id")
         room = serializer.validated_data.get("room")        
         urgency_status = serializer.validated_data.get("urgency_status")        
         is_resolved = serializer.validated_data.get("is_resolved")        
@@ -111,6 +112,7 @@ class FeedbackMetaDataView(APIView):
 
         metadata = {
             "qrId": qrId,
+            "feedback_id": feedback_id,
             "room": room,
             "urgency_status": urgency_status,
             "is_resolved": is_resolved,
@@ -208,10 +210,7 @@ class FeedbackMetaDataView(APIView):
             response = datacube.update_document(database_id=feedback_metadata_db, collection_name=feedback_metadata_coll, filters=filters, update_data=update_data)
 
             return Response(
-                {
-                    "success": True,
-                    "message": "Updated metadata successfully"
-                },
+                response,
                 status=status.HTTP_200_OK
             )
 
