@@ -227,6 +227,38 @@ def _fetch_places_text_search(
 
     return fetched
 
+def get_hotel_coordinates(hotel_name: str, city: str = "Mumbai") -> Dict:
+    results = _fetch_places_text_search(
+        text_query=f"{hotel_name}, {city}",
+        radius_km=20,
+    )
+
+    if not results:
+        return {}
+
+    hotel_name_lower = hotel_name.lower().strip()
+
+    best = next(
+        (
+            p for p in results
+            if p.get("displayName", {}).get("text", "").lower().strip()
+            == hotel_name_lower
+        ),
+        results[0],
+    )
+
+    location = best.get("location", {})
+
+    return {
+        "name": best.get("displayName", {}).get("text", hotel_name),
+        "address": best.get("formattedAddress", ""),
+        "rating": best.get("rating"),
+        "reviews": best.get("userRatingCount", 0),
+        "url": best.get("googleMapsUri", ""),
+        "lat": location.get("latitude"),
+        "lng": location.get("longitude"),
+    }
+
 
 def search_google_maps_competitors(
     keyword: str,

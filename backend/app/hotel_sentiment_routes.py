@@ -20,8 +20,14 @@ from transformers import pipeline
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, PageBreak, Image
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+    HRFlowable,
+    PageBreak,
+    Image,
 )
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 
@@ -31,7 +37,7 @@ import sys
 
 try:
     import google.genai._api_client as genai_client
-    
+
     async def _safe_aclose(self):
         # Prevent AttributeError if _async_httpx_client wasn't initialized
         client = getattr(self, "_async_httpx_client", None)
@@ -55,61 +61,209 @@ USE_MOCK_DATA = False
 
 # Filter out non-luxury / budget / hostel properties from the approval list
 EXCLUDED_KEYWORDS = [
-    "pod", "capsule", "hostel", "budget", "motel", "inn", 
-    "backpack", "dorm", "guesthouse", "guest house", "b&b", "bed & breakfast"
+    "pod",
+    "capsule",
+    "hostel",
+    "budget",
+    "motel",
+    "inn",
+    "backpack",
+    "dorm",
+    "guesthouse",
+    "guest house",
+    "b&b",
+    "bed & breakfast",
 ]
 
 # Customer Journey Taxonomy Definition
 CUSTOMER_JOURNEY_TAXONOMY = {
     "1. Pre-Arrival Phase": {
-        "Digital Search & Discovery": ["website", "seo", "ota", "booking.com", "expedia", "social media", "virtual tour"],
-        "Booking & Reservation Execution": ["booking engine", "ux", "payment", "confirmation", "reservation"],
-        "Pre-Arrival Communication": ["welcome email", "upsell", "transfer", "spa package", "digital check-in"],
-        "Special Request Management": ["early check-in", "high floor", "dietary", "anniversary", "birthday", "special request"]
+        "Digital Search & Discovery": [
+            "website",
+            "seo",
+            "ota",
+            "booking.com",
+            "expedia",
+            "social media",
+            "virtual tour",
+        ],
+        "Booking & Reservation Execution": [
+            "booking engine",
+            "ux",
+            "payment",
+            "confirmation",
+            "reservation",
+        ],
+        "Pre-Arrival Communication": [
+            "welcome email",
+            "upsell",
+            "transfer",
+            "spa package",
+            "digital check-in",
+        ],
+        "Special Request Management": [
+            "early check-in",
+            "high floor",
+            "dietary",
+            "anniversary",
+            "birthday",
+            "special request",
+        ],
     },
     "2. Arrival & Check-In Phase": {
-        "Transportation & Valet Service": ["valet", "parking", "signage", "luggage assistance", "car transfer"],
-        "Main Entrance & Doorman Greeting": ["doorman", "entrance", "lobby", "scent", "music", "welcome tone"],
-        "Front Desk & Reception Desk Experience": ["queue", "wait time", "loyalty", "status", "upgrade", "check-in", "key", "reception"],
-        "Baggage & Escort Service": ["bellboy", "bell staff", "escort", "luggage delivery", "room orientation"]
+        "Transportation & Valet Service": [
+            "valet",
+            "parking",
+            "signage",
+            "luggage assistance",
+            "car transfer",
+        ],
+        "Main Entrance & Doorman Greeting": [
+            "doorman",
+            "entrance",
+            "lobby",
+            "scent",
+            "music",
+            "welcome tone",
+        ],
+        "Front Desk & Reception Desk Experience": [
+            "queue",
+            "wait time",
+            "loyalty",
+            "status",
+            "upgrade",
+            "check-in",
+            "key",
+            "reception",
+        ],
+        "Baggage & Escort Service": [
+            "bellboy",
+            "bell staff",
+            "escort",
+            "luggage delivery",
+            "room orientation",
+        ],
     },
     "3. In-Room & Stay Experience": {
-        "Room First Impressions": ["cleanliness", "clean", "fresh scent", "ambient", "welcome amenity"],
-        "In-Room Technology & Connectivity": ["wifi", "wi-fi", "climate control", "charging", "tv", "digital key"],
-        "Comfort & Sleep Environment": ["bed", "pillow", "bedding", "curtain", "blackout", "quiet", "noise", "soundproof"],
-        "In-Room Amenities & Hardware": ["minibar", "coffee", "tea", "iron", "safe", "deposit box"],
-        "Bathroom Experience": ["bathroom", "shower", "water pressure", "hot water", "toiletries", "towel", "hair dryer"],
-        "Housekeeping & Turn-Down Service": ["housekeeping", "linen", "dnd", "do not disturb", "turndown", "turn-down"]
+        "Room First Impressions": [
+            "cleanliness",
+            "clean",
+            "fresh scent",
+            "ambient",
+            "welcome amenity",
+        ],
+        "In-Room Technology & Connectivity": [
+            "wifi",
+            "wi-fi",
+            "climate control",
+            "charging",
+            "tv",
+            "digital key",
+        ],
+        "Comfort & Sleep Environment": [
+            "bed",
+            "pillow",
+            "bedding",
+            "curtain",
+            "blackout",
+            "quiet",
+            "noise",
+            "soundproof",
+        ],
+        "In-Room Amenities & Hardware": [
+            "minibar",
+            "coffee",
+            "tea",
+            "iron",
+            "safe",
+            "deposit box",
+        ],
+        "Bathroom Experience": [
+            "bathroom",
+            "shower",
+            "water pressure",
+            "hot water",
+            "toiletries",
+            "towel",
+            "hair dryer",
+        ],
+        "Housekeeping & Turn-Down Service": [
+            "housekeeping",
+            "linen",
+            "dnd",
+            "do not disturb",
+            "turndown",
+            "turn-down",
+        ],
     },
     "4. Food & Beverage (F&B) Touchpoints": {
         "Breakfast Service": ["breakfast", "buffet", "egg", "hostess", "coffee"],
-        "In-Room Dining (Room Service)": ["room service", "in-room dining", "trolley", "delivery time", "food temperature"],
-        "On-Site Restaurants & Bars": ["restaurant", "bar", "sommelier", "waitstaff", "dinner", "lunch", "menu"],
-        "Executive Lounge Experience": ["lounge", "executive lounge", "cocktail", "afternoon tea", "club lounge"]
+        "In-Room Dining (Room Service)": [
+            "room service",
+            "in-room dining",
+            "trolley",
+            "delivery time",
+            "food temperature",
+        ],
+        "On-Site Restaurants & Bars": [
+            "restaurant",
+            "bar",
+            "sommelier",
+            "waitstaff",
+            "dinner",
+            "lunch",
+            "menu",
+        ],
+        "Executive Lounge Experience": [
+            "lounge",
+            "executive lounge",
+            "cocktail",
+            "afternoon tea",
+            "club lounge",
+        ],
     },
     "5. Amenities, Wellness & Guest Facilities": {
         "Fitness Center & Gym": ["gym", "fitness", "workout", "treadmill", "weights"],
         "Spa & Wellness Center": ["spa", "massage", "therapist", "treatment", "locker"],
-        "Pool & Beach Facilities": ["pool", "beach", "lounger", "sunbed", "lifeguard", "poolside"],
-        "Business Center & Meeting Facilities": ["business center", "printing", "meeting room", "conference", "av"]
+        "Pool & Beach Facilities": [
+            "pool",
+            "beach",
+            "lounger",
+            "sunbed",
+            "lifeguard",
+            "poolside",
+        ],
+        "Business Center & Meeting Facilities": [
+            "business center",
+            "printing",
+            "meeting room",
+            "conference",
+            "av",
+        ],
     },
     "6. Departure & Post-Departure Phase": {
         "Pre-Departure Communication": ["folio", "invoice", "express check-out"],
         "Front Desk Check-Out": ["check-out", "checkout", "dispute", "fee", "receipt"],
-        "Service Recovery": ["complaint", "issue resolution", "apology", "manager", "rectified"],
+        "Service Recovery": [
+            "complaint",
+            "issue resolution",
+            "apology",
+            "manager",
+            "rectified",
+        ],
         "Departure Assistance": ["taxi", "cab", "departure", "valet retrieval"],
-        "Post-Stay Follow-Up": ["survey", "lost and found", "follow-up", "thank you"]
-    }
+        "Post-Stay Follow-Up": ["survey", "lost and found", "follow-up", "thank you"],
+    },
 }
 
 
 def _is_valid_competitor(place: dict) -> bool:
     """Filters out budget, pod, and low-tier accommodations before user approval."""
     name_lower = place.get("name", "").lower()
-    
+
     if any(keyword in name_lower for keyword in EXCLUDED_KEYWORDS):
         return False
-        
+
     rating = place.get("rating")
     if rating and rating < 3.8:
         return False
@@ -127,24 +281,27 @@ def _is_valid_competitor(place: dict) -> bool:
 
     return True
 
-def _fetch_static_map_image(results: list, width: int = 600, height: int = 280) -> Optional[io.BytesIO]:
+
+def _fetch_static_map_image(
+    results: list, width: int = 600, height: int = 280
+) -> Optional[io.BytesIO]:
     """
-    Fetches a static map image directly from the Google Maps Static API 
+    Fetches a static map image directly from the Google Maps Static API
     with custom pins pre-rendered on the server.
     """
     api_key = os.getenv("GOOGLE_MAPS_API_KEY")
-    
+
     base_url = "https://maps.googleapis.com/maps/api/staticmap"
-    
+
     markers = []
-    
+
     for place in results:
         lat = place.get("lat") or place.get("latitude")
         lng = place.get("lng") or place.get("longitude")
-        
+
         if lat is not None and lng is not None:
             is_user = place.get("is_user_establishment", False)
-            
+
             if is_user:
                 markers.append(f"markers=color:red|label:S|{lat},{lng}")
             else:
@@ -162,7 +319,9 @@ def _fetch_static_map_image(results: list, width: int = 600, height: int = 280) 
     }
 
     query_string = "&".join(markers)
-    full_url = f"{base_url}?{'&'.join([f'{k}={v}' for k, v in params.items()])}&{query_string}"
+    full_url = (
+        f"{base_url}?{'&'.join([f'{k}={v}' for k, v in params.items()])}&{query_string}"
+    )
 
     try:
         response = requests.get(full_url, timeout=10)
@@ -170,14 +329,18 @@ def _fetch_static_map_image(results: list, width: int = 600, height: int = 280) 
             logger.info("[PDF MAP] Google Static Map successfully fetched.")
             return io.BytesIO(response.content)
         else:
-            logger.error(f"[PDF MAP] Google Maps API error {response.status_code}: {response.text}")
+            logger.error(
+                f"[PDF MAP] Google Maps API error {response.status_code}: {response.text}"
+            )
             return None
     except Exception as e:
         logger.error(f"[PDF MAP] Request failed: {e}")
         return None
 
 
-def _generate_offline_map_diagram(places: list, width: int = 600, height: int = 280) -> Optional[io.BytesIO]:
+def _generate_offline_map_diagram(
+    places: list, width: int = 600, height: int = 280
+) -> Optional[io.BytesIO]:
     """Generates a clean offline geometric coordinate map using Pillow (PIL) - zero extra dependencies."""
     try:
         img = PILImage.new("RGB", (width, height), color="#F8FAFC")
@@ -196,12 +359,16 @@ def _generate_offline_map_diagram(places: list, width: int = 600, height: int = 
 
         lat_span = (max_lat - min_lat) or 0.01
         lng_span = (max_lng - min_lng) or 0.01
-        
+
         padding = 40
         plot_w = width - (padding * 2)
         plot_h = height - (padding * 2)
 
-        draw.text((padding, 12), "Property Coordinates & Location Relative Plot", fill="#1E293B")
+        draw.text(
+            (padding, 12),
+            "Property Coordinates & Location Relative Plot",
+            fill="#1E293B",
+        )
 
         for p in places:
             x = padding + int(((p["lng"] - min_lng) / lng_span) * plot_w)
@@ -209,10 +376,18 @@ def _generate_offline_map_diagram(places: list, width: int = 600, height: int = 
 
             radius = 7
             if p["is_user"]:
-                draw.ellipse([x - radius, y - radius, x + radius, y + radius], fill="#DC2626", outline="#7F1D1D")
+                draw.ellipse(
+                    [x - radius, y - radius, x + radius, y + radius],
+                    fill="#DC2626",
+                    outline="#7F1D1D",
+                )
                 draw.text((x + 10, y - 6), "Subject Property", fill="#DC2626")
             else:
-                draw.rectangle([x - radius, y - radius, x + radius, y + radius], fill="#2563EB", outline="#1E3A8A")
+                draw.rectangle(
+                    [x - radius, y - radius, x + radius, y + radius],
+                    fill="#2563EB",
+                    outline="#1E3A8A",
+                )
                 draw.text((x + 10, y - 6), "Competitor", fill="#2563EB")
 
         buf = io.BytesIO()
@@ -227,6 +402,7 @@ def _generate_offline_map_diagram(places: list, width: int = 600, height: int = 
 
 # In-memory task store with basic TTL cleanup
 hotel_sentiment_tasks: Dict[str, Dict[str, Any]] = {}
+
 
 def _clean_expired_tasks(max_age_hours: int = 24):
     """Clean up old tasks from memory to prevent memory leaks."""
@@ -248,7 +424,7 @@ try:
         model="cardiffnlp/twitter-roberta-base-sentiment-latest",
         return_all_scores=True,
         truncation=True,
-        max_length=512
+        max_length=512,
     )
     logger.info("[HOTEL SENTIMENT] Hugging Face sentiment model loaded successfully.")
 except Exception as e:
@@ -257,6 +433,7 @@ except Exception as e:
 
 
 # ── Request models ────────────────────────────────────────────────────────────
+
 
 class HotelSearchRequest(BaseModel):
     city: str
@@ -292,16 +469,18 @@ class HotelAnalyzeRequest(BaseModel):
 
 # ── Sentence Splitting Helper ──────────────────────────────────────────────────
 
+
 def _split_into_sentences(text: str) -> List[str]:
     """Splits text into sentences based on punctuation, preserving original phrase clarity."""
     if not text:
         return []
-    sentences = re.split(r'(?<=[.!?])\s+|\n+', text)
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
     cleaned = [s.strip() for s in sentences if s and len(s.strip()) > 3]
     return cleaned if cleaned else [text.strip()]
 
 
 # ── Sentence-Level Hugging Face Analysis Engine ──────────────────────────────
+
 
 def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
     """Processes reviews at sentence level through the Hugging Face sentiment pipeline using batching."""
@@ -322,10 +501,12 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
             "top_positive_phrases": [],
             "top_negative_phrases": [],
             "keyword_themes": {},
-            "journey_breakdown": empty_journey
+            "journey_breakdown": empty_journey,
         }
 
-    valid_reviews = [r for r in reviews if r.get("text") and r.get("text") != "[Rating Only]"]
+    valid_reviews = [
+        r for r in reviews if r.get("text") and r.get("text") != "[Rating Only]"
+    ]
     if not valid_reviews:
         return {
             "overall_score": 0.0,
@@ -338,7 +519,7 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
             "top_positive_phrases": [],
             "top_negative_phrases": [],
             "keyword_themes": {},
-            "journey_breakdown": empty_journey
+            "journey_breakdown": empty_journey,
         }
 
     positive_count = 0
@@ -356,7 +537,7 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
         "Location & Noise": 0,
         "Loyalty & Recognition": 0,
         "Check-in & Digital Key": 0,
-        "Banquets & Events": 0
+        "Banquets & Events": 0,
     }
 
     journey_breakdown = {
@@ -369,11 +550,13 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
         text = rev.get("text", "")
         sentences = _split_into_sentences(text)
         for s in sentences:
-            sentence_map.append({
-                "sentence": s,
-                "author": rev.get("author", "Guest"),
-                "date": rev.get("date", "Recent")
-            })
+            sentence_map.append(
+                {
+                    "sentence": s,
+                    "author": rev.get("author", "Guest"),
+                    "date": rev.get("date", "Recent"),
+                }
+            )
 
     if not sentence_map:
         return {
@@ -387,15 +570,15 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
             "top_positive_phrases": [],
             "top_negative_phrases": [],
             "keyword_themes": {},
-            "journey_breakdown": empty_journey
+            "journey_breakdown": empty_journey,
         }
 
     sentence_texts = [item["sentence"] for item in sentence_map]
-    
+
     batch_size = 32
     pipeline_results = []
     for i in range(0, len(sentence_texts), batch_size):
-        batch = sentence_texts[i:i + batch_size]
+        batch = sentence_texts[i : i + batch_size]
         results = hf_sentiment_analyzer(batch, truncation=True, max_length=512)
         pipeline_results.extend(results)
 
@@ -404,7 +587,11 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
     for item, results in zip(sentence_map, pipeline_results):
         sentence_text = item["sentence"]
 
-        if isinstance(results, list) and len(results) > 0 and isinstance(results[0], list):
+        if (
+            isinstance(results, list)
+            and len(results) > 0
+            and isinstance(results[0], list)
+        ):
             results = results[0]
 
         if isinstance(results, dict):
@@ -413,12 +600,12 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
         scores = {}
         if isinstance(results, list):
             for res in results:
-                if isinstance(res, dict) and 'label' in res and 'score' in res:
-                    scores[res['label'].lower()] = res['score']
+                if isinstance(res, dict) and "label" in res and "score" in res:
+                    scores[res["label"].lower()] = res["score"]
 
-        pos_score = scores.get('positive', 0.0)
-        neg_score = scores.get('negative', 0.0)
-        neu_score = scores.get('neutral', 0.0)
+        pos_score = scores.get("positive", 0.0)
+        neg_score = scores.get("negative", 0.0)
+        neu_score = scores.get("neutral", 0.0)
 
         compound = pos_score - neg_score
         compounds.append(compound)
@@ -427,7 +614,7 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
         phrase_data = {
             "author": item["author"],
             "date": item["date"],
-            "text": sentence_text
+            "text": sentence_text,
         }
 
         s_label = "neu"
@@ -447,15 +634,35 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
             keyword_themes["Service & Staff"] += 1
         if any(k in sentence_lower for k in ["room", "bed", "bathroom", "clean"]):
             keyword_themes["Room & Comfort"] += 1
-        if any(k in sentence_lower for k in ["breakfast", "dining", "restaurant", "food"]):
+        if any(
+            k in sentence_lower for k in ["breakfast", "dining", "restaurant", "food"]
+        ):
             keyword_themes["Dining & Breakfast"] += 1
-        if any(k in sentence_lower for k in ["location", "noise", "renovation", "street"]):
+        if any(
+            k in sentence_lower for k in ["location", "noise", "renovation", "street"]
+        ):
             keyword_themes["Location & Noise"] += 1
-        if any(k in sentence_lower for k in ["honors", "loyalty", "diamond", "gold", "member", "upgrade"]):
+        if any(
+            k in sentence_lower
+            for k in ["honors", "loyalty", "diamond", "gold", "member", "upgrade"]
+        ):
             keyword_themes["Loyalty & Recognition"] += 1
-        if any(k in sentence_lower for k in ["check-in", "checkin", "digital key", "app", "front desk", "queue"]):
+        if any(
+            k in sentence_lower
+            for k in [
+                "check-in",
+                "checkin",
+                "digital key",
+                "app",
+                "front desk",
+                "queue",
+            ]
+        ):
             keyword_themes["Check-in & Digital Key"] += 1
-        if any(k in sentence_lower for k in ["banquet", "event", "wedding", "conference", "ballroom"]):
+        if any(
+            k in sentence_lower
+            for k in ["banquet", "event", "wedding", "conference", "ballroom"]
+        ):
             keyword_themes["Banquets & Events"] += 1
 
         for phase_name, sub_dict in CUSTOMER_JOURNEY_TAXONOMY.items():
@@ -466,7 +673,7 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
     # Statistical calculations for Hilton / Property level
     arr = np.array(compounds)
     n_samples = len(arr)
-    
+
     avg_score = round(float(np.mean(arr)), 3) if n_samples > 0 else 0.0
     median_score = round(float(np.median(arr)), 3) if n_samples > 0 else 0.0
     var_val = float(np.var(arr, ddof=1)) if n_samples > 1 else 0.0
@@ -497,18 +704,19 @@ def _run_huggingface_sentiment_analysis(reviews: list) -> dict:
         "top_positive_phrases": pos_phrases[:3],
         "top_negative_phrases": neg_phrases[:3],
         "keyword_themes": {k: v for k, v in keyword_themes.items() if v > 0},
-        "journey_breakdown": journey_breakdown
+        "journey_breakdown": journey_breakdown,
     }
 
 
 # ── Review Provider Functions (Mock vs Apify) ───────────────────────────────
+
 
 def _fetch_reviews_mock(name: str) -> List[dict]:
     """Loads reviews from local test_hotel_reviews.json file using fuzzy/partial key matching."""
     test_json_path = os.path.join(os.path.dirname(__file__), "test_hotel_reviews.json")
     if not os.path.exists(test_json_path):
         return []
-    
+
     with open(test_json_path, "r", encoding="utf-8") as f:
         mock_data = json.load(f)
 
@@ -526,10 +734,15 @@ def _fetch_reviews_mock(name: str) -> List[dict]:
     return list(mock_data.values())[0]
 
 
-def _fetch_reviews_apify(url: str, progress_cb) -> tuple[List[dict], dict, Optional[str]]:
+def _fetch_reviews_apify(
+    url: str, progress_cb
+) -> tuple[List[dict], dict, Optional[str]]:
     """Calls Apify scraper to pull live Google Maps reviews."""
     from .hotel_apify_scraper import scrape_hotel_reviews_apify
-    scraped = scrape_hotel_reviews_apify(url=url, max_reviews=0, progress_callback=progress_cb)
+
+    scraped = scrape_hotel_reviews_apify(
+        url=url, max_reviews=0, progress_callback=progress_cb
+    )
     if scraped.get("error"):
         return [], {}, scraped["error"]
     return scraped.get("reviews", []), scraped.get("business_details", {}), None
@@ -537,9 +750,15 @@ def _fetch_reviews_apify(url: str, progress_cb) -> tuple[List[dict], dict, Optio
 
 # ── Search worker ─────────────────────────────────────────────────────────────
 
+
 def _hotel_search_worker(
-    task_id: str, city: str, radius_km: float, limit: int,
-    establishment_name: str, origin_lat: Optional[float], origin_lng: Optional[float],
+    task_id: str,
+    city: str,
+    radius_km: float,
+    limit: int,
+    establishment_name: str,
+    origin_lat: Optional[float],
+    origin_lng: Optional[float],
 ):
     try:
         from .google_maps_scraper import search_google_maps_competitors
@@ -548,7 +767,9 @@ def _hotel_search_worker(
         logger.info(f"[HOTEL SENTIMENT] task_id={task_id} searching: '{keyword}'")
 
         def progress(current, total, message):
-            hotel_sentiment_tasks[task_id]["progress"] = int((current / max(total, 1)) * 90)
+            hotel_sentiment_tasks[task_id]["progress"] = int(
+                (current / max(total, 1)) * 90
+            )
             hotel_sentiment_tasks[task_id]["status_message"] = message
 
         raw_places = search_google_maps_competitors(
@@ -568,62 +789,81 @@ def _hotel_search_worker(
         establishment_maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(query)}"
 
         establishment = {
-            "name":                  establishment_name,
-            "address":               f"{city} area",
-            "rating":                4.8,
-            "reviews":               120,
-            "url":                   establishment_maps_url,
-            "lat":                   origin_lat,
-            "lng":                   origin_lng,
-            "distance_km":           0.0,
-            "within_radius":         True,
-            "selected":              True,
+            "name": establishment_name,
+            "address": f"{city} area",
+            "rating": 4.8,
+            "reviews": 120,
+            "url": establishment_maps_url,
+            "lat": origin_lat,
+            "lng": origin_lng,
+            "distance_km": 0.0,
+            "within_radius": True,
+            "selected": True,
             "is_user_establishment": True,
         }
         filtered_places.insert(0, establishment)
 
-        hotel_sentiment_tasks[task_id].update({
-            "status":         "ready_for_approval",
-            "progress":       100,
-            "status_message": f"Found {len(filtered_places)} luxury competitors. Please review and approve.",
-            "places":         filtered_places,
-        })
+        hotel_sentiment_tasks[task_id].update(
+            {
+                "status": "ready_for_approval",
+                "progress": 100,
+                "status_message": f"Found {len(filtered_places)} luxury competitors. Please review and approve.",
+                "places": filtered_places,
+            }
+        )
 
     except Exception as e:
         logger.error(f"[HOTEL SENTIMENT] Search failed task_id={task_id}: {e}")
-        hotel_sentiment_tasks[task_id].update({
-            "status": "error", "error": str(e), "progress": 100,
-        })
+        hotel_sentiment_tasks[task_id].update(
+            {
+                "status": "error",
+                "error": str(e),
+                "progress": 100,
+            }
+        )
 
 
 # ── Sentiment analysis worker ─────────────────────────────────────────────────
 
+
 def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
     selected = [p for p in places if p.get("selected", True)]
-    total    = len(selected)
-    mode     = "LOCAL MOCK" if USE_MOCK_DATA else "APIFY PRODUCTION"
-    logger.info(f"[HOTEL SENTIMENT] [{mode}] task_id={task_id} analysing {total} places")
+    total = len(selected)
+    mode = "LOCAL MOCK" if USE_MOCK_DATA else "APIFY PRODUCTION"
+    logger.info(
+        f"[HOTEL SENTIMENT] [{mode}] task_id={task_id} analysing {total} places"
+    )
 
     results = []
-    errors  = []
+    errors = []
 
     for i, place in enumerate(selected):
         name = place.get("name", f"Place {i+1}")
-        url  = place.get("url", "")
+        url = place.get("url", "")
 
         def progress_cb(current_step_pct, max_step_pct, msg):
             base_progress = (i / max(total, 1)) * 85
-            step_contribution = (current_step_pct / max(max_step_pct, 1)) * (85 / max(total, 1))
-            hotel_sentiment_tasks[task_id]["progress"] = min(85, int(base_progress + step_contribution))
-            hotel_sentiment_tasks[task_id]["status_message"] = f"[{i+1}/{total}] {name}: {msg}"
+            step_contribution = (current_step_pct / max(max_step_pct, 1)) * (
+                85 / max(total, 1)
+            )
+            hotel_sentiment_tasks[task_id]["progress"] = min(
+                85, int(base_progress + step_contribution)
+            )
+            hotel_sentiment_tasks[task_id][
+                "status_message"
+            ] = f"[{i+1}/{total}] {name}: {msg}"
 
         biz_details = {}
         reviews = []
 
         if USE_MOCK_DATA:
             time.sleep(0.5)
-            hotel_sentiment_tasks[task_id]["progress"] = int(((i + 1) / max(total, 1)) * 85)
-            hotel_sentiment_tasks[task_id]["status_message"] = f"[{i+1}/{total}] Hugging Face model running on {name}..."
+            hotel_sentiment_tasks[task_id]["progress"] = int(
+                ((i + 1) / max(total, 1)) * 85
+            )
+            hotel_sentiment_tasks[task_id][
+                "status_message"
+            ] = f"[{i+1}/{total}] Hugging Face model running on {name}..."
             reviews = _fetch_reviews_mock(name)
         else:
             if url:
@@ -632,47 +872,56 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
                     if err:
                         raise Exception(err)
                 except Exception as e:
-                    logger.error(f"[HOTEL SENTIMENT] Apify extraction failed for {name}: {e}")
+                    logger.error(
+                        f"[HOTEL SENTIMENT] Apify extraction failed for {name}: {e}"
+                    )
                     errors.append({"name": name, "error": str(e)})
 
         review_count = len(reviews)
         sentiment = _run_huggingface_sentiment_analysis(reviews)
 
-        results.append({
-            "name":                 biz_details.get("name") or name,
-            "address":              biz_details.get("address") or place.get("address", ""),
-            "rating":               biz_details.get("rating") or place.get("rating"),
-            "google_review_count":  biz_details.get("total_reviews") or place.get("reviews", review_count),
-            "scraped_review_count": review_count,
-            "url":                  url,
-            "lat":                  place.get("lat"),
-            "lng":                  place.get("lng"),
-            "is_user_establishment": place.get("is_user_establishment", False),
-            "distance_km":          place.get("distance_km", 0.0),
-            "sentiment":            sentiment,
-            "adr":                  place.get("adr"),
-            "revpar":               place.get("revpar"),
-            "occupancy_rate":       place.get("occupancy_rate"),
-        })
+        results.append(
+            {
+                "name": biz_details.get("name") or name,
+                "address": biz_details.get("address") or place.get("address", ""),
+                "rating": biz_details.get("rating") or place.get("rating"),
+                "google_review_count": biz_details.get("total_reviews")
+                or place.get("reviews", review_count),
+                "scraped_review_count": review_count,
+                "url": url,
+                "lat": place.get("lat"),
+                "lng": place.get("lng"),
+                "is_user_establishment": place.get("is_user_establishment", False),
+                "distance_km": place.get("distance_km", 0.0),
+                "sentiment": sentiment,
+                "adr": place.get("adr"),
+                "revpar": place.get("revpar"),
+                "occupancy_rate": place.get("occupancy_rate"),
+            }
+        )
 
     combined_report = _build_combined_sentiment_report(results)
 
-    hotel_sentiment_tasks[task_id].update({
-        "status":          "completed",
-        "progress":        100,
-        "status_message":  f"Sentiment analysis completed successfully ({mode} mode).",
-        "results":         results,
-        "combined_report": combined_report,
-        "errors":          errors
-    })
+    hotel_sentiment_tasks[task_id].update(
+        {
+            "status": "completed",
+            "progress": 100,
+            "status_message": f"Sentiment analysis completed successfully ({mode} mode).",
+            "results": results,
+            "combined_report": combined_report,
+            "errors": errors,
+        }
+    )
 
 
 def _build_combined_sentiment_report(results: List[dict]) -> dict:
     if not results:
         return {}
 
-    with_sentiment = [r for r in results if r.get("sentiment", {}).get("overall_score") is not None]
-    with_rating    = [r for r in results if r.get("rating")]
+    with_sentiment = [
+        r for r in results if r.get("sentiment", {}).get("overall_score") is not None
+    ]
+    with_rating = [r for r in results if r.get("rating")]
 
     # Extract Hilton data
     hilton_result = next((r for r in results if r.get("is_user_establishment")), None)
@@ -688,7 +937,11 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
     for r in results:
         sent = r.get("sentiment", {})
         score = sent.get("overall_score")
-        n_sentences = (sent.get("positive_count", 0) + sent.get("neutral_count", 0) + sent.get("negative_count", 0))
+        n_sentences = (
+            sent.get("positive_count", 0)
+            + sent.get("neutral_count", 0)
+            + sent.get("negative_count", 0)
+        )
 
         if score is not None and n_sentences > 0:
             hotel_means.append(score)
@@ -698,10 +951,16 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
             market_neg_total += sent.get("negative_count", 0)
 
     # Combined Market Micro Average (Sentence Weighted Mean)
-    micro_mean = float(np.average(hotel_means, weights=hotel_sample_sizes)) if hotel_means else 0.0
+    micro_mean = (
+        float(np.average(hotel_means, weights=hotel_sample_sizes))
+        if hotel_means
+        else 0.0
+    )
 
     # Combined Market Sentiments (%)
-    total_market_sentences = (market_pos_total + market_neu_total + market_neg_total) or 1
+    total_market_sentences = (
+        market_pos_total + market_neu_total + market_neg_total
+    ) or 1
     market_pos_pct = round((market_pos_total / total_market_sentences) * 100, 1)
     market_neu_pct = round((market_neu_total / total_market_sentences) * 100, 1)
     market_neg_pct = round((market_neg_total / total_market_sentences) * 100, 1)
@@ -712,48 +971,70 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
     hilton_neg = hilton_sentiment.get("negative_count", 0)
     hilton_total = (hilton_pos + hilton_neu + hilton_neg) or 1
 
-    hilton_pos_pct = round((hilton_pos / hilton_total) * 100, 1)
-    hilton_neu_pct = round((hilton_neu / hilton_total) * 100, 1)
-    hilton_neg_pct = round((hilton_neg / hilton_total) * 100, 1)
+    # hilton_pos_pct = round((hilton_pos / hilton_total) * 100, 1)
+    # hilton_neu_pct = round((hilton_neu / hilton_total) * 100, 1)
+    # hilton_neg_pct = round((hilton_neg / hilton_total) * 100, 1)
+
+    raw_pos_pct = (hilton_pos / hilton_total) * 100
+    raw_neu_pct = (hilton_neu / hilton_total) * 100
+    raw_neg_pct = (hilton_neg / hilton_total) * 100
+
+    hilton_pos_pct = round(raw_pos_pct, 1)
+    hilton_neu_pct = round(raw_neu_pct, 1)
+    hilton_neg_pct = round(raw_neg_pct, 1)
+
+    pct_sum = round(hilton_pos_pct + hilton_neu_pct + hilton_neg_pct, 1)
+    diff = round(100.0 - pct_sum, 1)
+
+    if diff != 0:
+        pct_dict = {
+            "pos": (hilton_pos_pct, raw_pos_pct),
+            "neu": (hilton_neu_pct, raw_neu_pct),
+            "neg": (hilton_neg_pct, raw_neg_pct),
+        }
+
+        largest_key = max(pct_dict, key=lambda k: pct_dict[k][0])
+
+        if largest_key == "pos":
+            hilton_pos_pct = round(hilton_pos_pct + diff, 1)
+        elif largest_key == "neu":
+            hilton_neu_pct = round(hilton_neu_pct + diff, 1)
+        elif largest_key == "neg":
+            hilton_neg_pct = round(hilton_neg_pct + diff, 1)
 
     # Structured Side-by-Side Sector Analysis Table Data
     sector_analysis_table = {
         "mean": {
             "hilton": hilton_sentiment.get("overall_score", 0.0),
-            "market": round(micro_mean, 3)
+            "market": round(micro_mean, 3),
         },
-        "median": {
-            "hilton": hilton_sentiment.get("median_score", 0.0),
-            "market": None
-        },
-        "mode": {
-            "hilton": hilton_sentiment.get("mode_score", 0.0),
-            "market": None
-        },
-        "positive_pct": {
-            "hilton": hilton_pos_pct,
-            "market": market_pos_pct
-        },
-        "neutral_pct": {
-            "hilton": hilton_neu_pct,
-            "market": market_neu_pct
-        },
-        "negative_pct": {
-            "hilton": hilton_neg_pct,
-            "market": market_neg_pct
-        }
+        "median": {"hilton": hilton_sentiment.get("median_score", 0.0), "market": None},
+        "mode": {"hilton": hilton_sentiment.get("mode_score", 0.0), "market": None},
+        "positive_pct": {"hilton": hilton_pos_pct, "market": market_pos_pct},
+        "neutral_pct": {"hilton": hilton_neu_pct, "market": market_neu_pct},
+        "negative_pct": {"hilton": hilton_neg_pct, "market": market_neg_pct},
     }
 
     avg_score = round(micro_mean, 3)
 
-    if avg_score is None:   market_label = "No Data"
-    elif avg_score > 0.5:  market_label = "Very Positive"
-    elif avg_score > 0.2:  market_label = "Positive"
-    elif avg_score > -0.2: market_label = "Mixed / Neutral"
-    elif avg_score > -0.5: market_label = "Negative"
-    else:                  market_label = "Very Negative"
+    if avg_score is None:
+        market_label = "No Data"
+    elif avg_score > 0.5:
+        market_label = "Very Positive"
+    elif avg_score > 0.2:
+        market_label = "Positive"
+    elif avg_score > -0.2:
+        market_label = "Mixed / Neutral"
+    elif avg_score > -0.5:
+        market_label = "Negative"
+    else:
+        market_label = "Very Negative"
 
-    avg_rating = round(sum(r["rating"] for r in with_rating) / len(with_rating), 2) if with_rating else None
+    avg_rating = (
+        round(sum(r["rating"] for r in with_rating) / len(with_rating), 2)
+        if with_rating
+        else None
+    )
 
     hilton_stats = {
         "score": hilton_sentiment.get("overall_score", 0.0),
@@ -763,7 +1044,7 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
         "total_positive": hilton_pos,
         "total_neutral": hilton_neu,
         "total_negative": hilton_neg,
-        "journey": hilton_sentiment.get("journey_breakdown", {})
+        "journey": hilton_sentiment.get("journey_breakdown", {}),
     }
 
     # Calculate Bayesian Weighted Sentiment Score
@@ -773,9 +1054,11 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
     for r in results:
         raw_score = r.get("sentiment", {}).get("overall_score", 0.0)
         v_count = float(r.get("scraped_review_count", 0))
-        
+
         if raw_score is not None:
-            bayes_score = (v_count / (v_count + m_threshold)) * raw_score + (m_threshold / (v_count + m_threshold)) * market_mean
+            bayes_score = (v_count / (v_count + m_threshold)) * raw_score + (
+                m_threshold / (v_count + m_threshold)
+            ) * market_mean
             r["bayesian_sentiment_score"] = round(bayes_score, 3)
         else:
             r["bayesian_sentiment_score"] = -999.0
@@ -794,7 +1077,11 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
 
     ranked_by_raw_score = sorted(
         results,
-        key=lambda r: r.get("sentiment", {}).get("overall_score") if r.get("sentiment", {}).get("overall_score") is not None else -999.0,
+        key=lambda r: (
+            r.get("sentiment", {}).get("overall_score")
+            if r.get("sentiment", {}).get("overall_score") is not None
+            else -999.0
+        ),
         reverse=True,
     )
 
@@ -802,8 +1089,10 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
     if not reliable_ranked:
         reliable_ranked = ranked
 
-    best  = reliable_ranked[0]  if reliable_ranked and with_sentiment else None
-    worst = reliable_ranked[-1] if reliable_ranked and len(reliable_ranked) > 1 else None
+    best = reliable_ranked[0] if reliable_ranked and with_sentiment else None
+    worst = (
+        reliable_ranked[-1] if reliable_ranked and len(reliable_ranked) > 1 else None
+    )
 
     combined_themes = {}
     combined_journey = {
@@ -820,53 +1109,83 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
             if phase_name in combined_journey:
                 for sub_name, counts in sub_dict.items():
                     if sub_name in combined_journey[phase_name]:
-                        combined_journey[phase_name][sub_name]["pos"] += counts.get("pos", 0)
-                        combined_journey[phase_name][sub_name]["neu"] += counts.get("neu", 0)
-                        combined_journey[phase_name][sub_name]["neg"] += counts.get("neg", 0)
+                        combined_journey[phase_name][sub_name]["pos"] += counts.get(
+                            "pos", 0
+                        )
+                        combined_journey[phase_name][sub_name]["neu"] += counts.get(
+                            "neu", 0
+                        )
+                        combined_journey[phase_name][sub_name]["neg"] += counts.get(
+                            "neg", 0
+                        )
 
     total_pos = sum(r["sentiment"].get("positive_count", 0) for r in with_sentiment)
-    total_neu = sum(r["sentiment"].get("neutral_count",  0) for r in with_sentiment)
+    total_neu = sum(r["sentiment"].get("neutral_count", 0) for r in with_sentiment)
     total_neg = sum(r["sentiment"].get("negative_count", 0) for r in with_sentiment)
     total_all = total_pos + total_neu + total_neg or 1
 
-    positive_places = sum(1 for r in with_sentiment if r["sentiment"].get("overall_score", 0) > 0.2)
-    neutral_places  = sum(1 for r in with_sentiment if -0.2 <= r["sentiment"].get("overall_score", 0) <= 0.2)
-    negative_places = sum(1 for r in with_sentiment if r["sentiment"].get("overall_score", 0) < -0.2)
+    positive_places = sum(
+        1 for r in with_sentiment if r["sentiment"].get("overall_score", 0) > 0.2
+    )
+    neutral_places = sum(
+        1
+        for r in with_sentiment
+        if -0.2 <= r["sentiment"].get("overall_score", 0) <= 0.2
+    )
+    negative_places = sum(
+        1 for r in with_sentiment if r["sentiment"].get("overall_score", 0) < -0.2
+    )
 
     insights = []
     if avg_score is not None:
         if avg_score > 0.4:
-            insights.append("Customer sentiment across luxury hotels in this market is strongly positive — reputation and word-of-mouth are major drivers of bookings.")
+            insights.append(
+                "Customer sentiment across luxury hotels in this market is strongly positive — reputation and word-of-mouth are major drivers of bookings."
+            )
         elif avg_score > 0.1:
-            insights.append("Sentiment leans positive but inconsistently — there is a clear opportunity to differentiate through consistently excellent guest experience.")
+            insights.append(
+                "Sentiment leans positive but inconsistently — there is a clear opportunity to differentiate through consistently excellent guest experience."
+            )
         elif avg_score > -0.1:
-            insights.append("Mixed sentiment indicates guests have varied experiences. Service consistency appears to be the primary challenge across the market.")
+            insights.append(
+                "Mixed sentiment indicates guests have varied experiences. Service consistency appears to be the primary challenge across the market."
+            )
         else:
-            insights.append("Negative sentiment dominates — a significant service quality gap exists in this luxury hotel market that a well-run property can exploit.")
+            insights.append(
+                "Negative sentiment dominates — a significant service quality gap exists in this luxury hotel market that a well-run property can exploit."
+            )
 
     if best:
-        insights.append(f"{best['name']} leads the market in customer sentiment (score: {best['sentiment']['overall_score']:+.3f}), setting the benchmark that other properties are judged against.")
+        insights.append(
+            f"{best['name']} leads the market in customer sentiment (score: {best['sentiment']['overall_score']:+.3f}), setting the benchmark that other properties are judged against."
+        )
 
     if worst and worst["name"] != best["name"]:
-        insights.append(f"{worst['name']} has the lowest sentiment score ({worst['sentiment']['overall_score']:+.3f}) — their reviews likely reveal the most common guest pain points in this market.")
+        insights.append(
+            f"{worst['name']} has the lowest sentiment score ({worst['sentiment']['overall_score']:+.3f}) — their reviews likely reveal the most common guest pain points in this market."
+        )
 
     if combined_themes:
         top_theme = max(combined_themes.items(), key=lambda x: x[1])[0]
-        insights.append(f"'{top_theme}' is the most frequently mentioned topic across all hotel reviews — this is the primary decision factor for guests in this market.")
+        insights.append(
+            f"'{top_theme}' is the most frequently mentioned topic across all hotel reviews — this is the primary decision factor for guests in this market."
+        )
 
     total_scraped = sum(r.get("scraped_review_count", 0) for r in results)
-    insights.append(f"Analysis based on {total_scraped:,} reviews found across {len(results)} hotel(s) over the selected period.")
+    insights.append(
+        f"Analysis based on {total_scraped:,} reviews found across {len(results)} hotel(s) over the selected period."
+    )
 
     return {
-        "total_analysed":         len(results),
+        "total_analysed": len(results),
         "total_reviews_analyzed": total_scraped,
-        "with_sentiment":         len(with_sentiment),
-        "avg_sentiment_score":    avg_score,
-        "sector_analysis_table":  sector_analysis_table,
-        "hilton_stats":           hilton_stats,
-        "market_label":           market_label,
-        "avg_rating":             avg_rating,
-        "sentiment_ranking":      [
+        "with_sentiment": len(with_sentiment),
+        "avg_sentiment_score": avg_score,
+        "sector_analysis_table": sector_analysis_table,
+        "hilton_stats": hilton_stats,
+        "market_label": market_label,
+        "avg_rating": avg_rating,
+        "sentiment_ranking": [
             {
                 "name": r["name"],
                 "score": r.get("sentiment", {}).get("overall_score"),
@@ -876,27 +1195,39 @@ def _build_combined_sentiment_report(results: List[dict]) -> dict:
                 "rating": r.get("rating"),
                 "isUser": r.get("is_user_establishment", False),
                 "adr": r.get("adr"),
-                "revpar": r.get("revpar")
-            } for r in ranked_by_raw_score
+                "revpar": r.get("revpar"),
+            }
+            for r in ranked_by_raw_score
         ],
-        "best_sentiment":         {"name": best["name"], "score": best["sentiment"].get("overall_score")} if best else None,
-        "worst_sentiment":        {"name": worst["name"], "score": worst["sentiment"].get("overall_score")} if worst else None,
-        "total_positive":         total_pos,
-        "total_neutral":          total_neu,
-        "total_negative":         total_neg,
-        "positive_pct":           round(total_pos / total_all * 100, 1) if with_sentiment else 0,
-        "neutral_pct":            round(total_neu / total_all * 100, 1) if with_sentiment else 0,
-        "negative_pct":           round(total_neg / total_all * 100, 1) if with_sentiment else 0,
-        "positive_places":        positive_places,
-        "neutral_places":         neutral_places,
-        "negative_places":        negative_places,
-        "combined_themes":        dict(sorted(combined_themes.items(), key=lambda x: x[1], reverse=True)),
-        "combined_journey":       combined_journey,
-        "insights":               insights,
+        "best_sentiment": (
+            {"name": best["name"], "score": best["sentiment"].get("overall_score")}
+            if best
+            else None
+        ),
+        "worst_sentiment": (
+            {"name": worst["name"], "score": worst["sentiment"].get("overall_score")}
+            if worst
+            else None
+        ),
+        "total_positive": total_pos,
+        "total_neutral": total_neu,
+        "total_negative": total_neg,
+        "positive_pct": round(total_pos / total_all * 100, 1) if with_sentiment else 0,
+        "neutral_pct": round(total_neu / total_all * 100, 1) if with_sentiment else 0,
+        "negative_pct": round(total_neg / total_all * 100, 1) if with_sentiment else 0,
+        "positive_places": positive_places,
+        "neutral_places": neutral_places,
+        "negative_places": negative_places,
+        "combined_themes": dict(
+            sorted(combined_themes.items(), key=lambda x: x[1], reverse=True)
+        ),
+        "combined_journey": combined_journey,
+        "insights": insights,
     }
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/test-instant")
 async def test_instant_sentiment():
@@ -911,39 +1242,48 @@ async def test_instant_sentiment():
     results = []
     for idx, (place_name, reviews) in enumerate(mock_data.items()):
         # Offload CPU-bound HuggingFace model pipeline to background threadpool
-        sentiment = await run_in_threadpool(_run_huggingface_sentiment_analysis, reviews)
-        
-        results.append({
-            "name": place_name,
-            "address": "Mock Test Address",
-            "rating": 4.7,
-            "google_review_count": len(reviews),
-            "scraped_review_count": len(reviews),
-            "url": "https://maps.google.com",
-            "lat": 25.2048 + (idx * 0.01),
-            "lng": 55.2708 + (idx * 0.01), 
-            "is_user_establishment": True if "Regency" in place_name or idx == 0 else False,
-            "distance_km": 0.0,
-            "sentiment": sentiment,
-            "adr": None,
-            "revpar": None,
-            "occupancy_rate": None
-        })
+        sentiment = await run_in_threadpool(
+            _run_huggingface_sentiment_analysis, reviews
+        )
+
+        results.append(
+            {
+                "name": place_name,
+                "address": "Mock Test Address",
+                "rating": 4.7,
+                "google_review_count": len(reviews),
+                "scraped_review_count": len(reviews),
+                "url": "https://maps.google.com",
+                "lat": 25.2048 + (idx * 0.01),
+                "lng": 55.2708 + (idx * 0.01),
+                "is_user_establishment": (
+                    True if "Regency" in place_name or idx == 0 else False
+                ),
+                "distance_km": 0.0,
+                "sentiment": sentiment,
+                "adr": None,
+                "revpar": None,
+                "occupancy_rate": None,
+            }
+        )
 
     combined_report = _build_combined_sentiment_report(results)
 
     # Offload Map Generation to threadpool as well
     places_coords = [
-        {"lat": r["lat"], "lng": r["lng"], "is_user": r["is_user_establishment"]} 
-        for r in results if r.get("lat") and r.get("lng")
+        {"lat": r["lat"], "lng": r["lng"], "is_user": r["is_user_establishment"]}
+        for r in results
+        if r.get("lat") and r.get("lng")
     ]
-    
+
     map_buffer = None
     if os.getenv("GOOGLE_MAPS_API_KEY"):
         map_buffer = await run_in_threadpool(_fetch_static_map_image, results)
-    
+
     if not map_buffer and places_coords:
-        map_buffer = await run_in_threadpool(_generate_offline_map_diagram, places_coords)
+        map_buffer = await run_in_threadpool(
+            _generate_offline_map_diagram, places_coords
+        )
 
     combined_report["map_buffer"] = map_buffer
 
@@ -957,26 +1297,30 @@ async def test_instant_sentiment():
         "city": "Test City",
         "days_back": 30,
         "establishment_name": results[0]["name"] if results else "Test Establishment",
-        "created_at": datetime.datetime.now()
+        "created_at": datetime.datetime.now(),
     }
 
     return {
         "task_id": test_task_id,
         "status": "completed",
         "results": results,
-        "combined_report": combined_report
+        "combined_report": combined_report,
     }
+
 
 @router.post("/search")
 async def hotel_search(request: HotelSearchRequest, background_tasks: BackgroundTasks):
     _clean_expired_tasks()
     task_id = str(uuid.uuid4())
     hotel_sentiment_tasks[task_id] = {
-        "status": "searching", "progress": 0,
+        "status": "searching",
+        "progress": 0,
         "status_message": f"Searching for Luxury Hotels near {request.city}...",
-        "places": [], "error": None, "city": request.city,
+        "places": [],
+        "error": None,
+        "city": request.city,
         "days_back": request.days_back,
-        "created_at": datetime.datetime.now()
+        "created_at": datetime.datetime.now(),
     }
     background_tasks.add_task(
         _hotel_search_worker,
@@ -995,29 +1339,35 @@ async def hotel_search(request: HotelSearchRequest, background_tasks: Background
 async def hotel_progress(task_id: str):
     task = hotel_sentiment_tasks.get(task_id)
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
+        )
     return {
-        "status":          task.get("status"),
-        "progress":        task.get("progress", 0),
-        "status_message":  task.get("status_message", ""),
-        "places":          task.get("places", []),
-        "results":         task.get("results", []),
+        "status": task.get("status"),
+        "progress": task.get("progress", 0),
+        "status_message": task.get("status_message", ""),
+        "places": task.get("places", []),
+        "results": task.get("results", []),
         "combined_report": task.get("combined_report", {}),
-        "errors":          task.get("errors", []),
-        "error":           task.get("error"),
+        "errors": task.get("errors", []),
+        "error": task.get("error"),
     }
 
 
 @router.post("/analyse")
-async def hotel_analyse(request: HotelAnalyzeRequest, background_tasks: BackgroundTasks):
+async def hotel_analyse(
+    request: HotelAnalyzeRequest, background_tasks: BackgroundTasks
+):
     task = hotel_sentiment_tasks.get(request.task_id)
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
+        )
 
-    task["status"]         = "analysing"
-    task["progress"]       = 0
+    task["status"] = "analysing"
+    task["progress"] = 0
     task["status_message"] = "Starting sentiment analysis..."
-    task["days_back"]      = request.days_back
+    task["days_back"] = request.days_back
 
     background_tasks.add_task(
         _hotel_sentiment_worker,
@@ -1032,114 +1382,282 @@ async def hotel_analyse(request: HotelAnalyzeRequest, background_tasks: Backgrou
 async def download_sentiment_pdf(task_id: str, client_time: Optional[str] = None):
     task = hotel_sentiment_tasks.get(task_id)
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
+        )
     if task.get("status") != "completed":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analysis not complete yet")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Analysis not complete yet"
+        )
     try:
         pdf_bytes = _generate_sentiment_pdf(task, client_time=client_time)
-        city      = task.get("city", "hotel")
-        filename  = f"hotel-sentiment-{city.replace(' ','-')}-{datetime.date.today()}.pdf"
+        city = task.get("city", "hotel")
+        filename = (
+            f"hotel-sentiment-{city.replace(' ','-')}-{datetime.date.today()}.pdf"
+        )
         return StreamingResponse(
-            io.BytesIO(pdf_bytes), media_type="application/pdf",
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except Exception as e:
         logger.error(f"[HOTEL SENTIMENT] PDF generation failed: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"PDF generation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF generation failed: {e}",
+        )
 
 
-def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwargs) -> bytes:
+def _generate_sentiment_pdf(
+    task: dict, client_time: Optional[str] = None, **kwargs
+) -> bytes:
     import io
     import os
     import datetime
     import logging
     import numpy as np
     from scipy import stats
+    from xml.sax.saxutils import escape
 
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
     from reportlab.lib import colors
     from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-        HRFlowable, PageBreak, KeepTogether, Image
+        SimpleDocTemplate,
+        Paragraph,
+        Spacer,
+        Table,
+        TableStyle,
+        HRFlowable,
+        PageBreak,
+        KeepTogether,
+        Image,
     )
-    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
     logger = logging.getLogger(__name__)
 
-    results   = task.get("results", [])
-    combined  = task.get("combined_report", {})
+    results = task.get("results", [])
+    combined = task.get("combined_report", {})
     days_back = task.get("days_back", 30)
 
-    hilton_stats = combined.get("hilton_stats", {
-        "score": 0.0, "pos_pct": 0.0, "neg_pct": 0.0,
-        "total_positive": 0, "total_neutral": 0, "total_negative": 0, "journey": {}
-    })
+    hilton_stats = combined.get(
+        "hilton_stats",
+        {
+            "score": 0.0,
+            "pos_pct": 0.0,
+            "neg_pct": 0.0,
+            "total_positive": 0,
+            "total_neutral": 0,
+            "total_negative": 0,
+            "journey": {},
+        },
+    )
 
     establishment_name = task.get("establishment_name", "")
     user_est = None
+
     if results:
-        user_est = next((r.get("name") for r in results if r.get("is_user_establishment")), None)
+        user_est = next(
+            (r.get("name") for r in results if r.get("is_user_establishment")),
+            None,
+        )
+
         if not establishment_name:
             establishment_name = user_est or results[0].get("name", "")
 
-    PURPLE      = colors.HexColor("#7C3AED")
+    # ==========================================================================
+    # COLORS
+    # ==========================================================================
+
+    PURPLE = colors.HexColor("#7C3AED")
     PURPLE_DARK = colors.HexColor("#4C1D95")
     PURPLE_LITE = colors.HexColor("#EDE9FE")
-    SLATE       = colors.HexColor("#1E293B")
-    SLATE_MID   = colors.HexColor("#475569")
-    SLATE_LITE  = colors.HexColor("#F8FAFC")
-    WHITE       = colors.white
+    SLATE = colors.HexColor("#1E293B")
+    SLATE_MID = colors.HexColor("#475569")
+    SLATE_LITE = colors.HexColor("#F8FAFC")
+    WHITE = colors.white
+
+    # ==========================================================================
+    # DOCUMENT
+    # ==========================================================================
 
     buf = io.BytesIO()
+
     doc = SimpleDocTemplate(
-        buf, 
-        pagesize=A4, 
-        rightMargin=2*cm, 
-        leftMargin=2*cm, 
-        topMargin=2.0*cm, 
-        bottomMargin=2.0*cm,
-        title="Sentiment Analysis Report"
+        buf,
+        pagesize=A4,
+        rightMargin=2 * cm,
+        leftMargin=2 * cm,
+        topMargin=2.0 * cm,
+        bottomMargin=2.0 * cm,
+        title="Sentiment Analysis Report",
     )
-    W = A4[0] - 4*cm
 
-    def S(name, **kw): return ParagraphStyle(name, **kw)
-    style_body       = S("Body",    fontSize=8.5, leading=11, textColor=SLATE_MID,   fontName="Helvetica")
-    style_body_bold  = S("BB",      fontSize=8.5, leading=11, textColor=SLATE,       fontName="Helvetica-Bold")
-    style_section    = S("Sect",    fontSize=12,  leading=15, textColor=PURPLE_DARK, fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=4)
-    style_small      = S("Small",   fontSize=7.5, leading=10, textColor=SLATE_MID,   fontName="Helvetica")
-    style_th         = S("TH",      fontSize=8,   leading=10, textColor=WHITE,       fontName="Helvetica-Bold", alignment=TA_CENTER)
-    style_cover_h1   = S("CH1",     fontSize=22,  leading=26, textColor=PURPLE_DARK, fontName="Helvetica-Bold", alignment=TA_CENTER)
-    style_cover_est  = S("CEst",    fontSize=15,  leading=18, textColor=PURPLE,      fontName="Helvetica-Bold", alignment=TA_CENTER)
-    style_cover_sub  = S("CSub",    fontSize=10,  leading=13, textColor=SLATE_MID,   fontName="Helvetica",      alignment=TA_CENTER)
-    style_italic     = S("It",      fontSize=7.5, leading=10, textColor=SLATE_MID,   fontName="Helvetica-Oblique")
+    W = A4[0] - 4 * cm
 
-    logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
+    def S(name, **kw):
+        return ParagraphStyle(name, **kw)
+
+    # ==========================================================================
+    # STYLES
+    # ==========================================================================
+
+    style_body = S(
+        "Body",
+        fontSize=8.5,
+        leading=11,
+        textColor=SLATE_MID,
+        fontName="Helvetica",
+    )
+
+    style_body_bold = S(
+        "BB",
+        fontSize=8.5,
+        leading=11,
+        textColor=SLATE,
+        fontName="Helvetica-Bold",
+    )
+
+    style_section = S(
+        "Sect",
+        fontSize=12,
+        leading=15,
+        textColor=PURPLE_DARK,
+        fontName="Helvetica-Bold",
+        spaceBefore=12,
+        spaceAfter=4,
+    )
+
+    style_small = S(
+        "Small",
+        fontSize=7.5,
+        leading=10,
+        textColor=SLATE_MID,
+        fontName="Helvetica",
+    )
+
+    style_th = S(
+        "TH",
+        fontSize=8,
+        leading=10,
+        textColor=WHITE,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+    )
+
+    style_cover_h1 = S(
+        "CH1",
+        fontSize=22,
+        leading=26,
+        textColor=PURPLE_DARK,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+    )
+
+    style_cover_est = S(
+        "CEst",
+        fontSize=15,
+        leading=18,
+        textColor=PURPLE,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+    )
+
+    style_cover_sub = S(
+        "CSub",
+        fontSize=10,
+        leading=13,
+        textColor=SLATE_MID,
+        fontName="Helvetica",
+        alignment=TA_CENTER,
+    )
+
+    style_italic = S(
+        "It",
+        fontSize=7.5,
+        leading=10,
+        textColor=SLATE_MID,
+        fontName="Helvetica-Oblique",
+    )
+
+    # ==========================================================================
+    # LOGO
+    # ==========================================================================
+
+    logo_path = os.path.join(
+        os.path.dirname(__file__),
+        "logo.png",
+    )
+
     has_logo = os.path.exists(logo_path)
+
+    # ==========================================================================
+    # FOOTERS
+    # ==========================================================================
 
     def draw_later_page_footer(canvas, doc):
         canvas.saveState()
+
         canvas.setStrokeColor(colors.HexColor("#CBD5E1"))
         canvas.setLineWidth(0.5)
-        canvas.line(2*cm, 1.8*cm, A4[0] - 2*cm, 1.8*cm)
-        
+
+        canvas.line(
+            2 * cm,
+            1.8 * cm,
+            A4[0] - 2 * cm,
+            1.8 * cm,
+        )
+
         if has_logo:
             try:
-                canvas.drawImage(logo_path, 2*cm, 1.0*cm, width=1.8*cm, height=0.7*cm, preserveAspectRatio=True, mask='auto')
+                canvas.drawImage(
+                    logo_path,
+                    2 * cm,
+                    1.0 * cm,
+                    width=1.8 * cm,
+                    height=0.7 * cm,
+                    preserveAspectRatio=True,
+                    mask="auto",
+                )
             except Exception:
                 pass
 
-        canvas.setFont("Helvetica-Bold", 8)
+        canvas.setFont(
+            "Helvetica-Bold",
+            8,
+        )
         canvas.setFillColor(SLATE)
-        canvas.drawString(4*cm if has_logo else 2*cm, 1.3*cm, "DoWell Research")
-        
-        canvas.setFont("Helvetica", 8)
+
+        canvas.drawString(
+            4 * cm if has_logo else 2 * cm,
+            1.3 * cm,
+            "DoWell Research",
+        )
+
+        canvas.setFont(
+            "Helvetica",
+            8,
+        )
         canvas.setFillColor(SLATE_MID)
-        footer_date = client_time if client_time else datetime.date.today().strftime('%d %B %Y')
-        canvas.drawString(4*cm if has_logo else 2*cm, 1.0*cm, f"Generated: {footer_date}  ·  Sentiment Analysis Report")
-        
-        canvas.drawRightString(A4[0] - 2*cm, 1.1*cm, f"Page {doc.page}")
+
+        footer_date = (
+            client_time if client_time else datetime.date.today().strftime("%d %B %Y")
+        )
+
+        canvas.drawString(
+            4 * cm if has_logo else 2 * cm,
+            1.0 * cm,
+            f"Generated: {footer_date}  ·  Sentiment Analysis Report",
+        )
+
+        canvas.drawRightString(
+            A4[0] - 2 * cm,
+            1.1 * cm,
+            f"Page {doc.page}",
+        )
+
         canvas.restoreState()
 
     def draw_cover_footer(canvas, doc):
@@ -1147,148 +1665,641 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
 
     story = []
 
+    # ==========================================================================
     # COVER PAGE
-    story.append(Spacer(1, 0.5*cm))
+    # ==========================================================================
+
+    story.append(
+        Spacer(
+            1,
+            0.5 * cm,
+        )
+    )
+
     if has_logo:
         try:
-            story.append(Image(logo_path, width=4*cm, height=1.5*cm, kind='proportional'))
-            story.append(Spacer(1, 0.5*cm))
+            story.append(
+                Image(
+                    logo_path,
+                    width=6 * cm,
+                    height=3.5 * cm,
+                    kind="proportional",
+                )
+            )
+
+            story.append(
+                Spacer(
+                    1,
+                    0.5 * cm,
+                )
+            )
         except Exception:
             pass
 
-    story.append(Paragraph("Sentiment Analysis Report", style_cover_h1))
-    story.append(Paragraph("DoWell Research", style_cover_sub))
-    story.append(Spacer(1, 0.3*cm))
+    story.append(
+        Paragraph(
+            "Sentiment Analysis Report",
+            style_cover_h1,
+        )
+    )
+
+    story.append(
+        Paragraph(
+            "DoWell Research",
+            style_cover_sub,
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            0.3 * cm,
+        )
+    )
 
     if establishment_name:
-        story.append(Paragraph(f"{establishment_name}", style_cover_est))
-        story.append(Spacer(1, 0.3*cm))
+        story.append(
+            Paragraph(
+                escape(str(establishment_name)),
+                style_cover_est,
+            )
+        )
 
-    story.append(HRFlowable(width=W*0.8, thickness=1.5, color=PURPLE, spaceAfter=15))
-    report_date = client_time if client_time else datetime.date.today().strftime('%B %d, %Y')
+        story.append(
+            Spacer(
+                1,
+                0.3 * cm,
+            )
+        )
+
+    story.append(
+        HRFlowable(
+            width=W * 0.8,
+            thickness=1.5,
+            color=PURPLE,
+            spaceAfter=15,
+        )
+    )
+
+    report_date = (
+        client_time if client_time else datetime.date.today().strftime("%B %d, %Y")
+    )
 
     meta_table_data = [
-        [Paragraph("<b>Report Date:</b>", style_small), Paragraph(report_date, style_small)],
-        [Paragraph("<b>Sample Footprint:</b>", style_small), Paragraph(f"{len(results)} properties | {combined.get('total_reviews_analyzed', 0):,} reviews | {days_back} days", style_small)],
-        [Paragraph("<b>Prepared By:</b>", style_body_bold), Paragraph("DoWell Research", style_body_bold)],
+        [
+            Paragraph(
+                "<b>Report Date:</b>",
+                style_small,
+            ),
+            Paragraph(
+                escape(str(report_date)),
+                style_small,
+            ),
+        ],
+        [
+            Paragraph(
+                "<b>Sample Footprint:</b>",
+                style_small,
+            ),
+            Paragraph(
+                f"{len(results)} properties | "
+                f"{combined.get('total_reviews_analyzed', 0):,} reviews | "
+                f"{days_back} days",
+                style_small,
+            ),
+        ],
+        [
+            Paragraph(
+                "<b>Prepared By:</b>",
+                style_body_bold,
+            ),
+            Paragraph(
+                "DoWell Research",
+                style_body_bold,
+            ),
+        ],
     ]
-    meta_table = Table(meta_table_data, colWidths=[W*0.35, W*0.45])
-    meta_table.setStyle(TableStyle([
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BACKGROUND", (0, 0), (-1, -1), SLATE_LITE),
-        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-    ]))
-    story.append(meta_table)
-    story.append(Spacer(1, 0.5*cm))
 
-    # Geographic Distribution Section
-    story.append(Paragraph("Geographic Distribution & Competitors", style_section))
-    story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-    story.append(Spacer(1, 0.2 * cm))
+    meta_table = Table(
+        meta_table_data,
+        colWidths=[
+            W * 0.35,
+            W * 0.45,
+        ],
+    )
+
+    meta_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "ALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "LEFT",
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, -1),
+                    SLATE_LITE,
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    0.5,
+                    colors.HexColor("#CBD5E1"),
+                ),
+                (
+                    "INNERGRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.5,
+                    colors.HexColor("#E2E8F0"),
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    5,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    5,
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    10,
+                ),
+            ]
+        )
+    )
+
+    story.append(meta_table)
+
+    story.append(
+        Spacer(
+            1,
+            0.5 * cm,
+        )
+    )
+
+    # ==========================================================================
+    # GEOGRAPHIC DISTRIBUTION
+    # ==========================================================================
+
+    story.append(
+        Paragraph(
+            "Geographic Distribution & Competitors",
+            style_section,
+        )
+    )
+
+    story.append(
+        HRFlowable(
+            width=W,
+            thickness=1,
+            color=PURPLE_LITE,
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            0.2 * cm,
+        )
+    )
 
     map_buffer = kwargs.get("map_buffer") or combined.get("map_buffer")
+
+    if not map_buffer and results:
+        places_coords = [
+            {
+                "lat": r["lat"],
+                "lng": r["lng"],
+                "is_user": r.get(
+                    "is_user_establishment",
+                    False,
+                ),
+            }
+            for r in results
+            if r.get("lat") is not None and r.get("lng") is not None
+        ]
+
+        if os.getenv("GOOGLE_MAPS_API_KEY"):
+            map_buffer = _fetch_static_map_image(results)
+
+        if not map_buffer and places_coords:
+            map_buffer = _generate_offline_map_diagram(places_coords)
+
     if map_buffer:
         try:
-            map_img = Image(map_buffer, width=W, height=6.0 * cm, kind='proportional')
+            map_img = Image(
+                map_buffer,
+                width=W,
+                height=6.0 * cm,
+                kind="proportional",
+            )
+
             story.append(map_img)
+
         except Exception as err:
             logger.error(f"[PDF MAP] Failed to render image flowable: {err}")
 
+    gemini_summary = kwargs.get("gemini_summary")
+
+    if gemini_summary:
+        try:
+            summary_text = str(gemini_summary).strip()
+
+            if summary_text:
+                story.append(
+                    Spacer(
+                        1,
+                        0.35 * cm,
+                    )
+                )
+
+                story.append(
+                    Paragraph(
+                        "AI Executive Summary",
+                        style_section,
+                    )
+                )
+
+                story.append(
+                    HRFlowable(
+                        width=W,
+                        thickness=1,
+                        color=PURPLE_LITE,
+                    )
+                )
+
+                story.append(
+                    Spacer(
+                        1,
+                        0.15 * cm,
+                    )
+                )
+
+                # Escape characters that have special meaning
+                # inside ReportLab's mini-XML syntax.
+                summary_text = escape(summary_text)
+
+                # Preserve Gemini line breaks.
+                summary_text = summary_text.replace(
+                    "\r\n",
+                    "\n",
+                )
+
+                summary_text = summary_text.replace(
+                    "\r",
+                    "\n",
+                )
+
+                summary_text = summary_text.replace(
+                    "\n",
+                    "<br/>",
+                )
+
+                summary_table = Table(
+                    [
+                        [
+                            Paragraph(
+                                summary_text,
+                                style_body,
+                            )
+                        ]
+                    ],
+                    colWidths=[W],
+                )
+
+                summary_table.setStyle(
+                    TableStyle(
+                        [
+                            (
+                                "BACKGROUND",
+                                (0, 0),
+                                (-1, -1),
+                                SLATE_LITE,
+                            ),
+                            (
+                                "BOX",
+                                (0, 0),
+                                (-1, -1),
+                                0.5,
+                                colors.HexColor("#E2E8F0"),
+                            ),
+                            (
+                                "LEFTPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                10,
+                            ),
+                            (
+                                "RIGHTPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                10,
+                            ),
+                            (
+                                "TOPPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                8,
+                            ),
+                            (
+                                "BOTTOMPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                8,
+                            ),
+                            (
+                                "VALIGN",
+                                (0, 0),
+                                (-1, -1),
+                                "TOP",
+                            ),
+                        ]
+                    )
+                )
+
+                story.append(summary_table)
+
+        except Exception as err:
+            logger.error(f"[PDF GEMINI] Failed to render Gemini summary: {err}")
+
+    # ==========================================================================
+    # PAGE BREAK
+    # ==========================================================================
+
     story.append(PageBreak())
 
-    # ==============================================================================
+    # ==========================================================================
     # PAGE 2: SECTOR ANALYSIS
-    # ==============================================================================
-    story.append(Paragraph("Sector Analysis", style_section))
-    story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-    story.append(Spacer(1, 0.2*cm))
+    # ==========================================================================
 
-    sector_tbl = combined.get("sector_analysis_table", {})
+    story.append(
+        Paragraph(
+            "Sector Analysis",
+            style_section,
+        )
+    )
+
+    story.append(
+        HRFlowable(
+            width=W,
+            thickness=1,
+            color=PURPLE_LITE,
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            0.2 * cm,
+        )
+    )
+
+    sector_tbl = combined.get(
+        "sector_analysis_table",
+        {},
+    )
+
     input_hotel_name = user_est or "Input Hotel"
 
-    # Calculate Market Median & Mode directly if missing in payload
+    # Calculate Market Median & Mode directly if missing
     all_scores = [
-        r.get("sentiment", {}).get("overall_score") 
-        for r in results 
+        r.get("sentiment", {}).get("overall_score")
+        for r in results
         if r.get("sentiment", {}).get("overall_score") is not None
     ]
-    
-    market_median_val = sector_tbl.get('median', {}).get('market')
+
+    market_median_val = sector_tbl.get("median", {}).get("market")
+
     if market_median_val is None and all_scores:
         market_median_val = float(np.median(all_scores))
-        
-    market_mode_val = sector_tbl.get('mode', {}).get('market')
+
+    market_mode_val = sector_tbl.get("mode", {}).get("market")
+
     if market_mode_val is None and len(all_scores) > 2:
-        market_mode_val = float(stats.mode(np.round(all_scores, 2), keepdims=False).mode)
+        market_mode_val = float(
+            stats.mode(
+                np.round(
+                    all_scores,
+                    2,
+                ),
+                keepdims=False,
+            ).mode
+        )
 
     def format_mode(val):
         if val is None:
             return "—"
+
         sign = "-" if val < 0 else ""
-        # Formats the mode value to 1 decimal place and appends 'X'
-        return f"{sign}{abs(val):.1f}X"
+
+        return f"{sign}" f"{abs(val):.1f}" f"X"
 
     market_stats_data = [
         [
-            Paragraph("<b>Statistical Indicator</b>", style_body_bold), 
-            Paragraph(f"<b>{input_hotel_name} Value</b>", style_body_bold), 
-            Paragraph("<b>Combined Market Value</b>", style_body_bold)
+            Paragraph(
+                "<b>Statistical Indicator</b>",
+                style_body_bold,
+            ),
+            Paragraph(
+                f"<b>{escape(str(input_hotel_name))} Value</b>",
+                style_body_bold,
+            ),
+            Paragraph(
+                "<b>Combined Market Value</b>",
+                style_body_bold,
+            ),
         ],
         [
-            Paragraph("Mean (Average)", style_small), 
-            Paragraph(f"{sector_tbl.get('mean', {}).get('hilton', 0.0):+.3f}", style_small),
-            Paragraph(f"{sector_tbl.get('mean', {}).get('market', 0.0):+.3f}", style_small)
+            Paragraph(
+                "Mean (Average)",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('mean', {}).get('hilton', 0.0):+.3f}",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('mean', {}).get('market', 0.0):+.3f}",
+                style_small,
+            ),
         ],
         [
-            Paragraph("Median", style_small), 
-            Paragraph(f"{sector_tbl.get('median', {}).get('hilton', 0.0):+.3f}", style_small),
-            Paragraph(f"{market_median_val:+.3f}" if market_median_val is not None else "—", style_small)
+            Paragraph(
+                "Median",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('median', {}).get('hilton', 0.0):+.3f}",
+                style_small,
+            ),
+            Paragraph(
+                (f"{market_median_val:+.3f}" if market_median_val is not None else "—"),
+                style_small,
+            ),
         ],
         [
-            Paragraph("Mode", style_small), 
-            Paragraph(f"{format_mode(sector_tbl.get('mode', {}).get('hilton'))}", style_small),
-            Paragraph(f"{format_mode(market_mode_val)}", style_small)
+            Paragraph(
+                "Mode",
+                style_small,
+            ),
+            Paragraph(
+                format_mode(sector_tbl.get("mode", {}).get("hilton")),
+                style_small,
+            ),
+            Paragraph(
+                format_mode(market_mode_val),
+                style_small,
+            ),
         ],
         [
-            Paragraph("Positive Sentiment %", style_small), 
-            Paragraph(f"{sector_tbl.get('positive_pct', {}).get('hilton', 0.0):.1f}%", style_small),
-            Paragraph(f"{sector_tbl.get('positive_pct', {}).get('market', 0.0):.1f}%", style_small)
+            Paragraph(
+                "Positive Sentiment %",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('positive_pct', {}).get('hilton', 0.0):.1f}%",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('positive_pct', {}).get('market', 0.0):.1f}%",
+                style_small,
+            ),
         ],
         [
-            Paragraph("Neutral Sentiment %", style_small), 
-            Paragraph(f"{sector_tbl.get('neutral_pct', {}).get('hilton', 0.0):.1f}%", style_small),
-            Paragraph(f"{sector_tbl.get('neutral_pct', {}).get('market', 0.0):.1f}%", style_small)
+            Paragraph(
+                "Neutral Sentiment %",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('neutral_pct', {}).get('hilton', 0.0):.1f}%",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('neutral_pct', {}).get('market', 0.0):.1f}%",
+                style_small,
+            ),
         ],
         [
-            Paragraph("Negative Sentiment %", style_small), 
-            Paragraph(f"{sector_tbl.get('negative_pct', {}).get('hilton', 0.0):.1f}%", style_small),
-            Paragraph(f"{sector_tbl.get('negative_pct', {}).get('market', 0.0):.1f}%", style_small)
-        ]
+            Paragraph(
+                "Negative Sentiment %",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('negative_pct', {}).get('hilton', 0.0):.1f}%",
+                style_small,
+            ),
+            Paragraph(
+                f"{sector_tbl.get('negative_pct', {}).get('market', 0.0):.1f}%",
+                style_small,
+            ),
+        ],
     ]
 
-    market_table = Table(market_stats_data, colWidths=[W * 0.40, W * 0.30, W * 0.30])
-    market_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), SLATE_LITE),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-    ]))
+    market_table = Table(
+        market_stats_data,
+        colWidths=[
+            W * 0.40,
+            W * 0.30,
+            W * 0.30,
+        ],
+    )
+
+    market_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    SLATE_LITE,
+                ),
+                (
+                    "GRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.5,
+                    colors.HexColor("#E2E8F0"),
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    8,
+                ),
+                (
+                    "ALIGN",
+                    (1, 0),
+                    (-1, -1),
+                    "CENTER",
+                ),
+            ]
+        )
+    )
+
     story.append(market_table)
-    story.append(Spacer(1, 0.4*cm))
+
+    story.append(
+        Spacer(
+            1,
+            0.4 * cm,
+        )
+    )
 
     est_label = user_est if user_est else "Hilton Baseline"
-    story.append(Paragraph(f"{est_label} — Key Performance Snapshot", style_section))
-    story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-    story.append(Spacer(1, 0.2*cm))
+
+    story.append(
+        Paragraph(
+            f"{escape(str(est_label))} — Key Performance Snapshot",
+            style_section,
+        )
+    )
+
+    story.append(
+        HRFlowable(
+            width=W,
+            thickness=1,
+            color=PURPLE_LITE,
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            0.2 * cm,
+        )
+    )
 
     styles = getSampleStyleSheet()
+
     style_kpi_num = ParagraphStyle(
         "KpiNum",
         parent=styles["Normal"],
@@ -1305,207 +2316,1015 @@ def _generate_sentiment_pdf(task: dict, client_time: Optional[str] = None, **kwa
         fontSize=7.5,
         leading=9,
         alignment=1,
-        textColor=SLATE_MID
+        textColor=SLATE_MID,
     )
 
-    score_val = hilton_stats.get('score', 0.0)
+    score_val = hilton_stats.get(
+        "score",
+        0.0,
+    )
+
     score_color = "#059669" if score_val >= 0 else "#DC2626"
 
     kpi_card_data = [
         [
-            Paragraph(f'<font color="{score_color}">{score_val:+.3f}</font>', style_kpi_num),
-            Paragraph(f"{hilton_stats.get('pos_pct', 0.0):.1f}%", style_kpi_num),
-            Paragraph(f"{hilton_stats.get('neu_pct', 0.0):.1f}%", style_kpi_num),
-            Paragraph(f"{hilton_stats.get('neg_pct', 0.0):.1f}%", style_kpi_num),
+            Paragraph(
+                f'<font color="{score_color}">' f"{score_val:+.3f}" f"</font>",
+                style_kpi_num,
+            ),
+            Paragraph(
+                f"{hilton_stats.get('pos_pct', 0.0):.1f}%",
+                style_kpi_num,
+            ),
+            Paragraph(
+                f"{hilton_stats.get('neu_pct', 0.0):.1f}%",
+                style_kpi_num,
+            ),
+            Paragraph(
+                f"{hilton_stats.get('neg_pct', 0.0):.1f}%",
+                style_kpi_num,
+            ),
         ],
         [
-            Paragraph("OVERALL SCORE", style_kpi_label),
-            Paragraph("POSITIVE SENTIMENT", style_kpi_label),
-            Paragraph("NEUTRAL SENTIMENT", style_kpi_label),
-            Paragraph("NEGATIVE SENTIMENT", style_kpi_label),
-        ]
+            Paragraph(
+                "OVERALL SCORE",
+                style_kpi_label,
+            ),
+            Paragraph(
+                "POSITIVE SENTIMENT",
+                style_kpi_label,
+            ),
+            Paragraph(
+                "NEUTRAL SENTIMENT",
+                style_kpi_label,
+            ),
+            Paragraph(
+                "NEGATIVE SENTIMENT",
+                style_kpi_label,
+            ),
+        ],
     ]
 
     col_w = W / 4.0
-    kpi_card_table = Table(kpi_card_data, colWidths=[col_w, col_w, col_w, col_w])
-    kpi_card_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), SLATE_LITE),
-        ('BOX', (0, 0), (-1, -1), 1, PURPLE_LITE),
-        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ]))
+
+    kpi_card_table = Table(
+        kpi_card_data,
+        colWidths=[
+            col_w,
+            col_w,
+            col_w,
+            col_w,
+        ],
+    )
+
+    kpi_card_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, -1),
+                    SLATE_LITE,
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    1,
+                    PURPLE_LITE,
+                ),
+                (
+                    "INNERGRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.5,
+                    colors.HexColor("#E2E8F0"),
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    8,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    8,
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+            ]
+        )
+    )
+
     story.append(kpi_card_table)
 
+    # ==========================================================================
     # PAGE 3: SENTIMENT RANKING
-    ranking = combined.get("sentiment_ranking", [])
+    # ==========================================================================
+
+    ranking = combined.get(
+        "sentiment_ranking",
+        [],
+    )
+
     if ranking:
         story.append(PageBreak())
-        story.append(Paragraph("Sentiment Ranking Across Competitors", style_section))
-        story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-        story.append(Spacer(1, 0.2*cm))
+
+        story.append(
+            Paragraph(
+                "Sentiment Ranking Across Competitors",
+                style_section,
+            )
+        )
+
+        story.append(
+            HRFlowable(
+                width=W,
+                thickness=1,
+                color=PURPLE_LITE,
+            )
+        )
+
+        story.append(
+            Spacer(
+                1,
+                0.2 * cm,
+            )
+        )
 
         ranking_sorted = sorted(
             ranking,
-            key=lambda item: item.get("score") if item.get("score") is not None else -999.0,
-            reverse=True
+            key=lambda item: (
+                item.get("score") if item.get("score") is not None else -999.0
+            ),
+            reverse=True,
         )
-        rank_rows = [["#","Hotel","Sentiment","Score","Rating"]]
+
+        rank_rows = [
+            [
+                "#",
+                "Hotel",
+                "Sentiment",
+                "Score",
+                "Rating",
+            ]
+        ]
+
         for i, r in enumerate(ranking_sorted):
             sc = r.get("score")
-            sc_color = "#059669" if sc and sc>0.2 else ("#DC2626" if sc and sc<-0.2 else "#B45309")
-            hotel_name_markup = f"<b>[YOU] {r.get('name')}</b>" if r.get("isUser") else r.get("name","")
-            rank_rows.append([
-                str(i+1),
-                Paragraph(hotel_name_markup, style_body),
-                Paragraph(f'<font color="{sc_color}">{r.get("label","")}</font>', style_body),
-                Paragraph(f'<font color="{sc_color}">{f"{sc:+.3f}" if sc is not None else "—"}</font>', style_body_bold),
-                f"★ {r['rating']}" if r.get("rating") else "—",
-            ])
-        rt = Table(rank_rows, colWidths=[W*0.06,W*0.42,W*0.21,W*0.15,W*0.16])
-        rt.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),PURPLE_DARK),
-            ("TEXTCOLOR",(0,0),(-1,0),WHITE),
-            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-            ("FONTSIZE",(0,0),(-1,-1),8),
-            ("ALIGN",(0,0),(0,-1),"CENTER"),
-            ("ALIGN",(3,0),(-1,-1),"CENTER"),
-            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,SLATE_LITE]),
-            ("INNERGRID",(0,0),(-1,-1),0.3,colors.HexColor("#E2E8F0")),
-            ("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#CBD5E1")),
-            ("TOPPADDING",(0,0),(-1,-1),4),
-            ("BOTTOMPADDING",(0,0),(-1,-1),4),
-            ("LEFTPADDING",(0,0),(-1,-1),6)
-        ]))
+
+            sc_color = (
+                "#059669"
+                if sc and sc > 0.2
+                else ("#DC2626" if sc and sc < -0.2 else "#B45309")
+            )
+
+            hotel_name_markup = (
+                f"<b>[YOU] " f"{escape(str(r.get('name', '')))}" f"</b>"
+                if r.get("isUser")
+                else escape(str(r.get("name", "")))
+            )
+
+            score_display = f"{sc:+.3f}" if sc is not None else "—"
+
+            rank_rows.append(
+                [
+                    str(i + 1),
+                    Paragraph(
+                        hotel_name_markup,
+                        style_body,
+                    ),
+                    Paragraph(
+                        f'<font color="{sc_color}">'
+                        f"{escape(str(r.get('label', '')))}"
+                        f"</font>",
+                        style_body,
+                    ),
+                    Paragraph(
+                        f'<font color="{sc_color}">' f"{score_display}" f"</font>",
+                        style_body_bold,
+                    ),
+                    (f"★ {r['rating']}" if r.get("rating") else "—"),
+                ]
+            )
+
+        rt = Table(
+            rank_rows,
+            colWidths=[
+                W * 0.06,
+                W * 0.42,
+                W * 0.21,
+                W * 0.15,
+                W * 0.16,
+            ],
+        )
+
+        rt.setStyle(
+            TableStyle(
+                [
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        PURPLE_DARK,
+                    ),
+                    (
+                        "TEXTCOLOR",
+                        (0, 0),
+                        (-1, 0),
+                        WHITE,
+                    ),
+                    (
+                        "FONTNAME",
+                        (0, 0),
+                        (-1, 0),
+                        "Helvetica-Bold",
+                    ),
+                    (
+                        "FONTSIZE",
+                        (0, 0),
+                        (-1, -1),
+                        8,
+                    ),
+                    (
+                        "ALIGN",
+                        (0, 0),
+                        (0, -1),
+                        "CENTER",
+                    ),
+                    (
+                        "ALIGN",
+                        (3, 0),
+                        (-1, -1),
+                        "CENTER",
+                    ),
+                    (
+                        "VALIGN",
+                        (0, 0),
+                        (-1, -1),
+                        "MIDDLE",
+                    ),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [
+                            WHITE,
+                            SLATE_LITE,
+                        ],
+                    ),
+                    (
+                        "INNERGRID",
+                        (0, 0),
+                        (-1, -1),
+                        0.3,
+                        colors.HexColor("#E2E8F0"),
+                    ),
+                    (
+                        "BOX",
+                        (0, 0),
+                        (-1, -1),
+                        0.5,
+                        colors.HexColor("#CBD5E1"),
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        4,
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        4,
+                    ),
+                    (
+                        "LEFTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                ]
+            )
+        )
+
         story.append(rt)
 
+    # ==========================================================================
     # PAGE 4: TOUCHPOINT SENTIMENT COMPARISON
-    cj_data = combined.get("combined_journey", {})
-    hilton_cj_data = hilton_stats.get("journey", {})
-    total_properties = max(1, len(results))
+    # ==========================================================================
+
+    cj_data = combined.get(
+        "combined_journey",
+        {},
+    )
+
+    hilton_cj_data = hilton_stats.get(
+        "journey",
+        {},
+    )
+
+    total_properties = max(
+        1,
+        len(results),
+    )
 
     if cj_data:
         story.append(PageBreak())
-        story.append(Paragraph("Touchpoint Sentiment Comparison", style_section))
-        story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-        story.append(Spacer(1, 0.15*cm))
 
-        cj_rows = [[
-            Paragraph("<b>Operational Phase / Touchpoint</b>", style_th), 
-            Paragraph("<b>Combined Market Avg<br/>(+ / -)</b>", style_th), 
-            Paragraph(f"<b>{input_hotel_name}<br/>(+ / -)</b>", style_th)
-        ]]
-        
+        story.append(
+            Paragraph(
+                "Touchpoint Sentiment Comparison",
+                style_section,
+            )
+        )
+
+        story.append(
+            HRFlowable(
+                width=W,
+                thickness=1,
+                color=PURPLE_LITE,
+            )
+        )
+
+        story.append(
+            Spacer(
+                1,
+                0.15 * cm,
+            )
+        )
+
+        cj_rows = [
+            [
+                Paragraph(
+                    "<b>Operational Phase / Touchpoint</b>",
+                    style_th,
+                ),
+                Paragraph(
+                    "<b>Combined Market Avg<br/>(+ / -)</b>",
+                    style_th,
+                ),
+                Paragraph(
+                    f"<b>{escape(str(input_hotel_name))}<br/>(+ / -)</b>",
+                    style_th,
+                ),
+            ]
+        ]
+
+        # ----------------------------------------------------------------------
+        # Add EVERY phase and EVERY active touchpoint
+        # ----------------------------------------------------------------------
+
         for phase_name, sub_dict in cj_data.items():
-            cj_rows.append([Paragraph(f"<b>{phase_name}</b>", style_body_bold), "", ""])
+
+            if not isinstance(
+                sub_dict,
+                dict,
+            ):
+                continue
+
+            phase_rows = []
 
             for sub_name, counts in sub_dict.items():
-                comb_pos, comb_neg = counts.get("pos", 0), counts.get("neg", 0)
-                
-                # Average Pos/Neg counts across market per property
-                avg_comb_pos = comb_pos / total_properties
-                avg_comb_neg = comb_neg / total_properties
-                
-                c_pos_str = f"+{avg_comb_pos:.1f}" if avg_comb_pos > 0 else "0.0"
-                c_neg_str = f"-{avg_comb_neg:.1f}" if avg_comb_neg > 0 else "0.0"
-                comb_display = f"<font color='#059669'>{c_pos_str}</font> / <font color='#DC2626'>{c_neg_str}</font>"
 
-                # Target Hotel Pos/Neg counts
-                hilton_sub = hilton_cj_data.get(phase_name, {}).get(sub_name, {"pos": 0, "neg": 0})
-                h_pos, h_neg = hilton_sub.get("pos", 0), hilton_sub.get("neg", 0)
+                if not isinstance(
+                    counts,
+                    dict,
+                ):
+                    continue
 
-                pos_str = f"+{h_pos}" if h_pos > 0 else "0"
-                neg_str = f"-{h_neg}" if h_neg > 0 else "0"
-                hilton_display = f"<font color='#059669'>{pos_str}</font> / <font color='#DC2626'>{neg_str}</font>"
+                # ----------------------------------------------------------------
+                # Combined market counts
+                # ----------------------------------------------------------------
 
-                if (comb_pos + comb_neg) > 0 or (h_pos + h_neg) > 0:
-                    cj_rows.append([
-                        Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;• {sub_name}", style_small),
-                        Paragraph(comb_display, style_small),
-                        Paragraph(hilton_display, style_small)
-                    ])
+                comb_pos = counts.get("pos", 0) or 0
 
-        cjt = Table(cj_rows, colWidths=[W*0.50, W*0.25, W*0.25])
-        cjt.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), PURPLE_DARK),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, SLATE_LITE]),
-            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
-            ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#E2E8F0")),
-            ("TOPPADDING", (0, 0), (-1, -1), 2),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ]))
-        story.append(cjt)
+                comb_neg = counts.get("neg", 0) or 0
 
+                try:
+                    comb_pos = float(comb_pos)
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    comb_pos = 0.0
+
+                try:
+                    comb_neg = float(comb_neg)
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    comb_neg = 0.0
+
+                # ----------------------------------------------------------------
+                # Subject hotel counts
+                # ----------------------------------------------------------------
+
+                hilton_phase = hilton_cj_data.get(
+                    phase_name,
+                    {},
+                )
+
+                if not isinstance(
+                    hilton_phase,
+                    dict,
+                ):
+                    hilton_phase = {}
+
+                hilton_sub = (
+                    hilton_phase.get(
+                        sub_name,
+                        {},
+                    )
+                    or {}
+                )
+
+                if not isinstance(
+                    hilton_sub,
+                    dict,
+                ):
+                    hilton_sub = {}
+
+                h_pos = (
+                    hilton_sub.get(
+                        "pos",
+                        0,
+                    )
+                    or 0
+                )
+
+                h_neg = (
+                    hilton_sub.get(
+                        "neg",
+                        0,
+                    )
+                    or 0
+                )
+
+                try:
+                    h_pos = float(h_pos)
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    h_pos = 0.0
+
+                try:
+                    h_neg = float(h_neg)
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    h_neg = 0.0
+
+                # ----------------------------------------------------------------
+                # Skip inactive touchpoints
+                # ----------------------------------------------------------------
+
+                if comb_pos + comb_neg == 0 and h_pos + h_neg == 0:
+                    continue
+
+                # ----------------------------------------------------------------
+                # Market average
+                # ----------------------------------------------------------------
+
+                avg_comb_pos = comb_pos / total_properties if total_properties else 0.0
+
+                avg_comb_neg = comb_neg / total_properties if total_properties else 0.0
+
+                rounded_comb_pos = round(
+                    avg_comb_pos,
+                    1,
+                )
+
+                rounded_comb_neg = round(
+                    avg_comb_neg,
+                    1,
+                )
+
+                c_pos_str = f"+{rounded_comb_pos:.1f}" if rounded_comb_pos != 0 else "-"
+
+                c_neg_str = f"-{rounded_comb_neg:.1f}" if rounded_comb_neg != 0 else "-"
+
+                comb_display = (
+                    f'<font color="#059669">'
+                    f"{c_pos_str}"
+                    f"</font>"
+                    f" / "
+                    f'<font color="#DC2626">'
+                    f"{c_neg_str}"
+                    f"</font>"
+                )
+
+                # ----------------------------------------------------------------
+                # Subject hotel values
+                # ----------------------------------------------------------------
+
+                if h_pos.is_integer():
+                    h_pos_display = int(h_pos)
+                else:
+                    h_pos_display = h_pos
+
+                if h_neg.is_integer():
+                    h_neg_display = int(h_neg)
+                else:
+                    h_neg_display = h_neg
+
+                pos_str = f"+{h_pos_display}" if h_pos != 0 else "-"
+
+                neg_str = f"-{h_neg_display}" if h_neg != 0 else "-"
+
+                hilton_display = (
+                    f'<font color="#059669">'
+                    f"{pos_str}"
+                    f"</font>"
+                    f" / "
+                    f'<font color="#DC2626">'
+                    f"{neg_str}"
+                    f"</font>"
+                )
+
+                # ----------------------------------------------------------------
+                # Add touchpoint row
+                # ----------------------------------------------------------------
+
+                phase_rows.append(
+                    [
+                        Paragraph(
+                            f"&nbsp;&nbsp;&nbsp;&nbsp;• " f"{escape(str(sub_name))}",
+                            style_small,
+                        ),
+                        Paragraph(
+                            comb_display,
+                            style_small,
+                        ),
+                        Paragraph(
+                            hilton_display,
+                            style_small,
+                        ),
+                    ]
+                )
+
+            # --------------------------------------------------------------------
+            # Add phase header and touchpoints
+            # --------------------------------------------------------------------
+
+            if phase_rows:
+
+                cj_rows.append(
+                    [
+                        Paragraph(
+                            f"<b>{escape(str(phase_name))}</b>",
+                            style_body_bold,
+                        ),
+                        "",
+                        "",
+                    ]
+                )
+
+                cj_rows.extend(phase_rows)
+
+        # ------------------------------------------------------------------------
+        # Build ONE table containing ALL phases
+        # ------------------------------------------------------------------------
+
+        if len(cj_rows) > 1:
+
+            cjt = Table(
+                cj_rows,
+                colWidths=[
+                    W * 0.50,
+                    W * 0.25,
+                    W * 0.25,
+                ],
+            )
+
+            cjt.setStyle(
+                TableStyle(
+                    [
+                        (
+                            "BACKGROUND",
+                            (0, 0),
+                            (-1, 0),
+                            PURPLE_DARK,
+                        ),
+                        (
+                            "VALIGN",
+                            (0, 0),
+                            (-1, -1),
+                            "MIDDLE",
+                        ),
+                        (
+                            "ALIGN",
+                            (1, 0),
+                            (-1, -1),
+                            "CENTER",
+                        ),
+                        (
+                            "ROWBACKGROUNDS",
+                            (0, 1),
+                            (-1, -1),
+                            [
+                                WHITE,
+                                SLATE_LITE,
+                            ],
+                        ),
+                        (
+                            "BOX",
+                            (0, 0),
+                            (-1, -1),
+                            0.5,
+                            colors.HexColor("#CBD5E1"),
+                        ),
+                        (
+                            "INNERGRID",
+                            (0, 0),
+                            (-1, -1),
+                            0.3,
+                            colors.HexColor("#E2E8F0"),
+                        ),
+                        (
+                            "TOPPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            2,
+                        ),
+                        (
+                            "BOTTOMPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            2,
+                        ),
+                        (
+                            "LEFTPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            4,
+                        ),
+                        (
+                            "RIGHTPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            4,
+                        ),
+                    ]
+                )
+            )
+
+            story.append(cjt)
+
+    # ==========================================================================
     # INDIVIDUAL PROPERTY BREAKDOWN
+    # ==========================================================================
+
     hilton_items = [r for r in results if r.get("is_user_establishment")]
+
     competitor_items = [r for r in results if not r.get("is_user_establishment")]
 
     competitor_items_sorted = sorted(
         competitor_items,
-        key=lambda r: r.get("sentiment", {}).get("overall_score") if r.get("sentiment", {}).get("overall_score") is not None else -999.0,
-        reverse=True
+        key=lambda r: (
+            r.get(
+                "sentiment",
+                {},
+            ).get("overall_score")
+            if r.get(
+                "sentiment",
+                {},
+            ).get("overall_score")
+            is not None
+            else -999.0
+        ),
+        reverse=True,
     )
 
     story.append(PageBreak())
-    story.append(Paragraph("Individual Hotel Sentiment Breakdown", style_section))
-    story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
-    story.append(Spacer(1, 0.2*cm))
+
+    story.append(
+        Paragraph(
+            "Individual Hotel Sentiment Breakdown",
+            style_section,
+        )
+    )
+
+    story.append(
+        HRFlowable(
+            width=W,
+            thickness=1,
+            color=PURPLE_LITE,
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            0.2 * cm,
+        )
+    )
 
     for i, r in enumerate(hilton_items + competitor_items_sorted):
+
         hotel_block = []
-        s = r.get("sentiment", {})
+
+        s = r.get(
+            "sentiment",
+            {},
+        )
+
         sc = s.get("overall_score")
-        pos = s.get("positive_count", 0)
-        neu = s.get("neutral_count", 0)
-        neg = s.get("negative_count", 0)
+
+        pos = s.get(
+            "positive_count",
+            0,
+        )
+
+        neu = s.get(
+            "neutral_count",
+            0,
+        )
+
+        neg = s.get(
+            "negative_count",
+            0,
+        )
+
         total = pos + neu + neg or 1
 
-        header = Table([[
-            Paragraph(f"{'★ ' if r.get('is_user_establishment') else ''}{r.get('name','')}", ParagraphStyle("HN",fontSize=9.5,leading=12,textColor=WHITE if not r.get('is_user_establishment') else colors.HexColor("#FDE047"),fontName="Helvetica-Bold")),
-            Paragraph(f"{s.get('overall_label','No Data')} · {f'{sc:+.3f}' if sc is not None else '—'}" + (f" · ★ {r['rating']}" if r.get('rating') else ""), ParagraphStyle("HS",fontSize=8,leading=10,textColor=PURPLE_LITE,fontName="Helvetica",alignment=TA_RIGHT)),
-        ]], colWidths=[W*0.6, W*0.4])
-        header.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,-1),PURPLE_DARK),
-            ("TOPPADDING",(0,0),(-1,-1),4),
-            ("BOTTOMPADDING",(0,0),(-1,-1),4),
-            ("LEFTPADDING",(0,0),(-1,-1),8),
-            ("RIGHTPADDING",(0,0),(-1,-1),8),
-            ("VALIGN",(0,0),(-1,-1),"MIDDLE")
-        ]))
+        hotel_name = escape(
+            str(
+                r.get(
+                    "name",
+                    "",
+                )
+            )
+        )
+
+        header = Table(
+            [
+                [
+                    Paragraph(
+                        f"{'★ ' if r.get('is_user_establishment') else ''}"
+                        f"{hotel_name}",
+                        ParagraphStyle(
+                            "HN",
+                            fontSize=9.5,
+                            leading=12,
+                            textColor=(
+                                WHITE
+                                if not r.get("is_user_establishment")
+                                else colors.HexColor("#FDE047")
+                            ),
+                            fontName="Helvetica-Bold",
+                        ),
+                    ),
+                    Paragraph(
+                        f"{escape(str(s.get('overall_label', 'No Data')))}"
+                        f" · "
+                        f"{f'{sc:+.3f}' if sc is not None else '—'}"
+                        f"{(' · ★ ' + str(r['rating'])) if r.get('rating') else ''}",
+                        ParagraphStyle(
+                            "HS",
+                            fontSize=8,
+                            leading=10,
+                            textColor=PURPLE_LITE,
+                            fontName="Helvetica",
+                            alignment=TA_RIGHT,
+                        ),
+                    ),
+                ]
+            ],
+            colWidths=[
+                W * 0.6,
+                W * 0.4,
+            ],
+        )
+
+        header.setStyle(
+            TableStyle(
+                [
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, -1),
+                        PURPLE_DARK,
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        4,
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        4,
+                    ),
+                    (
+                        "LEFTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        8,
+                    ),
+                    (
+                        "RIGHTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        8,
+                    ),
+                    (
+                        "VALIGN",
+                        (0, 0),
+                        (-1, -1),
+                        "MIDDLE",
+                    ),
+                ]
+            )
+        )
+
         hotel_block.append(header)
 
-        if r.get("scraped_review_count", 0) == 0:
-            hotel_block.append(Table([[Paragraph("No reviews found for this period.",style_small)]],colWidths=[W],style=TableStyle([("BACKGROUND",(0,0),(-1,-1),SLATE_LITE),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),("LEFTPADDING",(0,0),(-1,-1),8)])))
-        else:
-            body_rows = [
-                [Paragraph(f"Reviews found: {r.get('scraped_review_count',0)}  ·  Positive: {pos} ({pos/total*100:.0f}%)  ·  Neutral: {neu} ({neu/total*100:.0f}%)  ·  Negative: {neg} ({neg/total*100:.0f}%)", style_small)],
-            ]
-            if s.get("top_positive_phrases"):
-                p0 = s["top_positive_phrases"][0]
-                body_rows.append([Paragraph(f'<font color="#059669">✓ {p0.get("author","")} ({p0.get("date","")}):</font> "{p0.get("text","")}"', style_italic)])
-            if s.get("top_negative_phrases"):
-                n0 = s["top_negative_phrases"][0]
-                body_rows.append([Paragraph(f'<font color="#DC2626">✗ {n0.get("author","")} ({n0.get("date","")}):</font> "{n0.get("text","")}"', style_italic)])
+        if (
+            r.get(
+                "scraped_review_count",
+                0,
+            )
+            == 0
+        ):
 
-            body = Table(body_rows, colWidths=[W])
-            body.setStyle(TableStyle([
-                ("BACKGROUND",(0,0),(-1,-1),WHITE),
-                ("TOPPADDING",(0,0),(-1,-1),4),
-                ("BOTTOMPADDING",(0,0),(-1,-1),4),
-                ("LEFTPADDING",(0,0),(-1,-1),8),
-                ("RIGHTPADDING",(0,0),(-1,-1),8),
-                ("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#E2E8F0"))
-            ]))
+            hotel_block.append(
+                Table(
+                    [
+                        [
+                            Paragraph(
+                                "No reviews found for this period.",
+                                style_small,
+                            )
+                        ]
+                    ],
+                    colWidths=[W],
+                    style=TableStyle(
+                        [
+                            (
+                                "BACKGROUND",
+                                (0, 0),
+                                (-1, -1),
+                                SLATE_LITE,
+                            ),
+                            (
+                                "TOPPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                4,
+                            ),
+                            (
+                                "BOTTOMPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                4,
+                            ),
+                            (
+                                "LEFTPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                8,
+                            ),
+                        ]
+                    ),
+                )
+            )
+
+        else:
+
+            body_rows = [
+                [
+                    Paragraph(
+                        f"Reviews found: "
+                        f"{r.get('scraped_review_count', 0)}"
+                        f"  ·  Positive: "
+                        f"{pos} "
+                        f"({pos / total * 100:.0f}%)"
+                        f"  ·  Neutral: "
+                        f"{neu} "
+                        f"({neu / total * 100:.0f}%)"
+                        f"  ·  Negative: "
+                        f"{neg} "
+                        f"({neg / total * 100:.0f}%)",
+                        style_small,
+                    )
+                ],
+            ]
+
+            if s.get("top_positive_phrases"):
+
+                p0 = s["top_positive_phrases"][0]
+
+                body_rows.append(
+                    [
+                        Paragraph(
+                            f'<font color="#059669">'
+                            f'✓ {escape(str(p0.get("author", "")))} '
+                            f'({escape(str(p0.get("date", "")))}):'
+                            f"</font> "
+                            f'"{escape(str(p0.get("text", "")))}"',
+                            style_italic,
+                        )
+                    ]
+                )
+
+            if s.get("top_negative_phrases"):
+
+                n0 = s["top_negative_phrases"][0]
+
+                body_rows.append(
+                    [
+                        Paragraph(
+                            f'<font color="#DC2626">'
+                            f'✗ {escape(str(n0.get("author", "")))} '
+                            f'({escape(str(n0.get("date", "")))}):'
+                            f"</font> "
+                            f'"{escape(str(n0.get("text", "")))}"',
+                            style_italic,
+                        )
+                    ]
+                )
+
+            body = Table(
+                body_rows,
+                colWidths=[W],
+            )
+
+            body.setStyle(
+                TableStyle(
+                    [
+                        (
+                            "BACKGROUND",
+                            (0, 0),
+                            (-1, -1),
+                            WHITE,
+                        ),
+                        (
+                            "TOPPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            4,
+                        ),
+                        (
+                            "BOTTOMPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            4,
+                        ),
+                        (
+                            "LEFTPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            8,
+                        ),
+                        (
+                            "RIGHTPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            8,
+                        ),
+                        (
+                            "BOX",
+                            (0, 0),
+                            (-1, -1),
+                            0.5,
+                            colors.HexColor("#E2E8F0"),
+                        ),
+                    ]
+                )
+            )
+
             hotel_block.append(body)
 
-        hotel_block.append(Spacer(1, 0.2*cm))
-        # Keep entire hotel card intact to avoid single line page bleeds
+        hotel_block.append(
+            Spacer(
+                1,
+                0.2 * cm,
+            )
+        )
+
         story.append(KeepTogether(hotel_block))
 
-    doc.build(story, onFirstPage=draw_cover_footer, onLaterPages=draw_later_page_footer)
+    # ==========================================================================
+    # BUILD PDF
+    # ==========================================================================
+
+    doc.build(
+        story,
+        onFirstPage=draw_cover_footer,
+        onLaterPages=draw_later_page_footer,
+    )
+
     return buf.getvalue()
