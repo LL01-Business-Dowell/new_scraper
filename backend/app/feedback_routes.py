@@ -1,14 +1,14 @@
 import os
+import json
 import uuid
 import datetime
 import logging
 import tempfile
 import subprocess
 import requests as http_requests
-from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 import torch
-import json
-from .gemini_sentiment_analysis import analyze_sentiment
+from .gemini_sentiment_analysis import analyze_sentiment, calculate_fused_metrics
+# from helper.fusion import calculate_fused_metrics
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -24,6 +24,7 @@ QR_DATABASE_ID = "6a69cbefff5146ff3f2b568a"  # Collection mapping database
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
+TEXT_ANALYSIS_API_URL = "http://text-analysis:8004/api/analyze-sentiment/"
 
 # Hugging Face Configuration
 MODEL_ID = "joeddav/distilbert-base-uncased-go-emotions-student"
@@ -120,81 +121,6 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
             except Exception:
                 pass
 
-
-def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_score):
-    logger.info(f"[FUSED METRICS] Input raw values -> sentiment: {text_sentiment}, text_score: {text_score}, audio_emotion: {audio_emotion}, audio_score: {audio_score}")
-
-    try:
-        text_sentiment = str(text_sentiment or "NEUTRAL").upper()
-        audio_emotion = str(audio_emotion or "calm").lower()
-
-        try:
-            text_score = float(text_score) if text_score is not None else 0.0
-        except (ValueError, TypeError):
-            text_score = 0.0
-
-        try:
-            audio_score = float(audio_score) if audio_score is not None else 0.0
-        except (ValueError, TypeError):
-            audio_score = 0.0
-            
-        high_urgency_audio = [
-                "angry", "anger", "furious", "rage", "frustrated", "frustration", "annoyed", "irritated",
-                "fearful", "fear", "panic", "panicked", "distressed", "terrified", "alarmed",
-                "sarcastic", "sarcasm", "mocking", "cynical", "snarky", "scornful", "taunting", "derisive"
-            ]
-        
-        medium_urgency_audio = [
-                "sad", "sadness", "disappointed", "disappointment", "grief", "despair",
-                "disgust", "disgusted", "contempt",
-                "anxious", "anxiety", "nervous", "hesitant", "surprised", "shocked",
-                "ironic", "irony", "smug", "passive_aggressive", "dismissive", "condescending"
-            ]
-        
-        dashboard_color = "green"
-        severity_level = "low"
-        action_required = "No immediate action. Review at shift change."
-       
-        if text_sentiment == "NEGATIVE":
-            if audio_emotion in high_urgency_audio:
-                dashboard_color = "red"
-                severity_level = "high"
-                action_required = "CRITICAL: Immediate manager dispatch to guest room/table."
-            elif audio_emotion in medium_urgency_audio:
-                dashboard_color = "orange"
-                severity_level = "medium"
-                action_required = "URGENT: Front desk to call guest with an alternative/resolution within 15 mins."
-            else:
-                dashboard_color = "red"
-                severity_level = "high"
-                action_required = "HIGH RISK: Guest is expressing severe dissatisfaction with a controlled tone."
-
-        elif text_sentiment in ["POSITIVE", "NEUTRAL"] and audio_emotion in high_urgency_audio:
-            dashboard_color = "orange"
-            severity_level = "medium"
-            action_required = "POTENTIAL FRICTION: Staff to follow up and verify guest comfort."
-
-        return {
-            "assigned_color": dashboard_color,
-            "severity": severity_level,
-            "recommended_action": action_required,
-            "confidence_scores": {
-                "semantic_confidence": round(text_score, 2),
-                "acoustic_confidence": round(audio_score, 2)
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"[FUSED METRICS] Calculation error: {e}", exc_info=True)
-        return {
-            "assigned_color": "green",
-            "severity": "low",
-            "recommended_action": "Error calculating metrics. Defaulting to baseline.",
-            "confidence_scores": {
-                "semantic_confidence": 0.0,
-                "acoustic_confidence": 0.0
-            }
-        }
 
 
 def _save_to_datacube(
