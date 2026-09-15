@@ -12,15 +12,18 @@ import datetime
 class TextTranslationView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = TextSerializer(data=request.data)
+        
         if not serializer.is_valid():
             return Response(
-                {"status": "error", "message": "Invalid input data."},
+                {"success": False, "message": "Invalid input data."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         text = serializer.validated_data.get("text")
-        if not text:
+        target = serializer.validated_data.get("target_language", "en")
+
+        if not text or not target:
             return Response(
-                {"status": "error", "message": "No text provided."},
+                {"success": False, "message": "No text or target language provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -31,7 +34,7 @@ class TextTranslationView(APIView):
             Analyze the input text and provide:
             1. The detected language of the original text.
             2. The ISO 639-1 language code (or ISO 639-3 if unavailable).
-            3. An accurate, natural English translation of the text.
+            3. An accurate, natural {target} translation of the text.
 
             Input text: "{text}"
             """
@@ -50,13 +53,17 @@ class TextTranslationView(APIView):
             translation_data = json.loads(response.text)
 
             return Response(
-                {"status": "success", "data": translation_data},
+                {
+                    "success": True, 
+                    "message": "Translation successful", 
+                    "data": translation_data
+                },
                 status=status.HTTP_200_OK,
             )
 
         except Exception as e:
             return Response(
-                {"status": "error", "message": str(e)},
+                {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -65,7 +72,7 @@ class SentimentAnalysisView(APIView):
         serializer = TextSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(
-                {"status": "error", "message": "Invalid input data."},
+                {"success": False, "message": "Invalid input data."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         text = serializer.validated_data.get("text")
@@ -84,9 +91,9 @@ class SentimentAnalysisView(APIView):
                 ),
             )
             result = json.loads(response.text)
-            return Response({"status": "success", "data": result}, status=status.HTTP_200_OK)
+            return Response({"success": True, "message": "Sentiment analysis successful", "data": result}, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"success": False, "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 datacube = DataCubeService(api_key=os.environ.get("FEEDBACK_CRUD_API_KEY"))
 feedback_metadata_db = os.environ.get("FEEDBACK_METADATA_DB")
@@ -98,7 +105,7 @@ class FeedbackMetaDataView(APIView):
         if not serializer.is_valid():
             return Response(
                 {
-                    "status": "error", "message": "Invalid input data."
+                    "success": False, "message": "Invalid input data."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -187,6 +194,7 @@ class FeedbackMetaDataView(APIView):
 
     def put(self, request):
         qrId = request.data.get("qrId")
+        room = request.data.get("room")
         is_resolved = request.data.get("is_resolved")
         urgency_status = request.data.get("urgency_status")
         last_updated = request.data.get("last_updated")
@@ -200,7 +208,7 @@ class FeedbackMetaDataView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         try:
-            filters = { "qrId": qrId }
+            filters = { "qrId": qrId, "room": room }
             update_data = {
                 "is_resolved": is_resolved,
                 "urgency_status": urgency_status,

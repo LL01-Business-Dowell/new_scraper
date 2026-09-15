@@ -10,8 +10,8 @@ class TranslationSchema(BaseModel):
     language_code: str = Field(
         description="ISO 639-1 code (or ISO 639-3 if unavailable)"
     )
-    english_translation: str = Field(
-        description="Accurate and natural English translation of the text"
+    translation: str = Field(
+        description="Accurate and natural translation of the text"
     )
 
 class SentimentAnalysisSchema(BaseModel):

@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 class TextSerializer(serializers.Serializer):
     text = serializers.CharField(required=True)
+    target_language = serializers.CharField(required=False, allow_blank=True, default="English")
 
 class MetaDataSerializer(serializers.Serializer):
     qrId = serializers.CharField(required=True)
