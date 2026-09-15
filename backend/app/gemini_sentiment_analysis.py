@@ -101,7 +101,7 @@ def generate_ai_assessment(text_sentiment: str, text_score: float, audio_emotion
     elif text_sentiment == "NEGATIVE":
         if audio_emotion in ["calm", "neutral", "happy"]:
             return (
-                f"Controlled Dissatisfaction ({text_pct}% text confidence). "
+                f"Controlled Dissatisfaction ({text_pct}%). "
                 f"Guest expresses negative feedback in a controlled/calm tone ({audio_pct}%). "
                 f"High risk for delayed negative review."
             )
@@ -151,7 +151,7 @@ def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_sco
             else:
                 dashboard_color = "red"
                 severity_level = "high"
-                action_required = "HIGH RISK: Guest is expressing severe dissatisfaction with a controlled tone."
+                action_required = "HIGH RISK: Duty Manager to initiate discrete touchpoint within 30 mins for service recovery."
 
         elif text_sentiment in ["POSITIVE", "NEUTRAL"] and audio_emotion in HIGH_URGENCY_AUDIO:
             dashboard_color = "orange"
