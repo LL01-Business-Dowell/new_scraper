@@ -1,3 +1,109 @@
+# services:
+
+#   backend:
+#     build:
+#       context: ./backend
+#     container_name: backend_container
+#     ports:
+#       - "8000:8000"
+#     restart: unless-stopped
+#     env_file:
+#       - .env
+#     environment:
+#       PYTHONUNBUFFERED: 1
+#       INSCRIBER_URL: http://inscriber:8002/api/geo-query-cube/
+#       CRUD_BASE_URL: https://datacube.uxlivinglab.online/api/v2
+#       CRUD_COORDS_PATH: /crud
+#       CRUD_RESULTS_PATH: /crud
+#       SESSION_COLLECTION_NAME: csv_chat_sessions
+#     shm_size: "512mb"
+#     depends_on:
+#       - audio-analysis
+#       - inscriber
+#     networks:
+#       - queue-net
+
+#   inscriber:
+#     build:
+#       context: ./inscribing_proj
+#     container_name: inscriber_container
+#     ports:
+#       - "8002:8002"
+#     restart: unless-stopped
+#     env_file:
+#       - .env
+#     environment:
+#       PYTHONUNBUFFERED: 1
+#     networks:
+#       - queue-net
+    
+#   audio-analysis:
+#     build:
+#       context: ./audio_analysis
+#     container_name: audio_analysis_container
+#     ports:
+#       - "8003:8003"
+#     restart: unless-stopped
+#     env_file:
+#       - .env
+#     environment:
+#       PYTHONUNBUFFERED: 1
+#     networks:
+#       - queue-net
+
+#   text-analysis:
+#     build:
+#       context: ./text_analysis
+#     container_name: text_analysis_container
+#     ports:
+#       - "8004:8004"
+#     restart: unless-stopped
+#     env_file:
+#       - .env
+#     environment:
+#       PYTHONUNBUFFERED: 1
+#     networks:
+#       - queue-net
+
+#   frontend:
+#     build:
+#       context: ./frontend
+#       dockerfile: Dockerfile
+#       args:
+#         VITE_API_URL: ${VITE_API_URL:-https://reviewanalysis.uxlivinglab.org/api}
+#         VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
+#     container_name: frontend_container
+#     restart: unless-stopped
+#     env_file:
+#       - .env
+#     depends_on:
+#       - backend
+#     networks:
+#       - queue-net
+
+#   nginx:
+#     build:
+#       context: ./nginx
+#       dockerfile: Dockerfile
+#     container_name: nginx_scraper
+#     ports:
+#       - "80:80"
+#       - "443:443"
+#     restart: unless-stopped
+#     depends_on:
+#       - backend
+#       - frontend
+#     volumes:
+#       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+#       - /etc/letsencrypt:/etc/letsencrypt:ro
+#       - /var/www/certbot:/var/www/certbot
+#     networks:
+#       - queue-net
+
+# networks:
+#   queue-net:
+#     driver: bridge
+
 services:
 
   backend:
@@ -16,6 +122,7 @@ services:
       CRUD_COORDS_PATH: /crud
       CRUD_RESULTS_PATH: /crud
       SESSION_COLLECTION_NAME: csv_chat_sessions
+      DATACUBE_API_KEY: ${DATACUBE_API_KEY}  # Explicitly passed from .env
     shm_size: "512mb"
     depends_on:
       - audio-analysis
@@ -70,7 +177,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-https://reviewanalysis.uxlivinglab.org/api}
+        # Fixed URL to eliminate trailing /api prefix mismatch
+        VITE_API_URL: ${VITE_API_URL:-https://reviewanalysis.uxlivinglab.org}
         VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
     container_name: frontend_container
     restart: unless-stopped

@@ -257,7 +257,35 @@ def _extract_hotel_title(
 
 
 # =============================================================================
-# NEW: EXTRACT COORDINATES
+# EXTRACT OVERALL RATING
+# =============================================================================
+
+def _extract_overall_rating(items: List[Dict]) -> Optional[float]:
+    """Extract overall place rating/total score from Apify dataset metadata."""
+
+    for item in items:
+
+        overall = (
+            item.get("totalScore")
+            or item.get("placeStars")
+            or item.get("aggregateRating")
+            or item.get("rating")
+        )
+
+        if overall is not None:
+            try:
+                score = float(overall)
+                # Ensure it's a realistic 0-5 scale rating
+                if 0 <= score <= 5:
+                    return score
+            except (TypeError, ValueError):
+                pass
+
+    return None
+
+
+# =============================================================================
+# EXTRACT COORDINATES
 # =============================================================================
 
 def _extract_coordinates(
@@ -265,25 +293,12 @@ def _extract_coordinates(
 ) -> tuple[Optional[float], Optional[float]]:
     """
     Extract latitude and longitude from Apify dataset items.
-
-    Different versions of the Google Maps scraper can expose
-    coordinates under slightly different field names, so several
-    common structures are checked.
     """
 
     for item in items:
 
         latitude = None
         longitude = None
-
-        # ---------------------------------------------------------------------
-        # Format 1:
-        #
-        # "location": {
-        #     "lat": 19.0896,
-        #     "lng": 72.8656
-        # }
-        # ---------------------------------------------------------------------
 
         location = item.get("location")
 
@@ -299,13 +314,6 @@ def _extract_coordinates(
                 or location.get("longitude")
             )
 
-        # ---------------------------------------------------------------------
-        # Format 2:
-        #
-        # "latitude": 19.0896
-        # "longitude": 72.8656
-        # ---------------------------------------------------------------------
-
         if latitude is None:
             latitude = (
                 item.get("latitude")
@@ -317,15 +325,6 @@ def _extract_coordinates(
                 item.get("longitude")
                 or item.get("lng")
             )
-
-        # ---------------------------------------------------------------------
-        # Format 3:
-        #
-        # "coordinates": {
-        #     "latitude": ...,
-        #     "longitude": ...
-        # }
-        # ---------------------------------------------------------------------
 
         coordinates = item.get("coordinates")
 
@@ -343,10 +342,6 @@ def _extract_coordinates(
                     or coordinates.get("lng")
                 )
 
-        # ---------------------------------------------------------------------
-        # Convert to float if possible
-        # ---------------------------------------------------------------------
-
         try:
             if latitude is not None:
                 latitude = float(latitude)
@@ -357,10 +352,6 @@ def _extract_coordinates(
         except (TypeError, ValueError):
             latitude = None
             longitude = None
-
-        # ---------------------------------------------------------------------
-        # Validate coordinates
-        # ---------------------------------------------------------------------
 
         if (
             latitude is not None
@@ -392,15 +383,13 @@ def _append_to_master_file(
     hotel_name: str,
     url: str,
     reviews: List[Dict],
+    overall_rating: Optional[float] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     filepath: str = MASTER_FILE
 ):
     """
     Appends/updates hotel review data in the master JSON file.
-
-    Latitude and longitude are saved at the hotel level so they can
-    later be used by the competitor map in the PDF reports.
     """
 
     master_data = {}
@@ -437,12 +426,12 @@ def _append_to_master_file(
             .isoformat()
         ),
 
+        "overall_rating": overall_rating,
+
         "total_reviews": len(reviews),
 
-        # NEW
         "lat": latitude,
 
-        # NEW
         "lng": longitude,
 
         "reviews": reviews,
@@ -470,7 +459,7 @@ def _append_to_master_file(
         logger.info(
             f"[LOCAL DUMP] Successfully saved "
             f"'{hotel_name}' "
-            f"({len(reviews)} reviews) "
+            f"(rating={overall_rating}, {len(reviews)} reviews) "
             f"coordinates=({latitude}, {longitude}) "
             f"to {filepath}"
         )
@@ -495,7 +484,7 @@ def scrape_hotel_reviews_apify(
 ) -> Dict:
     """
     Scrapes Google Maps reviews and appends them to a single
-    master JSON file, including latitude and longitude.
+    master JSON file, including overall rating, latitude, and longitude.
     """
 
     result = {
@@ -620,7 +609,6 @@ def scrape_hotel_reviews_apify(
 
     else:
 
-        # Fallback to unique CID or URL
         cid = (
             url.split("cid=")[-1].split("&")[0]
             if "cid=" in url
@@ -632,19 +620,25 @@ def scrape_hotel_reviews_apify(
         )
 
     # -------------------------------------------------------------------------
-    # NEW: EXTRACT COORDINATES
+    # EXTRACT METADATA (COORDINATES & OVERALL RATING)
     # -------------------------------------------------------------------------
 
     latitude, longitude = _extract_coordinates(
         items
     )
 
+    overall_rating = _extract_overall_rating(
+        items
+    )
+
     # -------------------------------------------------------------------------
-    # Add coordinates to result as well
+    # ADD TO RESULT
     # -------------------------------------------------------------------------
 
     result["business_details"] = {
         "name": final_hotel_name,
+        "overall_rating": overall_rating,
+        "rating": overall_rating,
         "latitude": latitude,
         "longitude": longitude,
         "lat": latitude,
@@ -660,6 +654,7 @@ def scrape_hotel_reviews_apify(
         hotel_name=final_hotel_name,
         url=url,
         reviews=reviews,
+        overall_rating=overall_rating,
         latitude=latitude,
         longitude=longitude,
     )
@@ -677,6 +672,7 @@ def scrape_hotel_reviews_apify(
         f"[APIFY] Done — "
         f"{len(reviews)} reviews for "
         f"{final_hotel_name} "
+        f"overall_rating={overall_rating} "
         f"coordinates=({latitude}, {longitude})"
     )
 

@@ -1666,80 +1666,33 @@ def _generate_sentiment_pdf(
     story = []
 
     # ==========================================================================
-    # COVER PAGE
+    # PAGE 1: COVER, MAP & EXECUTIVE SUMMARY
     # ==========================================================================
-
-    story.append(
-        Spacer(
-            1,
-            0.5 * cm,
-        )
-    )
+    story.append(Spacer(1, 0.2 * cm))
 
     if has_logo:
         try:
             story.append(
                 Image(
                     logo_path,
-                    width=6 * cm,
-                    height=3.5 * cm,
+                    width=5 * cm,
+                    height=2.5 * cm,
                     kind="proportional",
                 )
             )
-
-            story.append(
-                Spacer(
-                    1,
-                    0.5 * cm,
-                )
-            )
+            story.append(Spacer(1, 0.2 * cm))
         except Exception:
             pass
 
-    story.append(
-        Paragraph(
-            "Sentiment Analysis Report",
-            style_cover_h1,
-        )
-    )
-
-    story.append(
-        Paragraph(
-            "DoWell Research",
-            style_cover_sub,
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            0.3 * cm,
-        )
-    )
+    story.append(Paragraph("Sentiment Analysis Report", style_cover_h1))
+    story.append(Paragraph("DoWell Research", style_cover_sub))
+    story.append(Spacer(1, 0.2 * cm))
 
     if establishment_name:
-        story.append(
-            Paragraph(
-                escape(str(establishment_name)),
-                style_cover_est,
-            )
-        )
+        story.append(Paragraph(escape(str(establishment_name)), style_cover_est))
+        story.append(Spacer(1, 0.2 * cm))
 
-        story.append(
-            Spacer(
-                1,
-                0.3 * cm,
-            )
-        )
-
-    story.append(
-        HRFlowable(
-            width=W * 0.8,
-            thickness=1.5,
-            color=PURPLE,
-            spaceAfter=15,
-        )
-    )
+    story.append(HRFlowable(width=W * 0.8, thickness=1.5, color=PURPLE, spaceAfter=8))
 
     report_date = (
         client_time if client_time else datetime.date.today().strftime("%B %d, %Y")
@@ -1747,308 +1700,158 @@ def _generate_sentiment_pdf(
 
     meta_table_data = [
         [
+            Paragraph("<b>Report Date:</b>", style_small),
+            Paragraph(escape(str(report_date)), style_small),
+        ],
+        [
+            Paragraph("<b>Sample Footprint:</b>", style_small),
             Paragraph(
-                "<b>Report Date:</b>",
-                style_small,
-            ),
-            Paragraph(
-                escape(str(report_date)),
+                f"{len(results)} properties | {combined.get('total_reviews_analyzed', 0):,} reviews | {days_back} days",
                 style_small,
             ),
         ],
         [
-            Paragraph(
-                "<b>Sample Footprint:</b>",
-                style_small,
-            ),
-            Paragraph(
-                f"{len(results)} properties | "
-                f"{combined.get('total_reviews_analyzed', 0):,} reviews | "
-                f"{days_back} days",
-                style_small,
-            ),
+            Paragraph("<b>Source Data:</b>", style_small),
+            Paragraph("Google Reviews", style_small),
         ],
         [
-            Paragraph(
-                "<b>Prepared By:</b>",
-                style_body_bold,
-            ),
-            Paragraph(
-                "DoWell Research",
-                style_body_bold,
-            ),
+            Paragraph("<b>Prepared By:</b>", style_body_bold),
+            Paragraph("DoWell Research", style_body_bold),
         ],
     ]
 
-    meta_table = Table(
-        meta_table_data,
-        colWidths=[
-            W * 0.35,
-            W * 0.45,
-        ],
-    )
-
+    meta_table = Table(meta_table_data, colWidths=[W * 0.35, W * 0.45])
     meta_table.setStyle(
-        TableStyle(
-            [
-                (
-                    "ALIGN",
-                    (0, 0),
-                    (-1, -1),
-                    "LEFT",
-                ),
-                (
-                    "VALIGN",
-                    (0, 0),
-                    (-1, -1),
-                    "MIDDLE",
-                ),
-                (
-                    "BACKGROUND",
-                    (0, 0),
-                    (-1, -1),
-                    SLATE_LITE,
-                ),
-                (
-                    "BOX",
-                    (0, 0),
-                    (-1, -1),
-                    0.5,
-                    colors.HexColor("#CBD5E1"),
-                ),
-                (
-                    "INNERGRID",
-                    (0, 0),
-                    (-1, -1),
-                    0.5,
-                    colors.HexColor("#E2E8F0"),
-                ),
-                (
-                    "TOPPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    5,
-                ),
-                (
-                    "BOTTOMPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    5,
-                ),
-                (
-                    "LEFTPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    10,
-                ),
-            ]
-        )
+        TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BACKGROUND", (0, 0), (-1, -1), SLATE_LITE),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ])
     )
-
     story.append(meta_table)
+    story.append(Spacer(1, 0.3 * cm))
 
-    story.append(
-        Spacer(
-            1,
-            0.5 * cm,
-        )
-    )
-
-    # ==========================================================================
-    # GEOGRAPHIC DISTRIBUTION
-    # ==========================================================================
-
-    story.append(
-        Paragraph(
-            "Geographic Distribution & Competitors",
-            style_section,
-        )
-    )
-
-    story.append(
-        HRFlowable(
-            width=W,
-            thickness=1,
-            color=PURPLE_LITE,
-        )
-    )
-
-    story.append(
-        Spacer(
-            1,
-            0.2 * cm,
-        )
-    )
+    # --- GEOGRAPHIC DISTRIBUTION MAP (PAGE 1) ---
+    story.append(Paragraph("Geographical Distribution", style_section))
+    story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
+    story.append(Spacer(1, 0.15 * cm))
 
     map_buffer = kwargs.get("map_buffer") or combined.get("map_buffer")
-
-    if not map_buffer and results:
-        places_coords = [
-            {
-                "lat": r["lat"],
-                "lng": r["lng"],
-                "is_user": r.get(
-                    "is_user_establishment",
-                    False,
-                ),
-            }
-            for r in results
-            if r.get("lat") is not None and r.get("lng") is not None
-        ]
-
-        if os.getenv("GOOGLE_MAPS_API_KEY"):
-            map_buffer = _fetch_static_map_image(results)
-
-        if not map_buffer and places_coords:
-            map_buffer = _generate_offline_map_diagram(places_coords)
-
     if map_buffer:
         try:
-            map_img = Image(
-                map_buffer,
-                width=W,
-                height=6.0 * cm,
-                kind="proportional",
-            )
-
+            # Map height fixed to 3.8 cm so Page 1 never overflows
+            map_img = Image(map_buffer, width=W, height=3.8 * cm, kind="proportional")
             story.append(map_img)
-
         except Exception as err:
             logger.error(f"[PDF MAP] Failed to render image flowable: {err}")
 
-    gemini_summary = kwargs.get("gemini_summary")
-
+    # --- EXECUTIVE SUMMARY (PAGE 1) ---
+    gemini_summary = kwargs.get("gemini_summary") or task.get("gemini_summary")
     if gemini_summary:
         try:
             summary_text = str(gemini_summary).strip()
-
             if summary_text:
-                story.append(
-                    Spacer(
-                        1,
-                        0.35 * cm,
-                    )
-                )
+                story.append(Spacer(1, 0.25 * cm))
+                story.append(Paragraph("AI Executive Summary", style_section))
+                story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
+                story.append(Spacer(1, 0.1 * cm))
 
-                story.append(
-                    Paragraph(
-                        "AI Executive Summary",
-                        style_section,
-                    )
-                )
-
-                story.append(
-                    HRFlowable(
-                        width=W,
-                        thickness=1,
-                        color=PURPLE_LITE,
-                    )
-                )
-
-                story.append(
-                    Spacer(
-                        1,
-                        0.15 * cm,
-                    )
-                )
-
-                # Escape characters that have special meaning
-                # inside ReportLab's mini-XML syntax.
-                summary_text = escape(summary_text)
-
-                # Preserve Gemini line breaks.
-                summary_text = summary_text.replace(
-                    "\r\n",
-                    "\n",
-                )
-
-                summary_text = summary_text.replace(
-                    "\r",
-                    "\n",
-                )
-
-                summary_text = summary_text.replace(
-                    "\n",
-                    "<br/>",
-                )
+                summary_text = escape(summary_text).replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br/>")
 
                 summary_table = Table(
-                    [
-                        [
-                            Paragraph(
-                                summary_text,
-                                style_body,
-                            )
-                        ]
-                    ],
+                    [[Paragraph(summary_text, style_body)]],
                     colWidths=[W],
                 )
-
                 summary_table.setStyle(
-                    TableStyle(
-                        [
-                            (
-                                "BACKGROUND",
-                                (0, 0),
-                                (-1, -1),
-                                SLATE_LITE,
-                            ),
-                            (
-                                "BOX",
-                                (0, 0),
-                                (-1, -1),
-                                0.5,
-                                colors.HexColor("#E2E8F0"),
-                            ),
-                            (
-                                "LEFTPADDING",
-                                (0, 0),
-                                (-1, -1),
-                                10,
-                            ),
-                            (
-                                "RIGHTPADDING",
-                                (0, 0),
-                                (-1, -1),
-                                10,
-                            ),
-                            (
-                                "TOPPADDING",
-                                (0, 0),
-                                (-1, -1),
-                                8,
-                            ),
-                            (
-                                "BOTTOMPADDING",
-                                (0, 0),
-                                (-1, -1),
-                                8,
-                            ),
-                            (
-                                "VALIGN",
-                                (0, 0),
-                                (-1, -1),
-                                "TOP",
-                            ),
-                        ]
-                    )
+                    TableStyle([
+                        ("BACKGROUND", (0, 0), (-1, -1), SLATE_LITE),
+                        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                        ("TOPPADDING", (0, 0), (-1, -1), 6),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ])
                 )
-
                 story.append(summary_table)
-
         except Exception as err:
             logger.error(f"[PDF GEMINI] Failed to render Gemini summary: {err}")
 
     # ==========================================================================
-    # PAGE BREAK
+    # PAGE 2: 2x2 SWOT ANALYSIS MATRIX (Rendered only if SWOT data exists)
     # ==========================================================================
+    # gemini_swot = kwargs.get("gemini_swot") or task.get("gemini_swot", {})
+    # has_swot_data = any(gemini_swot.get(k) for k in ["strengths", "weaknesses", "opportunities", "threats"])
+    # Replace line 1789 or handle None safely:
+    gemini_swot = (kwargs.get("gemini_swot") or task.get("gemini_swot")) or {}
 
+    has_swot_data = isinstance(gemini_swot, dict) and any(
+        gemini_swot.get(k) for k in ["strengths", "weaknesses", "opportunities", "threats"]
+    )
+
+    # Break page ONLY if there is an Executive Summary or SWOT Analysis to render
+    if gemini_summary or has_swot_data:
+        story.append(PageBreak())
+
+    if has_swot_data:
+        story.append(Paragraph(f"Strategic SWOT Analysis: {escape(str(establishment_name or 'Subject Hotel'))}", style_section))
+        story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
+        story.append(Spacer(1, 0.3 * cm))
+
+        def build_swot_card(title, items, header_color, bg_color):
+            content = f'<font color="{header_color}"><b>{title}</b></font><br/><br/>'
+            if items:
+                content += "<br/>".join([f"• {escape(str(item))}" for item in items])
+            else:
+                content += "• No specific factors identified."
+                
+            card_tbl = Table([[Paragraph(content, style_body)]], colWidths=[W * 0.485])
+            card_tbl.setStyle(
+                TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, -1), bg_color),
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 8),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ])
+            )
+            return card_tbl
+
+        # Render individual quadrant cards
+        s_card = build_swot_card("STRENGTHS", gemini_swot.get("strengths", []), "#065F46", colors.HexColor("#ECFDF5"))
+        w_card = build_swot_card("WEAKNESSES", gemini_swot.get("weaknesses", []), "#991B1B", colors.HexColor("#FEF2F2"))
+        o_card = build_swot_card("OPPORTUNITIES", gemini_swot.get("opportunities", []), "#1E40AF", colors.HexColor("#EFF6FF"))
+        t_card = build_swot_card("THREATS", gemini_swot.get("threats", []), "#9A3412", colors.HexColor("#FFF7ED"))
+
+        # Assemble into a clean 2x2 grid
+        swot_matrix = Table(
+            [[s_card, w_card], [o_card, t_card]],
+            colWidths=[W * 0.495, W * 0.495]
+        )
+        swot_matrix.setStyle(
+            TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ])
+        )
+
+        story.append(swot_matrix)
+        # story.append(PageBreak())  # Break to next section after SWOT
+
+    # ==========================================================================
+    # PAGE 3: SECTOR ANALYSIS
+    # ==========================================================================
     story.append(PageBreak())
-
-    # ==========================================================================
-    # PAGE 2: SECTOR ANALYSIS
-    # ==========================================================================
-
     story.append(
         Paragraph(
             "Sector Analysis",
@@ -2425,7 +2228,7 @@ def _generate_sentiment_pdf(
     story.append(kpi_card_table)
 
     # ==========================================================================
-    # PAGE 3: SENTIMENT RANKING
+    # PAGE4: SENTIMENT RANKING
     # ==========================================================================
 
     ranking = combined.get(
@@ -2618,7 +2421,7 @@ def _generate_sentiment_pdf(
         story.append(rt)
 
     # ==========================================================================
-    # PAGE 4: TOUCHPOINT SENTIMENT COMPARISON
+    # PAGE 5: TOUCHPOINT SENTIMENT COMPARISON
     # ==========================================================================
 
     cj_data = combined.get(

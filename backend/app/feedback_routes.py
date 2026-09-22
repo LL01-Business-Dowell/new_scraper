@@ -129,6 +129,7 @@ def _save_to_datacube(
     description: str,
     file_id: str,
     client_name: str = "",
+    location: dict = None,
     emotion_metrics: dict = None,
     raw_emotion_distribution: dict = None,
     fused_metrics: dict = None,
@@ -148,6 +149,7 @@ def _save_to_datacube(
             "client_name": client_name,
             "room_number": room_number,
             "description": description,
+            "location": location or {},
             "transcript": transcript,
             "transcript_analysis": transcript_analysis or {},
             "audio_file": f"{file_id}.wav",
@@ -269,6 +271,8 @@ async def submit_feedback(
     description: str = Form(default=""),
     client_name: str = Form(default=""),
     file_id: str = Form(default=""),
+    latitude: str = Form(default=None),
+    longitude: str = Form(default=None),
 ):
     try:
         id_param = request.query_params.get("id", "")
@@ -285,6 +289,16 @@ async def submit_feedback(
 
         emotion_data = None
         raw_emotions = None
+
+        user_location = None
+        if latitude and longitude:
+            try:
+                user_location = {
+                    "latitude": float(latitude),
+                    "longitude": float(longitude)
+                }
+            except ValueError:
+                logger.warning("[FEEDBACK] Invalid latitude/longitude values received")
 
         try:
             feedback_resp = http_requests.post(
@@ -314,6 +328,7 @@ async def submit_feedback(
             room_number=room_number,
             description=description,
             client_name=client_name,
+            location=user_location,
             file_id=final_file_id,
             emotion_metrics=emotion_data,
             raw_emotion_distribution=raw_emotions,

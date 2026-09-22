@@ -7,13 +7,13 @@ services:
       - "8000:8000"
     environment:
       - WATCHFILES_FORCE_POLLING=true
+      - CRUD_API_KEY=${CRUD_API_KEY}
     env_file:
       - .env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - queue-net
 
-  # Audio Analytics (Django) service
   audio-analysis:
     build: ./audio_analysis
     volumes:
@@ -24,20 +24,20 @@ services:
       - queue-net
 
   text-analysis:
-      build: ./text_analysis
-      volumes:
-        - ./text_analysis:/usr/src/app
-      ports:
-        - "8004:8004"
-      networks:
-        - queue-net
-        
+    build: ./text_analysis
+    volumes:
+      - ./text_analysis:/usr/src/app
+    ports:
+      - "8004:8004"
+    networks:
+      - queue-net
+
   frontend:
     build:
       context: ./frontend
-      target: development # Dev stage using Vite
+      target: development
       args:
-        VITE_API_URL: http://localhost:8000
+        VITE_API_URL: http://127.0.0.1:8000
         VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY}
     volumes:
       - ./frontend:/app

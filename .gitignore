@@ -37,3 +37,10 @@ aud.env
 # Other general ignored files
 .DS_Store
 Thumbs.db
+
+# Project-specific ignored datasets, credentials, and generated reports
+backend/all_hotels_reviews.json
+backend/app/gemini-runner.json
+backend/app/generate_all_hotel_reports.py
+backend/app/hotel_reports/
+backend/app/test_hotel_reviews.json

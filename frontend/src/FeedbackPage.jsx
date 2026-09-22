@@ -343,6 +343,24 @@ export default function FeedbackPage() {
         } else if (idParam.includes("-")) {
             setClientName(idParam.split("-")[0]);
         }
+
+        //fetch current location of user
+        const [location, setLocation] = useState({ latitude: null, longitude: null });
+
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setLocation({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                    });
+                },
+                (error) => {
+                    console.warn("Location permission denied or unavailable:", error.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
     }, []);
 
     const [roomNumber, setRoomNumber] = useState("");
@@ -359,6 +377,7 @@ export default function FeedbackPage() {
     const [transcriptText, setTranscriptText] = useState("");
     const [transcribeChoiceMade, setTranscribeChoiceMade] = useState(false);
     const [tabClosed, setTabClosed] = useState(false);
+
 
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
@@ -418,6 +437,11 @@ export default function FeedbackPage() {
             form.append("room_number", roomNumber);
             form.append("description", description);
             form.append("client", clientName);
+
+            if (location.latitude !== null && location.longitude !== null) {
+                form.append("latitude", location.latitude);
+                form.append("longitude", location.longitude);
+            }
 
             const resp = await axios.post(`${BASE}/api/feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },

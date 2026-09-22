@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Install dependencies (separate layer for cache efficiency)
 COPY package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -28,7 +28,7 @@ FROM node:18-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 COPY . .
 
 # Pass build arguments so Vite bakes them into the static dist bundle
