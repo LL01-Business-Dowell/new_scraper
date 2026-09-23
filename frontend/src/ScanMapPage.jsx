@@ -142,7 +142,7 @@ export default function ScanMapPage() {
 
       try {
         const response = await fetch(
-          `${baseUrl}api//scans/last24hours`
+          `${baseUrl}/api/scans/last24hours`
         );
 
         const result = await response.json();
