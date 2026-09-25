@@ -106,7 +106,8 @@ app.include_router(review_analysis_router, prefix="/api/review-analysis")
 app.include_router(hotel_sentiment_router)
 app.include_router(feedback_router, prefix="/api/feedback")
 app.include_router(qr_router)
-app.include_router(scan_router)
+# app.include_router(scan_router)
+app.include_router(scan_router, prefix="/api")
 
 tasks = {}
 csv_tasks: dict[str, dict] = {}
