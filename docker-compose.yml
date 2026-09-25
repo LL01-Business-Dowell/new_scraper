@@ -122,6 +122,7 @@ services:
       CRUD_COORDS_PATH: /crud
       CRUD_RESULTS_PATH: /crud
       SESSION_COLLECTION_NAME: csv_chat_sessions
+      CRUD_API_KEY: ${CRUD_API_KEY}
       DATACUBE_API_KEY: ${DATACUBE_API_KEY}  # Explicitly passed from .env
     shm_size: "512mb"
     depends_on:
