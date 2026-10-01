@@ -131,9 +131,11 @@ export default function ScanMapPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchRecentScans() {
-      setLoading(true);
-      setError(null);
+    async function fetchRecentScans(isInitialLoad = false) {
+      // Only trigger full visual loading indicator on first render
+      if (isInitialLoad) {
+        setLoading(true);
+      }
 
       try {
         const response = await fetch(`${baseUrl}/api/scans/last24hours`);
@@ -143,6 +145,7 @@ export default function ScanMapPage() {
 
         if (response.ok && result.success) {
           setScans(Array.isArray(result.data) ? result.data : []);
+          setError(null);
         } else {
           setError(result.detail || "Failed to load scan coordinates.");
         }
@@ -151,14 +154,24 @@ export default function ScanMapPage() {
         console.error("Map fetch error:", err);
         setError("Network error fetching scan locations.");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && isInitialLoad) {
+          setLoading(false);
+        }
       }
     }
 
-    fetchRecentScans();
+    // Initial fetch on component mount
+    fetchRecentScans(true);
 
+    // Poll every 3 seconds
+    const intervalId = setInterval(() => {
+      fetchRecentScans(false);
+    }, 3000);
+
+    // Cleanup interval and cancel flag on unmount
     return () => {
       cancelled = true;
+      clearInterval(intervalId);
     };
   }, [baseUrl]);
 
@@ -211,7 +224,7 @@ export default function ScanMapPage() {
           }}
         >
           <div style={{ padding: "12px 16px", background: "#0f172a", borderBottom: "1px solid #334155", fontSize: "0.85rem", fontWeight: "bold", textTransform: "uppercase", color: "#94a3b8" }}>
-            Scanned IDs
+            Scanned Locations
           </div>
 
           <div style={{ flex: 1, overflowY: "auto" }}>
