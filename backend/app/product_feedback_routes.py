@@ -17,72 +17,31 @@ router = APIRouter()
 
 CRUD_BASE_URL = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2")
 CRUD_API_KEY = os.getenv("FEEDBACK_CRUD_API_KEY", "")
-CRUD_KEY = os.getenv("FEEDBACK_QR_API_KEY", "")
 MASTER_DATABASE_ID = "695ce92eff84eaf663c457c2"
-QR_DATABASE_ID = "6a69cbefff5146ff3f2b568a"  # Collection mapping database
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
-TEXT_ANALYSIS_API_URL = os.getenv("TEXT_ANALYSIS_API_URL")
-
-# Hugging Face Configuration
-MODEL_ID = "joeddav/distilbert-base-uncased-go-emotions-student"
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-# 28 GoEmotions Labels Mapping
-GO_EMOTIONS_LABELS = [
-    "admiration", "amusement", "anger", "annoyance", "approval", "caring",
-    "confusion", "curiosity", "desire", "disappointment", "disapproval",
-    "disgust", "embarrassment", "excitement", "fear", "gratitude", "grief",
-    "joy", "love", "nervousness", "optimism", "pride", "realization",
-    "relief", "remorse", "sadness", "surprise", "neutral"
-]
-
-POSITIVE_EMOTIONS = {"admiration", "amusement", "approval", "caring", "excitement", "gratitude", "joy", "love", "optimism", "pride", "relief"}
-NEGATIVE_EMOTIONS = {"anger", "annoyance", "disappointment", "disapproval", "disgust", "embarrassment", "fear", "grief", "nervousness", "remorse", "sadness"}
 
 
 def _resolve_collection_by_qr_id(qr_id: str, default_client: str = "") -> str:
     """
-    Dynamically resolves the target collection name.
-    If default_client is provided, sanitizes and returns it.
-    Otherwise, queries DataCube using the unique `id` to find its client/collection.
+    Extracts the first 4 characters/digits from the QR ID to serve as the collection name.
+    Example: '100935c2f1ffd5d5' -> '1009'
     """
+    if qr_id and len(qr_id.strip()) >= 4:
+        return qr_id.strip()[:4]
+
+    if qr_id and qr_id.strip():
+        return qr_id.strip()
+
     if default_client and default_client.strip():
         return default_client.lower().strip().replace(" ", "_")
-
-    if not qr_id:
-        return "0000"
-
-    url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
-    headers = {
-        "Authorization": f"Api-Key {CRUD_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    params = {
-        "database_id": QR_DATABASE_ID,
-        "collection_name": "default",
-        "filters": json.dumps({"id": qr_id}),
-        "page": 1,
-        "page_size": 1
-    }
-
-    try:
-        response = http_requests.get(url, headers=headers, params=params, timeout=5)
-        if response.status_code == 200:
-            res_data = response.json()
-            docs = res_data.get("data", [])
-            if docs and docs[0].get("collection_name"):
-                return docs[0]["collection_name"]
-    except Exception as e:
-        logger.warning(f"[FEEDBACK] Failed to lookup collection for QR ID {qr_id}: {e}")
 
     return "0000"
 
 
 def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
-    file_id = f"feedback-{uuid.uuid4().hex[:12]}"
+    file_id = f"product-feedback-{uuid.uuid4().hex[:12]}"
     tmp_dir = tempfile.gettempdir()
     in_path = os.path.join(tmp_dir, f"{file_id}.webm")
     out_path = os.path.join(tmp_dir, f"{file_id}.wav")
@@ -105,7 +64,7 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
         )
 
         if result.returncode != 0:
-            logger.error(f"[FEEDBACK] ffmpeg error: {result.stderr.decode()}")
+            logger.error(f"[PRODUCT_FEEDBACK] ffmpeg error: {result.stderr.decode()}")
             raise RuntimeError(f"ffmpeg conversion failed: {result.stderr.decode()[:200]}")
 
         with open(out_path, "rb") as f:
@@ -121,10 +80,10 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
                 pass
 
 
-
 def _save_to_datacube(
     id_param: str,
-    room_number: str,
+    batch_id: str,
+    product_name: str,
     description: str,
     file_id: str,
     client_name: str = "",
@@ -136,18 +95,18 @@ def _save_to_datacube(
     transcript_analysis: dict = None
 ) -> str:
     if not CRUD_API_KEY or not MASTER_DATABASE_ID:
-        logger.warning("[FEEDBACK] Datacube credentials missing, skipping save")
+        logger.warning("[PRODUCT_FEEDBACK] Datacube credentials missing, skipping save")
         return ""
 
-    # collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
-    collection_name = id_param[:4] if id_param and len(id_param) >= 4 else (id_param or "0000")
+    collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
 
     try:
         doc_data = {
-            "type": "hotel_feedback",
+            "type": "product_feedback",
             "qr_id": id_param,
             "client_name": client_name,
-            "room_number": room_number,
+            "product_name": product_name,
+            "batch_id": batch_id,
             "description": description,
             "location": location or {},
             "transcript": transcript,
@@ -180,10 +139,10 @@ def _save_to_datacube(
             inserted_ids = res_data.get("inserted_ids", [])
             return inserted_ids[0] if inserted_ids else ""
         else:
-            logger.warning(f"[FEEDBACK] Datacube save failed {resp.status_code}: {resp.text[:200]}")
+            logger.warning(f"[PRODUCT_FEEDBACK] Datacube save failed {resp.status_code}: {resp.text[:200]}")
             return ""
     except Exception as e:
-        logger.error(f"[FEEDBACK] Datacube save error: {e}")
+        logger.error(f"[PRODUCT_FEEDBACK] Datacube save error: {e}")
         return ""
 
 
@@ -196,11 +155,9 @@ def _update_datacube_transcription(
     fused_metrics: dict = None
 ) -> bool:
     if not CRUD_API_KEY or not MASTER_DATABASE_ID or not doc_id:
-        logger.warning("[FEEDBACK] Missing parameters for Datacube update")
         return False
 
-    # collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
-    collection_name = id_param[:4] if id_param and len(id_param) >= 4 else (id_param or "0000")
+    collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
 
     try:
         target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
@@ -232,15 +189,14 @@ def _update_datacube_transcription(
         return bool(resp.status_code in (200, 201) and resp.json().get("success"))
 
     except Exception as e:
-        logger.error(f"[FEEDBACK] Datacube update error: {e}")
+        logger.error(f"[PRODUCT_FEEDBACK] Datacube update error: {e}")
         return False
 
 
 def _get_datacube_doc(id_param: str, doc_id: str, client_name: str = "") -> dict:
     if not CRUD_API_KEY or not MASTER_DATABASE_ID or not doc_id:
         return {}
-    # collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
-    collection_name = id_param[:4] if id_param and len(id_param) >= 4 else (id_param or "0000")
+    collection_name = _resolve_collection_by_qr_id(qr_id=id_param, default_client=client_name)
     try:
         target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
         payload = {
@@ -261,15 +217,16 @@ def _get_datacube_doc(id_param: str, doc_id: str, client_name: str = "") -> dict
             docs = resp.json().get("documents", [])
             return docs[0] if docs else {}
     except Exception as e:
-        logger.error(f"[FEEDBACK] Error fetching Datacube doc: {e}")
+        logger.error(f"[PRODUCT_FEEDBACK] Error fetching Datacube doc: {e}")
     return {}
 
 
 @router.post("/submit")
-async def submit_feedback(
+async def submit_product_feedback(
     request: Request,
     audio: UploadFile = File(...),
-    room_number: str = Form(default=""),
+    batch_id: str = Form(default=""),
+    product_name: str = Form(default=""),
     description: str = Form(default=""),
     client_name: str = Form(default=""),
     file_id: str = Form(default=""),
@@ -300,7 +257,7 @@ async def submit_feedback(
                     "longitude": float(longitude)
                 }
             except ValueError:
-                logger.warning("[FEEDBACK] Invalid latitude/longitude values received")
+                logger.warning("[PRODUCT_FEEDBACK] Invalid location received")
 
         try:
             feedback_resp = http_requests.post(
@@ -314,7 +271,7 @@ async def submit_feedback(
                     emotion_data = res_json.get("dashboard_metrics")
                     raw_emotions = res_json.get("raw_emotion_distribution")
         except Exception as e:
-            logger.warning(f"[FEEDBACK] Audio analysis error: {e}")
+            logger.warning(f"[PRODUCT_FEEDBACK] Audio analysis error: {e}")
 
         fused_metrics = None
         if emotion_data:
@@ -327,7 +284,8 @@ async def submit_feedback(
 
         doc_id = _save_to_datacube(
             id_param=id_param,
-            room_number=room_number,
+            batch_id=batch_id,
+            product_name=product_name,
             description=description,
             client_name=client_name,
             location=user_location,
@@ -341,7 +299,7 @@ async def submit_feedback(
 
         return JSONResponse({
             "success": True,
-            "message": "Thank you for your feedback.",
+            "message": "Product feedback received successfully.",
             "file_id": final_file_id,
             "doc_id": doc_id
         })
@@ -349,7 +307,7 @@ async def submit_feedback(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[FEEDBACK] Submit endpoint error: {e}")
+        logger.error(f"[PRODUCT_FEEDBACK] Submit error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -383,8 +341,6 @@ async def transcribe_on_demand(
             )
             if not (upload_resp.status_code == 200 and upload_resp.json().get("success")):
                 raise HTTPException(status_code=502, detail="Failed to upload audio to S3")
-        except HTTPException:
-            raise
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"S3 upload failed: {e}")
 
@@ -398,9 +354,10 @@ async def transcribe_on_demand(
             if trans_resp.status_code == 200 and trans_resp.json().get("success"):
                 transcript = trans_resp.json().get("data", {}).get("transcript", "")
         except Exception as e:
-            logger.warning(f"[FEEDBACK] Transcription error: {e}")
+            logger.warning(f"[PRODUCT_FEEDBACK] Transcription error: {e}")
 
-        transcript_analysis = analyze_sentiment(os.getenv("GEMINI_KEY_3"), transcript)
+        gemini_api_key = os.getenv("GEMINI_KEY_2") or os.getenv("GEMINI_KEY_1")
+        transcript_analysis = analyze_sentiment(gemini_api_key, transcript)
 
         doc_data = _get_datacube_doc(id_param, doc_id, client_name=client_name) if doc_id else {}
         audio_analysis = doc_data.get("audio_analysis", {})
@@ -434,5 +391,5 @@ async def transcribe_on_demand(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[FEEDBACK] Transcribe-lazy endpoint error: {e}")
+        logger.error(f"[PRODUCT_FEEDBACK] Transcribe endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
