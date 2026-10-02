@@ -401,7 +401,7 @@ export default function ProductFeedbackPage() {
                 form.append("longitude", location.longitude);
             }
 
-            const resp = await axios.post(`${BASE}/api/product-feedback/submit${window.location.search}`, form, {
+            const resp = await axios.post(`${BASE}/product-feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
                 timeout: 120000,
             });
