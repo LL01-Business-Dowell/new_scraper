@@ -25,6 +25,8 @@ import SentimentApp from "./SentimentApp";
 import FeedbackPage from "./FeedbackPage";
 import SentimentTestPage from "./SentimentTestPage";
 import FeedbackQrManager from "./FeedbackQrManager";
+import ScanMapPage from './ScanMapPage';
+import ProductFeedbackPage from "./ProductFeedbackPage";
 import "./App.css";
 
 // Normalise base URL — strip trailing slash once
@@ -242,6 +244,14 @@ const App = () => {
 
   if (currentPath === "/feedback-qr" || currentPath === "/qr-manager") {
     return <FeedbackQrManager />;
+  }
+
+  if (currentPath === "/scan-map" || currentPath === "/scans-map") {
+    return <ScanMapPage clientName="default_client" />;
+  }
+
+  if (currentPath === "/product-feedback" || currentPath === "/products-feedback") {
+    return <ProductFeedbackPage />
   }
 
   if (showCsvProcessor) {
