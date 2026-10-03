@@ -81,17 +81,15 @@ const styles = {
         letterSpacing: "0.06em",
         marginBottom: 8,
     },
-    input: {
-        width: "100%",
-        padding: "12px 14px",
-        borderRadius: 8,
-        background: "#FAFCFA",
-        border: "1px solid #C2D6CA",
+    batchDisplay: {
+        fontSize: "1.1rem",
+        fontWeight: 700,
         color: "#1B3B2B",
-        fontSize: "0.95rem",
-        outline: "none",
-        boxSizing: "border-box",
-        transition: "border-color 0.2s",
+        background: "#EAF2EC",
+        padding: "10px 14px",
+        borderRadius: 8,
+        border: "1px solid #C2D6CA",
+        wordBreak: "break-all",
     },
     textarea: {
         width: "100%",
@@ -321,8 +319,10 @@ export default function ProductFeedbackPage() {
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
         const idParam = searchParams.get("id") || "";
+        const batchParam = searchParams.get("batch_id") || "";
 
         setQrId(idParam);
+        setBatchId(batchParam);
 
         if (idParam.includes("-")) {
             setClientName(idParam.split("-")[0]);
@@ -348,7 +348,7 @@ export default function ProductFeedbackPage() {
 
     const startRecording = async () => {
         if (!isBatchIdValid) {
-            setErrorMsg("Please enter the Batch ID before recording.");
+            setErrorMsg("Batch ID is missing in the URL parameter.");
             return;
         }
 
@@ -381,7 +381,7 @@ export default function ProductFeedbackPage() {
 
     const handleSubmit = async () => {
         if (!isBatchIdValid) {
-            setErrorMsg("Please enter the Batch ID.");
+            setErrorMsg("Batch ID is missing.");
             return;
         }
 
@@ -477,7 +477,7 @@ export default function ProductFeedbackPage() {
                             marginBottom: 20,
                         }}>
                             <div style={{ fontSize: "0.85rem", color: "#1B3B2B", display: "flex", flexDirection: "column", gap: 4 }}>
-                                <div><strong>Batch ID:</strong> {batchId}</div>
+                                <div><strong>Batch ID:</strong> {batchId || "N/A"}</div>
                                 {clientName && <div><strong>Brand:</strong> {clientName}</div>}
                                 <div style={{ fontSize: "0.78rem", color: "#527060", marginTop: 4 }}>
                                     <span>{new Date().toLocaleDateString("en-US", { dateStyle: "long" })}</span>
@@ -599,17 +599,11 @@ export default function ProductFeedbackPage() {
                             border: "1px solid #D1E0D7",
                         }}>
                             <label style={{ ...styles.label, marginBottom: 8 }}>
-                                Batch ID *
+                                Batch ID
                             </label>
-                            <input
-                                type="text"
-                                value={batchId}
-                                onChange={e => setBatchId(e.target.value)}
-                                placeholder="e.g. BATCH-88402"
-                                disabled={recording || phase === "submitting"}
-                                style={{ ...styles.input, fontSize: "1.05rem", fontWeight: 600 }}
-                                required
-                            />
+                            <div style={styles.batchDisplay}>
+                                {batchId ? batchId : <span style={{ color: "#C93B3B", fontWeight: 400 }}>No Batch ID Provided in URL</span>}
+                            </div>
                         </div>
 
                         {phase === "form" && (
