@@ -82,7 +82,10 @@ function ScanMap({ scans, selectedScan, onSelectScan, markerRefs }) {
           return null;
         }
 
-        const isSelected = selectedScan && selectedScan.qr_id === scan.qr_id && selectedScan.scanned_at === scan.scanned_at;
+        const isSelected =
+          selectedScan &&
+          selectedScan.qr_id === scan.qr_id &&
+          selectedScan.scanned_at === scan.scanned_at;
 
         return (
           <Marker
@@ -124,6 +127,8 @@ export default function ScanMapPage() {
   const [selectedScan, setSelectedScan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isMobileCollapsed, setIsMobileCollapsed] = useState(true);
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
   const markerRefs = useRef({});
   const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
@@ -185,7 +190,7 @@ export default function ScanMapPage() {
     };
   }, [baseUrl, typeParam]);
 
-  // Handle clicking an item in the sidebar menu
+  // Handle clicking an item in the sidebar/drawer menu
   const handleItemClick = (scan) => {
     setSelectedScan(scan);
 
@@ -198,12 +203,69 @@ export default function ScanMapPage() {
   };
 
   return (
-    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div
+      style={{
+        width: "100%",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
+    >
+      {/* Dynamic CSS Rules for Responsive Behavior */}
+      <style>{`
+        /* Desktop Toggle Button Display */
+        .mobile-toggle-btn {
+          display: none !important;
+        }
+        .desktop-toggle-btn {
+          display: flex !important;
+        }
+
+        /* Mobile Layout Modifications (Unchanged) */
+        @media (max-width: 768px) {
+          .mobile-toggle-btn {
+            display: flex !important;
+          }
+          .desktop-toggle-btn {
+            display: none !important;
+          }
+          .scan-map-sidebar {
+            width: 100% !important;
+            height: ${isMobileCollapsed ? "48px" : "45vh"} !important;
+            position: absolute !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 2000 !important;
+            border-right: none !important;
+            border-top: 2px solid #334155 !important;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+          }
+          .scan-drawer-header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+          }
+          .scan-map-header h3 {
+            font-size: 0.85rem !important;
+          }
+          .scan-map-header div {
+            font-size: 0.75rem !important;
+            padding: 3px 8px !important;
+          }
+          .scan-list-container {
+            display: ${isMobileCollapsed ? "none" : "block"} !important;
+          }
+        }
+      `}</style>
+
       {/* Dynamic Header Title */}
       <header
+        className="scan-map-header"
         style={{
           flexShrink: 0,
-          padding: "14px 20px",
+          padding: "12px 16px",
           background: "#0f172a",
           color: "#ffffff",
           display: "flex",
@@ -213,69 +275,179 @@ export default function ScanMapPage() {
         }}
       >
         <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{headerTitle}</h3>
-        <div style={{ background: "#3b82f6", padding: "4px 12px", borderRadius: "12px", fontSize: "0.9rem", fontWeight: "bold" }}>
+        <div
+          style={{
+            background: "#3b82f6",
+            padding: "4px 12px",
+            borderRadius: "12px",
+            fontSize: "0.9rem",
+            fontWeight: "bold",
+            whiteSpace: "nowrap",
+          }}
+        >
           Total Scans: {scans.length}
         </div>
       </header>
 
-      {/* Rest of the UI remains identical */}
-      <div style={{ display: "flex", flex: 1, minHeight: 0, position: "relative" }}>
+      {/* Main Container */}
+      <div
+        className="scan-map-content"
+        style={{ display: "flex", flex: 1, minHeight: 0, position: "relative" }}
+      >
+        {/* Sidebar for Desktop / Drawer for Mobile */}
         <aside
+          className="scan-map-sidebar"
           style={{
-            width: "320px",
+            width: isDesktopCollapsed ? "48px" : "320px",
             background: "#1e293b",
             color: "#f8fafc",
             display: "flex",
             flexDirection: "column",
             borderRight: "1px solid #334155",
             zIndex: 10,
+            transition: "width 0.3s ease, height 0.3s ease",
+            overflow: "hidden",
           }}
         >
-          <div style={{ padding: "12px 16px", background: "#0f172a", borderBottom: "1px solid #334155", fontSize: "0.85rem", fontWeight: "bold", textTransform: "uppercase", color: "#94a3b8" }}>
-            Scanned Locations
+          {/* Header Bar */}
+          <div
+            className="scan-drawer-header"
+            onClick={() => {
+              if (window.innerWidth <= 768) {
+                setIsMobileCollapsed(!isMobileCollapsed);
+              }
+            }}
+            style={{
+              padding: "12px 16px",
+              background: "#0f172a",
+              borderBottom: "1px solid #334155",
+              fontSize: "0.85rem",
+              fontWeight: "bold",
+              textTransform: "uppercase",
+              color: "#94a3b8",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              cursor: "pointer",
+              userSelect: "none",
+              flexShrink: 0,
+            }}
+          >
+            {!isDesktopCollapsed && <span>Scanned Locations</span>}
+
+            {/* Desktop Only Toggle Button */}
+            <button
+              className="desktop-toggle-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDesktopCollapsed(!isDesktopCollapsed);
+              }}
+              aria-label="Toggle sidebar width"
+              style={{
+                background: "#334155",
+                border: "none",
+                borderRadius: "4px",
+                color: "#38bdf8",
+                cursor: "pointer",
+                padding: "4px 8px",
+                fontSize: "0.75rem",
+                alignItems: "center",
+                fontWeight: "bold",
+                marginLeft: "auto",
+              }}
+            >
+              {isDesktopCollapsed ? "▶" : "◀"}
+            </button>
+
+            {/* Mobile Only Toggle Button */}
+            <button
+              className="mobile-toggle-btn"
+              aria-label="Toggle scan list view"
+              style={{
+                background: "#334155",
+                border: "none",
+                borderRadius: "4px",
+                color: "#38bdf8",
+                cursor: "pointer",
+                padding: "4px 8px",
+                fontSize: "0.75rem",
+                alignItems: "center",
+                fontWeight: "bold",
+              }}
+            >
+              {isMobileCollapsed ? "▲ SHOW LIST" : "▼ HIDE"}
+            </button>
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            {scans.length === 0 && !loading && (
-              <div style={{ padding: "16px", color: "#94a3b8", fontSize: "0.9rem", textAlign: "center" }}>
-                No scans recorded.
-              </div>
-            )}
-
-            {scans.map((scan, idx) => {
-              const isSelected = selectedScan && selectedScan.qr_id === scan.qr_id && selectedScan.scanned_at === scan.scanned_at;
-
-              return (
+          {/* Scanned Items List */}
+          {!isDesktopCollapsed && (
+            <div className="scan-list-container" style={{ flex: 1, overflowY: "auto" }}>
+              {scans.length === 0 && !loading && (
                 <div
-                  key={`${scan.qr_id}-${scan.scanned_at || idx}`}
-                  onClick={() => handleItemClick(scan)}
                   style={{
-                    padding: "12px 16px",
-                    borderBottom: "1px solid #334155",
-                    cursor: "pointer",
-                    backgroundColor: isSelected ? "#3b82f6" : "transparent",
-                    transition: "background-color 0.2s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = "#334155";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
+                    padding: "16px",
+                    color: "#94a3b8",
+                    fontSize: "0.9rem",
+                    textAlign: "center",
                   }}
                 >
-                  <div style={{ fontWeight: "bold", fontSize: "0.95rem", color: isSelected ? "#ffffff" : "#38bdf8" }}>
-                    ID: {scan.qr_id}
-                  </div>
-                  <div style={{ fontSize: "0.75rem", color: isSelected ? "#e2e8f0" : "#94a3b8", marginTop: "4px" }}>
-                    {scan.scanned_at ? new Date(scan.scanned_at).toLocaleString() : "N/A"}
-                  </div>
+                  No scans recorded.
                 </div>
-              );
-            })}
-          </div>
+              )}
+
+              {scans.map((scan, idx) => {
+                const isSelected =
+                  selectedScan &&
+                  selectedScan.qr_id === scan.qr_id &&
+                  selectedScan.scanned_at === scan.scanned_at;
+
+                return (
+                  <div
+                    key={`${scan.qr_id}-${scan.scanned_at || idx}`}
+                    onClick={() => handleItemClick(scan)}
+                    style={{
+                      padding: "12px 16px",
+                      borderBottom: "1px solid #334155",
+                      cursor: "pointer",
+                      backgroundColor: isSelected ? "#3b82f6" : "transparent",
+                      transition: "background-color 0.2s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected) e.currentTarget.style.backgroundColor = "#334155";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: "bold",
+                        fontSize: "0.95rem",
+                        color: isSelected ? "#ffffff" : "#38bdf8",
+                      }}
+                    >
+                      ID: {scan.qr_id}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.75rem",
+                        color: isSelected ? "#e2e8f0" : "#94a3b8",
+                        marginTop: "4px",
+                      }}
+                    >
+                      {scan.scanned_at
+                        ? new Date(scan.scanned_at).toLocaleString()
+                        : "N/A"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </aside>
 
-        <main style={{ flex: 1, position: "relative" }}>
+        {/* Map View */}
+        <main style={{ flex: 1, position: "relative", width: "100%", height: "100%" }}>
           <ScanMap
             scans={scans}
             selectedScan={selectedScan}
