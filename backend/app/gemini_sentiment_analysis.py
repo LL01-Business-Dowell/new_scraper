@@ -102,7 +102,7 @@ def generate_ai_assessment(text_sentiment: str, text_score: float, audio_emotion
         if audio_emotion in ["calm", "neutral", "happy"]:
             return (
                 f"Controlled Dissatisfaction ({text_pct}%). "
-                f"Guest expresses negative feedback in a controlled/calm tone ({audio_pct}%). "
+                f"Customer expresses negative feedback in a controlled/calm tone ({audio_pct}%). "
                 f"High risk for delayed negative review."
             )
         elif audio_emotion in HIGH_URGENCY_AUDIO:
@@ -113,7 +113,7 @@ def generate_ai_assessment(text_sentiment: str, text_score: float, audio_emotion
     # 3. NEUTRAL TEXT CASES
     else:
         if audio_emotion in HIGH_URGENCY_AUDIO and audio_score >= 0.65:
-            return f"Vocal Distress Alert: Neutral words ({text_pct}%), but voice tone indicates high tension/frustration ({audio_pct}%)."
+            return f"Vocal Distress Alert: Neutral words ({text_pct}%), but voice tone indicates high tension ({audio_pct}%)."
         
     return f"Balanced Evaluation: Text evaluated as {text_sentiment} ({text_pct}%) alongside {audio_emotion} vocal tone ({audio_pct}%)."
 
@@ -143,20 +143,20 @@ def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_sco
             if audio_emotion in HIGH_URGENCY_AUDIO:
                 dashboard_color = "red"
                 severity_level = "high"
-                action_required = "CRITICAL: Immediate manager dispatch to guest room/table."
+                action_required = "CRITICAL: Store manager to immediately inspect the product and address any safety, quality, or serious customer concern."
             elif audio_emotion in MEDIUM_URGENCY_AUDIO:
                 dashboard_color = "orange"
                 severity_level = "medium"
-                action_required = "URGENT: Front desk to call guest with an alternative/resolution within 15 mins."
+                action_required = "URGENT: Store staff to review the product feedback and provide a suitable replacement, resolution, or explanation"
             else:
                 dashboard_color = "red"
                 severity_level = "high"
-                action_required = "HIGH RISK: Duty Manager to initiate discrete touchpoint within 30 mins for service recovery."
+                action_required = "HIGH PRIORITY: Store team to review the product concern and initiate appropriate corrective action."
 
         elif text_sentiment in ["POSITIVE", "NEUTRAL"] and audio_emotion in HIGH_URGENCY_AUDIO:
             dashboard_color = "orange"
             severity_level = "medium"
-            action_required = "POTENTIAL FRICTION: Staff to follow up and verify guest comfort."
+            action_required = "POTENTIAL CONCERN: Staff to review the feedback and verify product quality, availability, pricing, or customer expectations."
 
         assessment_remark = generate_ai_assessment(text_sentiment, text_score, audio_emotion, audio_score)
 
