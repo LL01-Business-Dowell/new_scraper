@@ -4,6 +4,8 @@ import logging
 import httpx
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 
 # Configure logger
 logger = logging.getLogger("scan_routes")
@@ -18,8 +20,8 @@ MASTER_DATABASE_ID = "69985c0844ca8a1af7fd639e"
 COLLECTION_NAME = "medsign_qr_scan"  
 
 @router.get("/last24hours")
-async def get_recent_scans():
-    logger.info("Processing last 24 hours scan request")
+async def get_recent_scans(type: Optional[str] = Query(None)):
+    logger.info(f"Processing last 24 hours scan request (type filter: {type})")
 
     if not CRUD_API_KEY:
         logger.error("Missing required server configuration: CRUD_API_KEY is not set")
@@ -29,11 +31,15 @@ async def get_recent_scans():
         "Authorization": f"Api-Key {CRUD_API_KEY}"
     }
 
-    # DataCube query format: GET with URL query parameters
+    # Pass the type filter to DataCube if provided
+    db_filters = {}
+    if type:
+        db_filters["type"] = type
+
     params = {
         "database_id": MASTER_DATABASE_ID,
         "collection_name": COLLECTION_NAME,
-        "filters": json.dumps({}),  # Empty JSON string filter to retrieve all documents
+        "filters": json.dumps(db_filters),
         "page": 1,
         "page_size": 500
     }
@@ -44,8 +50,6 @@ async def get_recent_scans():
             logger.info(f"Executing GET request to DataCube endpoint: {DATACUBE_URL}")
             res = await client.get(DATACUBE_URL, params=params, headers=headers)
             
-            logger.info(f"DataCube response status code: {res.status_code}")
-
             if res.status_code != 200:
                 logger.error(f"DataCube request failed with status code {res.status_code}. Response body: {res.text}")
                 raise HTTPException(status_code=res.status_code, detail="Failed to fetch data from DataCube")
@@ -56,8 +60,6 @@ async def get_recent_scans():
                 docs = json_data.get("data", [])
             elif isinstance(json_data, list):
                 docs = json_data
-                
-            logger.info(f"Successfully retrieved {len(docs)} documents from DataCube")
 
     except httpx.RequestError as exc:
         logger.error(f"HTTP network error while communicating with DataCube: {str(exc)}", exc_info=True)
@@ -70,11 +72,12 @@ async def get_recent_scans():
     twenty_four_hours_ago = now - timedelta(hours=24)
 
     recent_scans = []
-    skipped_zero_coords = 0
-    skipped_out_of_range = 0
-    skipped_parse_error = 0
 
-    for idx, doc in enumerate(docs):
+    for doc in docs:
+        # Fallback check: Filter in memory if DataCube doesn't strictly enforce filter queries
+        if type and doc.get("type") != type:
+            continue
+
         scanned_at_str = doc.get("scanned_at") or doc.get("submitted_at") or doc.get("created_at")
         lat = doc.get("latitude")
         lng = doc.get("longitude")
@@ -87,7 +90,6 @@ async def get_recent_scans():
             lng_val = float(lng)
 
             if lat_val == 0.0 and lng_val == 0.0:
-                skipped_zero_coords += 1
                 continue
 
             scan_time = datetime.fromisoformat(scanned_at_str.replace("Z", "+00:00"))
@@ -97,20 +99,11 @@ async def get_recent_scans():
                     "qr_id": doc.get("qr_id", "N/A"),
                     "latitude": lat_val,
                     "longitude": lng_val,
-                    "scanned_at": scanned_at_str
+                    "scanned_at": scanned_at_str,
+                    "type": doc.get("type", "N/A")
                 })
-            else:
-                skipped_out_of_range += 1
 
-        except (ValueError, TypeError) as parse_err:
-            skipped_parse_error += 1
+        except (ValueError, TypeError):
             continue
-
-    logger.info(
-        f"Processing complete. Valid scans within last 24h: {len(recent_scans)} | "
-        f"Skipped zero coords: {skipped_zero_coords} | "
-        f"Skipped older than 24h: {skipped_out_of_range} | "
-        f"Skipped parse errors: {skipped_parse_error}"
-    )
 
     return {"success": True, "count": len(recent_scans), "data": recent_scans}

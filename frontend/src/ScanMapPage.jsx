@@ -128,17 +128,30 @@ export default function ScanMapPage() {
   const markerRefs = useRef({});
   const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
+  // Parse the 'type' query parameter from the URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const typeParam = urlParams.get("type");
+
+  // Format header title dynamically based on typeParam
+  const headerTitle = typeParam
+    ? `${typeParam.toUpperCase()} SCANS — LAST 24 HOURS`
+    : "MEDSIGNQR SCANS — LAST 24 HOURS";
+
   useEffect(() => {
     let cancelled = false;
 
     async function fetchRecentScans(isInitialLoad = false) {
-      // Only trigger full visual loading indicator on first render
       if (isInitialLoad) {
         setLoading(true);
       }
 
       try {
-        const response = await fetch(`${baseUrl}/api/scans/last24hours`);
+        let endpoint = `${baseUrl}/api/scans/last24hours`;
+        if (typeParam) {
+          endpoint += `?type=${encodeURIComponent(typeParam)}`;
+        }
+
+        const response = await fetch(endpoint);
         const result = await response.json();
 
         if (cancelled) return;
@@ -160,20 +173,17 @@ export default function ScanMapPage() {
       }
     }
 
-    // Initial fetch on component mount
     fetchRecentScans(true);
 
-    // Poll every 3 seconds
     const intervalId = setInterval(() => {
       fetchRecentScans(false);
     }, 3000);
 
-    // Cleanup interval and cancel flag on unmount
     return () => {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [baseUrl]);
+  }, [baseUrl, typeParam]);
 
   // Handle clicking an item in the sidebar menu
   const handleItemClick = (scan) => {
@@ -189,7 +199,7 @@ export default function ScanMapPage() {
 
   return (
     <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Header */}
+      {/* Dynamic Header Title */}
       <header
         style={{
           flexShrink: 0,
@@ -202,16 +212,14 @@ export default function ScanMapPage() {
           zIndex: 1000,
         }}
       >
-        <h3 style={{ margin: 0, fontSize: "1.1rem" }}>MedSignQR Scan — Last 24 Hours</h3>
+        <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{headerTitle}</h3>
         <div style={{ background: "#3b82f6", padding: "4px 12px", borderRadius: "12px", fontSize: "0.9rem", fontWeight: "bold" }}>
           Total Scans: {scans.length}
         </div>
       </header>
 
-      {/* Content Wrapper */}
+      {/* Rest of the UI remains identical */}
       <div style={{ display: "flex", flex: 1, minHeight: 0, position: "relative" }}>
-        
-        {/* Sidebar Menu */}
         <aside
           style={{
             width: "320px",
@@ -267,7 +275,6 @@ export default function ScanMapPage() {
           </div>
         </aside>
 
-        {/* Main Map Container */}
         <main style={{ flex: 1, position: "relative" }}>
           <ScanMap
             scans={scans}
