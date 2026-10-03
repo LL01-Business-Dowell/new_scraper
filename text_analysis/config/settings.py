@@ -75,11 +75,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://backend-container:8000",
     "https://reviewanalysis.uxlivinglab.org",
     "https://medsignqr.uxlivinglab.org",
+    "https://www.dowellsmartlabelling.uxlivinglab.org",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "https://reviewanalysis.uxlivinglab.org",
     "https://medsignqr.uxlivinglab.org",
+    "https://www.dowellsmartlabelling.uxlivinglab.org",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
