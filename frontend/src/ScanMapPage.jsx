@@ -127,10 +127,11 @@ export default function ScanMapPage() {
   const [selectedScan, setSelectedScan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isMobileCollapsed, setIsMobileCollapsed] = useState(true);
+  const [isMobileCollapsed, setIsMobileCollapsed] = useState(false); // Default to open list on mobile
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
 
   const markerRefs = useRef({});
+  const isFirstLoad = useRef(true);
   const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
   // Parse the 'type' query parameter from the URL
@@ -148,6 +149,7 @@ export default function ScanMapPage() {
     async function fetchRecentScans(isInitialLoad = false) {
       if (isInitialLoad) {
         setLoading(true);
+        setError(null); // Clear any old errors on load
       }
 
       try {
@@ -157,20 +159,48 @@ export default function ScanMapPage() {
         }
 
         const response = await fetch(endpoint);
+
+        // If backend returns a non-OK status during initial load (warm-up), suppress showing error right away
+        if (!response.ok) {
+          if (!isInitialLoad) {
+            setError("Failed to update scan coordinates.");
+          }
+          return;
+        }
+
         const result = await response.json();
 
         if (cancelled) return;
 
-        if (response.ok && result.success) {
-          setScans(Array.isArray(result.data) ? result.data : []);
-          setError(null);
+        if (result.success) {
+          const rawScans = Array.isArray(result.data) ? result.data : [];
+
+          const sortedScans = [...rawScans].sort((a, b) => {
+            const timeA = new Date(a.scanned_at || 0).getTime();
+            const timeB = new Date(b.scanned_at || 0).getTime();
+            return timeB - timeA;
+          });
+
+          setScans(sortedScans);
+          setError(null); // Clear error on successful fetch
+
+          if (isFirstLoad.current && sortedScans.length > 0) {
+            setSelectedScan(sortedScans[0]);
+            isFirstLoad.current = false;
+          }
         } else {
-          setError(result.detail || "Failed to load scan coordinates.");
+          // Only set error if not in initial warm-up retry phase
+          if (!isInitialLoad) {
+            setError(result.detail || "Failed to load scan coordinates.");
+          }
         }
       } catch (err) {
         if (cancelled) return;
         console.error("Map fetch error:", err);
-        setError("Network error fetching scan locations.");
+        // Don't show critical network error banner immediately on first frame
+        if (!isInitialLoad) {
+          setError("Network error fetching scan locations.");
+        }
       } finally {
         if (!cancelled && isInitialLoad) {
           setLoading(false);
@@ -202,6 +232,10 @@ export default function ScanMapPage() {
     }
   };
 
+  const toggleMobileDrawer = () => {
+    setIsMobileCollapsed((prev) => !prev);
+  };
+
   return (
     <div
       style={{
@@ -222,7 +256,7 @@ export default function ScanMapPage() {
           display: flex !important;
         }
 
-        /* Mobile Layout Modifications (Unchanged) */
+        /* Mobile Layout Modifications */
         @media (max-width: 768px) {
           .mobile-toggle-btn {
             display: flex !important;
@@ -253,9 +287,6 @@ export default function ScanMapPage() {
           .scan-map-header div {
             font-size: 0.75rem !important;
             padding: 3px 8px !important;
-          }
-          .scan-list-container {
-            display: ${isMobileCollapsed ? "none" : "block"} !important;
           }
         }
       `}</style>
@@ -312,11 +343,7 @@ export default function ScanMapPage() {
           {/* Header Bar */}
           <div
             className="scan-drawer-header"
-            onClick={() => {
-              if (window.innerWidth <= 768) {
-                setIsMobileCollapsed(!isMobileCollapsed);
-              }
-            }}
+            onClick={toggleMobileDrawer}
             style={{
               padding: "12px 16px",
               background: "#0f172a",
@@ -333,7 +360,7 @@ export default function ScanMapPage() {
               flexShrink: 0,
             }}
           >
-            {!isDesktopCollapsed && <span>Scanned Locations</span>}
+            <span>Scanned Locations</span>
 
             {/* Desktop Only Toggle Button */}
             <button
@@ -362,6 +389,10 @@ export default function ScanMapPage() {
             {/* Mobile Only Toggle Button */}
             <button
               className="mobile-toggle-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMobileDrawer();
+              }}
               aria-label="Toggle scan list view"
               style={{
                 background: "#334155",
@@ -380,70 +411,68 @@ export default function ScanMapPage() {
           </div>
 
           {/* Scanned Items List */}
-          {!isDesktopCollapsed && (
-            <div className="scan-list-container" style={{ flex: 1, overflowY: "auto" }}>
-              {scans.length === 0 && !loading && (
+          <div className="scan-list-container" style={{ flex: 1, overflowY: "auto" }}>
+            {scans.length === 0 && !loading && (
+              <div
+                style={{
+                  padding: "16px",
+                  color: "#94a3b8",
+                  fontSize: "0.9rem",
+                  textAlign: "center",
+                }}
+              >
+                No scans recorded.
+              </div>
+            )}
+
+            {scans.map((scan, idx) => {
+              const isSelected =
+                selectedScan &&
+                selectedScan.qr_id === scan.qr_id &&
+                selectedScan.scanned_at === scan.scanned_at;
+
+              return (
                 <div
+                  key={`${scan.qr_id}-${scan.scanned_at || idx}`}
+                  onClick={() => handleItemClick(scan)}
                   style={{
-                    padding: "16px",
-                    color: "#94a3b8",
-                    fontSize: "0.9rem",
-                    textAlign: "center",
+                    padding: "12px 16px",
+                    borderBottom: "1px solid #334155",
+                    cursor: "pointer",
+                    backgroundColor: isSelected ? "#3b82f6" : "transparent",
+                    transition: "background-color 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = "#334155";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
                   }}
                 >
-                  No scans recorded.
-                </div>
-              )}
-
-              {scans.map((scan, idx) => {
-                const isSelected =
-                  selectedScan &&
-                  selectedScan.qr_id === scan.qr_id &&
-                  selectedScan.scanned_at === scan.scanned_at;
-
-                return (
                   <div
-                    key={`${scan.qr_id}-${scan.scanned_at || idx}`}
-                    onClick={() => handleItemClick(scan)}
                     style={{
-                      padding: "12px 16px",
-                      borderBottom: "1px solid #334155",
-                      cursor: "pointer",
-                      backgroundColor: isSelected ? "#3b82f6" : "transparent",
-                      transition: "background-color 0.2s ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = "#334155";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
+                      fontWeight: "bold",
+                      fontSize: "0.95rem",
+                      color: isSelected ? "#ffffff" : "#38bdf8",
                     }}
                   >
-                    <div
-                      style={{
-                        fontWeight: "bold",
-                        fontSize: "0.95rem",
-                        color: isSelected ? "#ffffff" : "#38bdf8",
-                      }}
-                    >
-                      ID: {scan.qr_id}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.75rem",
-                        color: isSelected ? "#e2e8f0" : "#94a3b8",
-                        marginTop: "4px",
-                      }}
-                    >
-                      {scan.scanned_at
-                        ? new Date(scan.scanned_at).toLocaleString()
-                        : "N/A"}
-                    </div>
+                    ID: {scan.qr_id}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      color: isSelected ? "#e2e8f0" : "#94a3b8",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {scan.scanned_at
+                      ? new Date(scan.scanned_at).toLocaleString()
+                      : "N/A"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </aside>
 
         {/* Map View */}
