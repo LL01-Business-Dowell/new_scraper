@@ -27,7 +27,7 @@ class TextTranslationView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        client = genai.Client(api_key=os.environ.get("GEMINI_KEY_3"))
+        client = genai.Client(api_key=os.environ.get("DOWELL_GEMINI_KEY"))
 
         prompt = f"""
             You are a language detection and translation assistant.
@@ -41,7 +41,7 @@ class TextTranslationView(APIView):
 
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.7-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -78,11 +78,11 @@ class SentimentAnalysisView(APIView):
         text = serializer.validated_data.get("text")
 
         try:
-            client=genai.Client(api_key=os.environ.get("GEMINI_KEY_3"))
+            client=genai.Client(api_key=os.environ.get("DOWELL_GEMINI_KEY"))
             prompt = f'Analyze the sentiment of this text: "{text}"'
             
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.7-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
