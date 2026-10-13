@@ -9,9 +9,6 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// -----------------------------------------------------------------------------
-// Leaflet Marker Icons
-// -----------------------------------------------------------------------------
 delete L.Icon.Default.prototype._getIconUrl;
 
 const defaultIcon = L.icon({
@@ -23,7 +20,6 @@ const defaultIcon = L.icon({
   popupAnchor: [1, -34],
 });
 
-// Distinct Red Icon for Highlighted/Selected Pin
 const selectedIcon = L.icon({
   iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -32,9 +28,6 @@ const selectedIcon = L.icon({
   popupAnchor: [1, -38],
 });
 
-// -----------------------------------------------------------------------------
-// Helper Component: Handles smooth flying/zooming to selected pin
-// -----------------------------------------------------------------------------
 function MapController({ selectedScan }) {
   const map = useMap();
 
@@ -44,9 +37,7 @@ function MapController({ selectedScan }) {
       const lng = Number(selectedScan.longitude);
 
       if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        map.flyTo([lat, lng], 16, {
-          duration: 1.5,
-        });
+        map.flyTo([lat, lng], 16, { duration: 1.5 });
       }
     }
   }, [selectedScan, map]);
@@ -54,18 +45,12 @@ function MapController({ selectedScan }) {
   return null;
 }
 
-// -----------------------------------------------------------------------------
-// Map Component
-// -----------------------------------------------------------------------------
 function ScanMap({ scans, selectedScan, onSelectScan, markerRefs }) {
   return (
     <MapContainer
       center={[20, 0]}
       zoom={2}
-      style={{
-        width: "100%",
-        height: "100%",
-      }}
+      style={{ width: "100%", height: "100%" }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -94,9 +79,7 @@ function ScanMap({ scans, selectedScan, onSelectScan, markerRefs }) {
             icon={isSelected ? selectedIcon : defaultIcon}
             ref={(el) => {
               const key = `${scan.qr_id}-${scan.scanned_at}`;
-              if (el) {
-                markerRefs.current[key] = el;
-              }
+              if (el) markerRefs.current[key] = el;
             }}
             eventHandlers={{
               click: () => onSelectScan(scan),
@@ -119,29 +102,65 @@ function ScanMap({ scans, selectedScan, onSelectScan, markerRefs }) {
   );
 }
 
-// -----------------------------------------------------------------------------
-// Main Page Component
-// -----------------------------------------------------------------------------
 export default function ScanMapPage() {
   const [scans, setScans] = useState([]);
   const [selectedScan, setSelectedScan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isMobileCollapsed, setIsMobileCollapsed] = useState(false); // Default to open list on mobile
-  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
+
+  // Both collapsed by default
+  const [isMobileCollapsed, setIsMobileCollapsed] = useState(true);
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(true);
+
+  // Highlighting new scans state
+  const [highlightedScanKeys, setHighlightedScanKeys] = useState(new Set());
+  const previousScanKeysRef = useRef(new Set());
 
   const markerRefs = useRef({});
-  const isFirstLoad = useRef(true);
-  const baseUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
-  // Parse the 'type' query parameter from the URL
+  // Clean raw environment variable to eliminate literal quotes
+  const rawBaseUrl = import.meta.env.VITE_API_URL || "";
+  const baseUrl = rawBaseUrl.replace(/['"]/g, "").trim();
+
+  // Parse URL parameters
   const urlParams = new URLSearchParams(window.location.search);
   const typeParam = urlParams.get("type");
+  const timeParam = urlParams.get("time");
 
-  // Format header title dynamically based on typeParam
+  const getInitialTime = () => {
+    if (timeParam === "7" || timeParam === "7d") return "168";
+    if (timeParam === "30" || timeParam === "30d") return "720";
+    return "24";
+  };
+
+  const [timeRangeHours, setTimeRangeHours] = useState(getInitialTime);
+
+  const handleTimeChange = (e) => {
+    const selectedHours = e.target.value;
+    setTimeRangeHours(selectedHours);
+
+    let timeUrlValue = "24";
+    if (selectedHours === "168") timeUrlValue = "7";
+    if (selectedHours === "720") timeUrlValue = "30";
+
+    const newSearchParams = new URLSearchParams(window.location.search);
+    newSearchParams.set("time", timeUrlValue);
+    window.history.replaceState(
+      {},
+      "",
+      `${window.location.pathname}?${newSearchParams.toString()}`
+    );
+  };
+
+  const timeLabelMap = {
+    "24": "LAST 24 HOURS",
+    "168": "LAST 7 DAYS",
+    "720": "LAST 30 DAYS",
+  };
+
   const headerTitle = typeParam
-    ? `${typeParam.toUpperCase()} SCANS — LAST 24 HOURS`
-    : "MEDSIGNQR SCANS — LAST 24 HOURS";
+    ? `${typeParam.toUpperCase()} SCANS — ${timeLabelMap[timeRangeHours]}`
+    : `MEDSIGNQR SCANS — ${timeLabelMap[timeRangeHours]}`;
 
   useEffect(() => {
     let cancelled = false;
@@ -149,57 +168,100 @@ export default function ScanMapPage() {
     async function fetchRecentScans(isInitialLoad = false) {
       if (isInitialLoad) {
         setLoading(true);
-        setError(null); // Clear any old errors on load
+        setError(null);
       }
 
       try {
-        let endpoint = `${baseUrl}/api/scans/last24hours`;
+        let endpoint = `/api/scans/last24hours?hours=${timeRangeHours}`;
         if (typeParam) {
-          endpoint += `?type=${encodeURIComponent(typeParam)}`;
+          endpoint += `&type=${encodeURIComponent(typeParam)}`;
+        }
+
+        if (baseUrl) {
+          endpoint = `${baseUrl.replace(/\/$/, "")}${endpoint}`;
         }
 
         const response = await fetch(endpoint);
+        const rawText = await response.text();
 
-        // If backend returns a non-OK status during initial load (warm-up), suppress showing error right away
+        // Silently handle non-200 responses if scans already exist
         if (!response.ok) {
-          if (!isInitialLoad) {
-            setError("Failed to update scan coordinates.");
+          console.warn(`[Background Refresh Warning] Server returned HTTP ${response.status}`);
+          if (isInitialLoad) {
+            setError("Unable to load scan locations right now. Please try again later.");
           }
           return;
         }
 
-        const result = await response.json();
+        let result;
+        try {
+          result = JSON.parse(rawText);
+        } catch (jsonErr) {
+          console.error("[Parse Error] Non-JSON response received:", rawText.slice(0, 300));
+          if (isInitialLoad) {
+            setError("Unable to load scan locations right now. Please try again later.");
+          }
+          return;
+        }
 
         if (cancelled) return;
 
         if (result.success) {
           const rawScans = Array.isArray(result.data) ? result.data : [];
 
+          // Sort scans reverse-chronologically (newest scan at index 0)
           const sortedScans = [...rawScans].sort((a, b) => {
             const timeA = new Date(a.scanned_at || 0).getTime();
             const timeB = new Date(b.scanned_at || 0).getTime();
             return timeB - timeA;
           });
 
-          setScans(sortedScans);
-          setError(null); // Clear error on successful fetch
+          const currentKeys = new Set(
+            sortedScans.map((s) => `${s.qr_id}-${s.scanned_at}`)
+          );
 
-          if (isFirstLoad.current && sortedScans.length > 0) {
+          // Detect new scans coming in during polling refreshes
+          if (previousScanKeysRef.current.size > 0) {
+            const newlyAddedKeys = new Set();
+            currentKeys.forEach((key) => {
+              if (!previousScanKeysRef.current.has(key)) {
+                newlyAddedKeys.add(key);
+              }
+            });
+
+            if (newlyAddedKeys.size > 0) {
+              setHighlightedScanKeys(newlyAddedKeys);
+              
+              // Automatically select and focus the newest scan on arrival
+              if (sortedScans.length > 0) {
+                setSelectedScan(sortedScans[0]);
+              }
+
+              // Clear highlight after 2 seconds
+              setTimeout(() => {
+                setHighlightedScanKeys(new Set());
+              }, 2000);
+            }
+          }
+
+          previousScanKeysRef.current = currentKeys;
+          setScans(sortedScans);
+          setError(null);
+
+          // Topmost/newest pin highlighted and focused by default on initial load
+          if (isInitialLoad && sortedScans.length > 0) {
             setSelectedScan(sortedScans[0]);
-            isFirstLoad.current = false;
           }
         } else {
-          // Only set error if not in initial warm-up retry phase
-          if (!isInitialLoad) {
-            setError(result.detail || "Failed to load scan coordinates.");
+          if (isInitialLoad) {
+            setError("No scan data available.");
           }
         }
       } catch (err) {
         if (cancelled) return;
-        console.error("Map fetch error:", err);
-        // Don't show critical network error banner immediately on first frame
-        if (!isInitialLoad) {
-          setError("Network error fetching scan locations.");
+        console.error("Map fetch network exception:", err);
+        if (isInitialLoad) {
+          setError("Unable to connect to service. Please check your network connection.");
         }
       } finally {
         if (!cancelled && isInitialLoad) {
@@ -218,9 +280,8 @@ export default function ScanMapPage() {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [baseUrl, typeParam]);
+  }, [baseUrl, typeParam, timeRangeHours]);
 
-  // Handle clicking an item in the sidebar/drawer menu
   const handleItemClick = (scan) => {
     setSelectedScan(scan);
 
@@ -236,6 +297,11 @@ export default function ScanMapPage() {
     setIsMobileCollapsed((prev) => !prev);
   };
 
+  const toggleDesktopDrawer = (e) => {
+    e.stopPropagation();
+    setIsDesktopCollapsed((prev) => !prev);
+  };
+
   return (
     <div
       style={{
@@ -246,9 +312,7 @@ export default function ScanMapPage() {
         overflow: "hidden",
       }}
     >
-      {/* Dynamic CSS Rules for Responsive Behavior */}
       <style>{`
-        /* Desktop Toggle Button Display */
         .mobile-toggle-btn {
           display: none !important;
         }
@@ -256,7 +320,30 @@ export default function ScanMapPage() {
           display: flex !important;
         }
 
-        /* Mobile Layout Modifications */
+        /* Pulse Highlight animation for 2s */
+        @keyframes highlightPulse {
+          0% { background-color: #f59e0b; }
+          100% { background-color: transparent; }
+        }
+
+        .new-scan-highlight {
+          animation: highlightPulse 2s ease-out;
+        }
+
+        /* Desktop Sidebar Overlay Styling */
+        @media (min-width: 769px) {
+          .scan-map-sidebar {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            height: 100% !important;
+            z-index: 2000 !important;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.4);
+          }
+        }
+
+        /* Mobile Sidebar Styling */
         @media (max-width: 768px) {
           .mobile-toggle-btn {
             display: flex !important;
@@ -276,22 +363,10 @@ export default function ScanMapPage() {
             border-top: 2px solid #334155 !important;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
           }
-          .scan-drawer-header {
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 10 !important;
-          }
-          .scan-map-header h3 {
-            font-size: 0.85rem !important;
-          }
-          .scan-map-header div {
-            font-size: 0.75rem !important;
-            padding: 3px 8px !important;
-          }
         }
       `}</style>
 
-      {/* Dynamic Header Title */}
+      {/* Header */}
       <header
         className="scan-map-header"
         style={{
@@ -302,30 +377,52 @@ export default function ScanMapPage() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          zIndex: 1000,
+          zIndex: 2001,
         }}
       >
         <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{headerTitle}</h3>
-        <div
-          style={{
-            background: "#3b82f6",
-            padding: "4px 12px",
-            borderRadius: "12px",
-            fontSize: "0.9rem",
-            fontWeight: "bold",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Total Scans: {scans.length}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <select
+            value={timeRangeHours}
+            onChange={handleTimeChange}
+            style={{
+              background: "#1e293b",
+              color: "#38bdf8",
+              border: "1px solid #334155",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              fontSize: "0.85rem",
+              fontWeight: "bold",
+              cursor: "pointer",
+            }}
+          >
+            <option value="24">24 Hours</option>
+            <option value="168">7 Days</option>
+            <option value="720">30 Days</option>
+          </select>
+
+          <div
+            style={{
+              background: "#3b82f6",
+              padding: "4px 12px",
+              borderRadius: "12px",
+              fontSize: "0.9rem",
+              fontWeight: "bold",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Total Scans: {scans.length}
+          </div>
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Content Area */}
       <div
         className="scan-map-content"
         style={{ display: "flex", flex: 1, minHeight: 0, position: "relative" }}
       >
-        {/* Sidebar for Desktop / Drawer for Mobile */}
+        {/* Collapsed Sidebar / Drawer */}
         <aside
           className="scan-map-sidebar"
           style={{
@@ -335,15 +432,13 @@ export default function ScanMapPage() {
             display: "flex",
             flexDirection: "column",
             borderRight: "1px solid #334155",
-            zIndex: 10,
             transition: "width 0.3s ease, height 0.3s ease",
             overflow: "hidden",
           }}
         >
-          {/* Header Bar */}
           <div
             className="scan-drawer-header"
-            onClick={toggleMobileDrawer}
+            onClick={toggleDesktopDrawer}
             style={{
               padding: "12px 16px",
               background: "#0f172a",
@@ -360,15 +455,11 @@ export default function ScanMapPage() {
               flexShrink: 0,
             }}
           >
-            <span>Scanned Locations</span>
+            {!isDesktopCollapsed && <span>Scanned Locations</span>}
 
-            {/* Desktop Only Toggle Button */}
             <button
               className="desktop-toggle-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsDesktopCollapsed(!isDesktopCollapsed);
-              }}
+              onClick={toggleDesktopDrawer}
               aria-label="Toggle sidebar width"
               style={{
                 background: "#334155",
@@ -380,13 +471,12 @@ export default function ScanMapPage() {
                 fontSize: "0.75rem",
                 alignItems: "center",
                 fontWeight: "bold",
-                marginLeft: "auto",
+                marginLeft: isDesktopCollapsed ? "auto" : "0",
               }}
             >
-              {isDesktopCollapsed ? "▶" : "◀"}
+              {isDesktopCollapsed ? "▶" : "◀ HIDE"}
             </button>
 
-            {/* Mobile Only Toggle Button */}
             <button
               className="mobile-toggle-btn"
               onClick={(e) => {
@@ -410,8 +500,14 @@ export default function ScanMapPage() {
             </button>
           </div>
 
-          {/* Scanned Items List */}
-          <div className="scan-list-container" style={{ flex: 1, overflowY: "auto" }}>
+          <div
+            className="scan-list-container"
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              display: isDesktopCollapsed ? "none" : "block",
+            }}
+          >
             {scans.length === 0 && !loading && (
               <div
                 style={{
@@ -426,27 +522,37 @@ export default function ScanMapPage() {
             )}
 
             {scans.map((scan, idx) => {
+              const itemKey = `${scan.qr_id}-${scan.scanned_at}`;
               const isSelected =
                 selectedScan &&
                 selectedScan.qr_id === scan.qr_id &&
                 selectedScan.scanned_at === scan.scanned_at;
 
+              const isHighlighted = highlightedScanKeys.has(itemKey);
+
               return (
                 <div
                   key={`${scan.qr_id}-${scan.scanned_at || idx}`}
                   onClick={() => handleItemClick(scan)}
+                  className={isHighlighted ? "new-scan-highlight" : ""}
                   style={{
                     padding: "12px 16px",
                     borderBottom: "1px solid #334155",
                     cursor: "pointer",
-                    backgroundColor: isSelected ? "#3b82f6" : "transparent",
+                    backgroundColor: isSelected
+                      ? "#3b82f6"
+                      : isHighlighted
+                      ? "#f59e0b"
+                      : "transparent",
                     transition: "background-color 0.2s ease",
                   }}
                   onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = "#334155";
+                    if (!isSelected && !isHighlighted)
+                      e.currentTarget.style.backgroundColor = "#334155";
                   }}
                   onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
+                    if (!isSelected && !isHighlighted)
+                      e.currentTarget.style.backgroundColor = "transparent";
                   }}
                 >
                   <div
@@ -475,7 +581,7 @@ export default function ScanMapPage() {
           </div>
         </aside>
 
-        {/* Map View */}
+        {/* Map */}
         <main style={{ flex: 1, position: "relative", width: "100%", height: "100%" }}>
           <ScanMap
             scans={scans}
