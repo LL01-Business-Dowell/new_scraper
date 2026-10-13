@@ -183,3 +183,69 @@ def calculate_fused_metrics(text_sentiment, text_score, audio_emotion, audio_sco
                 "acoustic_confidence": 0.0
             }
         }
+
+def hotel_fused_metrics(text_sentiment, text_score, audio_emotion, audio_score):
+    logger.info(f"[FUSED METRICS] Input raw values -> sentiment: {text_sentiment}, text_score: {text_score}, audio_emotion: {audio_emotion}, audio_score: {audio_score}")
+
+    try:
+        text_sentiment = str(text_sentiment or "NEUTRAL").upper()
+        audio_emotion = str(audio_emotion or "calm").lower()
+
+        try:
+            text_score = float(text_score) if text_score is not None else 0.0
+        except (ValueError, TypeError):
+            text_score = 0.0
+
+        try:
+            audio_score = float(audio_score) if audio_score is not None else 0.0
+        except (ValueError, TypeError):
+            audio_score = 0.0
+            
+       
+        dashboard_color = "green"
+        severity_level = "low"
+        action_required = "No immediate action. Review at shift change."
+       
+        if text_sentiment == "NEGATIVE":
+            if audio_emotion in HIGH_URGENCY_AUDIO:
+                dashboard_color = "red"
+                severity_level = "high"
+                action_required = "CRITICAL: Immediate manager dispatch to guest room/table." 
+            elif audio_emotion in MEDIUM_URGENCY_AUDIO:
+                dashboard_color = "orange"
+                severity_level = "medium"
+                action_required = "URGENT: Front desk to call guest with an alternative/resolution."
+            else:
+                dashboard_color = "red"
+                severity_level = "high"
+                action_required = "HIGH RISK: Duty Manager to initiate discrete touchpoint within 30 mins for service recovery."
+
+        elif text_sentiment in ["POSITIVE", "NEUTRAL"] and audio_emotion in HIGH_URGENCY_AUDIO:
+            dashboard_color = "orange"
+            severity_level = "medium"
+            action_required = "POTENTIAL FRICTION: Staff to follow up and verify guest comfort." 
+        assessment_remark = generate_ai_assessment(text_sentiment, text_score, audio_emotion, audio_score)
+
+        return {
+            "assigned_color": dashboard_color,
+            "severity": severity_level,
+            "recommended_action": action_required,
+            "ai_assessment_remark": assessment_remark,
+            "confidence_scores": {
+                "semantic_confidence": round(text_score, 2),
+                "acoustic_confidence": round(audio_score, 2)
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"[FUSED METRICS] Calculation error: {e}", exc_info=True)
+        return {
+            "assigned_color": "green",
+            "severity": "low",
+            "recommended_action": "Error calculating metrics. Defaulting to baseline.",
+            "ai_assessment_remark": "Error calculating metrics. Defaulting to baseline.",
+            "confidence_scores": {
+                "semantic_confidence": 0.0,
+                "acoustic_confidence": 0.0
+            }
+        }

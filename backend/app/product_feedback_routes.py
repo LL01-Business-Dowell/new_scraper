@@ -22,7 +22,6 @@ S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-t
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
 
-
 def _resolve_collection_by_qr_id(qr_id: str, default_client: str = "") -> str:
     """
     Extracts the first 4 characters/digits from the QR ID to serve as the collection name.

@@ -7,7 +7,7 @@ import tempfile
 import subprocess
 import requests as http_requests
 import torch
-from .gemini_sentiment_analysis import analyze_sentiment, calculate_fused_metrics
+from .gemini_sentiment_analysis import analyze_sentiment, hotel_fused_metrics
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -318,7 +318,7 @@ async def submit_feedback(
 
         fused_metrics = None
         if emotion_data:
-            fused_metrics = calculate_fused_metrics(
+            fused_metrics = hotel_fused_metrics(
                 text_sentiment="NEUTRAL",
                 text_score=0.0,
                 audio_emotion=emotion_data.get("dominant_emotion", "calm"),
@@ -405,7 +405,7 @@ async def transcribe_on_demand(
         doc_data = _get_datacube_doc(id_param, doc_id, client_name=client_name) if doc_id else {}
         audio_analysis = doc_data.get("audio_analysis", {})
 
-        fused_metrics = calculate_fused_metrics(
+        fused_metrics = hotel_fused_metrics(
             text_sentiment=transcript_analysis.get("label", "neutral"),
             text_score=transcript_analysis.get("confidence_score", 0.0),
             audio_emotion=audio_analysis.get("dominant_emotion", "calm"),
