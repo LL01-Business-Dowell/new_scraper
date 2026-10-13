@@ -5,7 +5,7 @@ import API_BASE_URL from "./config";
 const BASE = (API_BASE_URL || "").replace(/\/+$/, "");
 
 const MicIcon = () => (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
         <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
         <line x1="12" y1="19" x2="12" y2="23" />
@@ -14,19 +14,19 @@ const MicIcon = () => (
 );
 
 const StopIcon = () => (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
         <rect x="4" y="4" width="16" height="16" rx="2" />
     </svg>
 );
 
 const CheckIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="20 6 9 17 4 12" />
     </svg>
 );
 
 const RefreshIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="23 4 23 10 17 10" />
         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
     </svg>
@@ -37,8 +37,8 @@ const StarIcon = ({ filled, onClick, onMouseEnter, onMouseLeave }) => (
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        width="32"
-        height="32"
+        width="28"
+        height="28"
         viewBox="0 0 24 24"
         fill={filled ? "#10b981" : "none"}
         stroke={filled ? "#10b981" : "#A8C4B4"}
@@ -59,7 +59,7 @@ const styles = {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "flex-start",
-        padding: "2.5rem 1rem",
+        padding: "1.5rem 1rem",
         fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
     },
     card: {
@@ -67,9 +67,9 @@ const styles = {
         backdropFilter: "blur(12px)",
         border: "1px solid #D1E0D7",
         borderRadius: 16,
-        padding: "2rem 2rem 2.5rem",
+        padding: "1.25rem 1.5rem 1.5rem",
         width: "100%",
-        maxWidth: 480,
+        maxWidth: 440,
         boxShadow: "0 12px 32px rgba(27, 59, 43, 0.06)",
         position: "relative",
     },
@@ -77,67 +77,67 @@ const styles = {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: "1.5rem",
-        paddingBottom: "1rem",
+        marginBottom: "1rem",
+        paddingBottom: "0.75rem",
         borderBottom: "1px solid #D1E0D7",
     },
     closeBtn: {
         backgroundColor: "#10b981",
         color: "#ffffff",
         border: "none",
-        padding: "0.5rem 1.1rem",
+        padding: "0.4rem 0.9rem",
         fontWeight: "700",
         borderRadius: "8px",
         cursor: "pointer",
-        fontSize: "0.88rem",
-        transition: "background-color 0.2s, transform 0.1s",
+        fontSize: "0.82rem",
+        transition: "background-color 0.2s, transform 0.1s, opacity 0.2s",
         display: "inline-flex",
         alignItems: "center",
         gap: "4px",
     },
     title: {
-        fontSize: "1.5rem",
+        fontSize: "1.35rem",
         fontWeight: 700,
         color: "#1B3B2B",
         margin: 0,
         letterSpacing: "-0.01em",
     },
     subtitle: {
-        fontSize: "0.82rem",
+        fontSize: "0.78rem",
         color: "#527060",
         margin: 0,
     },
     label: {
         display: "block",
-        fontSize: "0.75rem",
+        fontSize: "0.72rem",
         fontWeight: 700,
         color: "#2E5A44",
         textTransform: "uppercase",
         letterSpacing: "0.06em",
-        marginBottom: 8,
+        marginBottom: 4,
     },
     batchDisplay: {
-        fontSize: "1.1rem",
-        fontWeight: 700,
+        fontSize: "0.78rem",
+        fontWeight: 600,
         color: "#1B3B2B",
         background: "#EAF2EC",
-        padding: "10px 14px",
-        borderRadius: 8,
+        padding: "3px 8px",
+        borderRadius: 4,
         border: "1px solid #C2D6CA",
         wordBreak: "break-all",
     },
     textarea: {
         width: "100%",
-        padding: "12px 14px",
-        borderRadius: 8,
+        padding: "8px 10px",
+        borderRadius: 6,
         background: "#FAFCFA",
         border: "1px solid #C2D6CA",
         color: "#1B3B2B",
-        fontSize: "0.9rem",
+        fontSize: "0.85rem",
         outline: "none",
         boxSizing: "border-box",
         resize: "vertical",
-        minHeight: 85,
+        minHeight: 60,
     },
     ratingContainer: {
         display: "flex",
@@ -146,46 +146,46 @@ const styles = {
         justifyContent: "center",
         background: "#F2F7F4",
         border: "1px solid #D1E0D7",
-        borderRadius: 10,
-        padding: "14px",
-        marginBottom: "1.25rem",
+        borderRadius: 8,
+        padding: "10px",
+        marginBottom: "1rem",
     },
     starsWrapper: {
         display: "flex",
-        gap: "8px",
-        marginTop: "4px",
+        gap: "6px",
+        marginTop: "2px",
     },
     consentBox: {
         background: "#F2F7F4",
         border: "1px solid #D1E0D7",
         borderRadius: 12,
-        padding: "18px",
-        marginBottom: "1.5rem",
+        padding: "14px",
+        marginBottom: "1rem",
     },
     consentTitle: {
-        fontSize: "0.82rem",
+        fontSize: "0.78rem",
         fontWeight: 700,
         color: "#2E5A44",
         textTransform: "uppercase",
         letterSpacing: "0.06em",
-        marginBottom: 10,
+        marginBottom: 6,
     },
     consentText: {
-        fontSize: "0.83rem",
+        fontSize: "0.8rem",
         color: "#385445",
-        lineHeight: 1.6,
+        lineHeight: 1.5,
         margin: 0,
     },
     consentCheck: {
         display: "flex",
         alignItems: "flex-start",
-        gap: 12,
-        marginTop: 14,
+        gap: 10,
+        marginTop: 10,
         cursor: "pointer",
     },
     checkbox: {
-        width: 18,
-        height: 18,
+        width: 16,
+        height: 16,
         borderRadius: 4,
         flexShrink: 0,
         border: "2px solid #2E5A44",
@@ -195,8 +195,8 @@ const styles = {
         justifyContent: "center",
     },
     micBtn: (recording) => ({
-        width: 76,
-        height: 76,
+        width: 64,
+        height: 64,
         borderRadius: "50%",
         border: "none",
         background: recording
@@ -208,95 +208,80 @@ const styles = {
         alignItems: "center",
         justifyContent: "center",
         boxShadow: recording
-            ? "0 0 0 8px rgba(201, 59, 59, 0.15), 0 8px 24px rgba(201, 59, 59, 0.25)"
-            : "0 8px 20px rgba(46, 90, 68, 0.25)",
+            ? "0 0 0 6px rgba(201, 59, 59, 0.15), 0 6px 18px rgba(201, 59, 59, 0.25)"
+            : "0 6px 16px rgba(46, 90, 68, 0.25)",
         transition: "all 0.3s ease",
         transform: recording ? "scale(1.05)" : "scale(1)",
     }),
     pulseRing: {
         position: "absolute",
-        width: 76,
-        height: 76,
+        width: 64,
+        height: 64,
         borderRadius: "50%",
         border: "2px solid rgba(201, 59, 59, 0.4)",
         animation: "pulse 1.5s ease-out infinite",
     },
     timer: {
-        fontSize: "0.85rem",
+        fontSize: "0.8rem",
         color: "#C93B3B",
         fontWeight: 700,
-        marginTop: 8,
+        marginTop: 6,
         fontVariantNumeric: "tabular-nums",
     },
     primaryBtn: {
         width: "100%",
-        padding: "14px",
+        padding: "12px",
         borderRadius: 8,
         border: "none",
         background: "linear-gradient(135deg, #2E5A44 0%, #1B3B2B 100%)",
         color: "#FFFFFF",
-        fontSize: "0.9rem",
+        fontSize: "0.88rem",
         fontWeight: 600,
         letterSpacing: "0.02em",
         cursor: "pointer",
-        boxShadow: "0 4px 14px rgba(27, 59, 43, 0.18)",
+        boxShadow: "0 4px 12px rgba(27, 59, 43, 0.18)",
         transition: "opacity 0.2s",
     },
     secondaryBtn: {
         width: "100%",
-        padding: "12px",
+        padding: "10px",
         borderRadius: 8,
         border: "1px solid #A8C4B4",
         background: "transparent",
         color: "#2E5A44",
-        fontSize: "0.85rem",
+        fontSize: "0.82rem",
         fontWeight: 600,
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        gap: 8,
-    },
-    transcriptBox: {
-        background: "#F2F7F4",
-        border: "1px solid #D1E0D7",
-        borderRadius: 8,
-        padding: "14px 16px",
-        marginTop: 12,
-        textAlign: "left",
-    },
-    transcriptText: {
-        fontSize: "0.9rem",
-        color: "#1B3B2B",
-        lineHeight: 1.7,
-        margin: 0,
-        fontStyle: "italic",
+        gap: 6,
     },
     success: {
         textAlign: "center",
         padding: "0.5rem 0 0",
     },
     successIcon: {
-        width: 56,
-        height: 56,
+        width: 48,
+        height: 48,
         borderRadius: "50%",
         background: "linear-gradient(135deg, #2E5A44, #1B3B2B)",
         color: "#FFF",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        margin: "0 auto 12px",
-        fontSize: 24,
-        boxShadow: "0 6px 18px rgba(27, 59, 43, 0.2)",
+        margin: "0 auto 10px",
+        fontSize: 20,
+        boxShadow: "0 4px 14px rgba(27, 59, 43, 0.2)",
     },
     errorBox: {
         background: "rgba(201, 59, 59, 0.08)",
         border: "1px solid rgba(201, 59, 59, 0.2)",
         borderRadius: 8,
-        padding: "10px 14px",
-        marginBottom: 14,
+        padding: "8px 12px",
+        marginBottom: 10,
         color: "#C93B3B",
-        fontSize: "0.82rem",
+        fontSize: "0.8rem",
     },
 };
 
@@ -306,7 +291,7 @@ const PulseStyle = () => (
       0% { transform: scale(1); opacity: 1; }
       100% { transform: scale(1.8); opacity: 0; }
     }
-    .btn-close-action:hover {
+    .btn-close-action:hover:not(:disabled) {
       background-color: #059669 !important;
     }
   `}</style>
@@ -360,16 +345,22 @@ export default function ProductFeedbackPage() {
     const [audioUrl, setAudioUrl] = useState(null);
     const [errorMsg, setErrorMsg] = useState("");
 
-    const [loadingTranscript, setLoadingTranscript] = useState(false);
-    const [transcriptText, setTranscriptText] = useState("");
-    const [transcribeChoiceMade, setTranscribeChoiceMade] = useState(false);
-
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
 
     const { formatted: timer, isNearLimit } = useTimer(recording, 120, () => {
         stopRecording();
     });
+
+    // Auto-fade error messages after 3 seconds
+    useEffect(() => {
+        if (errorMsg) {
+            const timer = setTimeout(() => {
+                setErrorMsg("");
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [errorMsg]);
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
@@ -400,11 +391,11 @@ export default function ProductFeedbackPage() {
     }, []);
 
     const handleReturnToSplash = () => {
-        if (window.history.length > 1) {
-            window.history.back();
-        } else {
-            window.close();
-        }
+        if (phase === "submitting") return;
+        
+        // Dynamic link target with URL query ID
+        const redirectUrl = `https://location-map-1.onrender.com/puretrace.html?id=${encodeURIComponent(qrId)}`;
+        window.location.href = redirectUrl;
     };
 
     const isBatchIdValid = batchId.trim() !== "";
@@ -450,7 +441,6 @@ export default function ProductFeedbackPage() {
 
         setPhase("submitting");
         setErrorMsg("");
-        setLoadingTranscript(true);
 
         try {
             const form = new FormData();
@@ -465,42 +455,15 @@ export default function ProductFeedbackPage() {
                 form.append("longitude", location.longitude);
             }
 
-            const resp = await axios.post(`${BASE}/product-feedback/submit${window.location.search}`, form, {
+            await axios.post(`${BASE}/product-feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
                 timeout: 120000,
             });
 
-            const docId = resp.data?.doc_id;
-            const fileId = resp.data?.file_id;
-
             setPhase("done");
-            runBackgroundTranscription(docId, fileId);
-
         } catch (err) {
             setErrorMsg("Submission failed. Please try again.");
             setPhase("recorded");
-            setLoadingTranscript(false);
-        }
-    };
-
-    const runBackgroundTranscription = async (docId, fileId) => {
-        try {
-            const form = new FormData();
-            form.append("audio", audioBlob, "recording.webm");
-            form.append("doc_id", docId || "");
-            form.append("file_id", fileId || "");
-            form.append("description", description);
-
-            const resp = await axios.post(`${BASE}/api/product-feedback/transcribe-lazy${window.location.search}`, form, {
-                headers: { "Content-Type": "multipart/form-data" },
-                timeout: 180000,
-            });
-
-            setTranscriptText(resp.data?.transcript || "No readable audio transcript available.");
-        } catch (err) {
-            setErrorMsg("Could not fetch transcript at this time.");
-        } finally {
-            setLoadingTranscript(false);
         }
     };
 
@@ -509,10 +472,6 @@ export default function ProductFeedbackPage() {
         setAudioUrl(null);
         setErrorMsg("");
         setPhase("form");
-    };
-
-    const handleRequestTranscript = () => {
-        setTranscribeChoiceMade(true);
     };
 
     if (phase === "done") {
@@ -537,67 +496,34 @@ export default function ProductFeedbackPage() {
 
                     <div style={styles.success}>
                         <div style={styles.successIcon}>✓</div>
-                        <h2 style={{ ...styles.title, textAlign: "center", marginBottom: 8 }}>Thank You</h2>
-                        <p style={{ color: "#527060", fontSize: "0.9rem", lineHeight: 1.6, marginBottom: 18, textAlign: "center" }}>
+                        <h2 style={{ ...styles.title, textAlign: "center", marginBottom: 6 }}>Thank You</h2>
+                        <p style={{ color: "#527060", fontSize: "0.85rem", lineHeight: 1.5, marginBottom: 14, textAlign: "center" }}>
                             Your feedback and rating have been submitted successfully.
                         </p>
 
                         <div style={{
                             background: "#F2F7F4",
                             border: "1px solid #D1E0D7",
-                            borderRadius: 10,
-                            padding: "14px 16px",
+                            borderRadius: 8,
+                            padding: "10px 12px",
                             textAlign: "center",
-                            marginBottom: 20,
+                            marginBottom: 16,
                         }}>
-                            <div style={{ fontSize: "0.85rem", color: "#1B3B2B", display: "flex", flexDirection: "column", gap: 4 }}>
+                            <div style={{ fontSize: "0.82rem", color: "#1B3B2B", display: "flex", flexDirection: "column", gap: 4 }}>
                                 <div><strong>Batch ID:</strong> {batchId || "N/A"}</div>
                                 {rating > 0 && <div><strong>Rating Given:</strong> {rating} / 5 Stars</div>}
                                 {clientName && <div><strong>Brand:</strong> {clientName}</div>}
-                                <div style={{ fontSize: "0.78rem", color: "#527060", marginTop: 4 }}>
+                                <div style={{ fontSize: "0.75rem", color: "#527060", marginTop: 2 }}>
                                     <span>{new Date().toLocaleDateString("en-US", { dateStyle: "long" })}</span>
                                 </div>
                             </div>
                         </div>
 
-                        {!transcribeChoiceMade ? (
-                            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #D1E0D7" }}>
-                                <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "#1B3B2B", marginBottom: 14 }}>
-                                    Would you like to view the transcript of your voice feedback?
-                                </p>
-                                <div style={{ display: "flex", gap: 12 }}>
-                                    <button onClick={handleRequestTranscript} style={styles.primaryBtn}>
-                                        Yes, View Transcript
-                                    </button>
-                                    <button onClick={handleReturnToSplash} style={styles.secondaryBtn}>
-                                        Close Screen
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div style={{ marginTop: 16 }}>
-                                {loadingTranscript && (
-                                    <p style={{ fontSize: "0.85rem", color: "#527060" }}>
-                                        Generating audio transcript...
-                                    </p>
-                                )}
-
-                                {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
-
-                                {!loadingTranscript && transcriptText && (
-                                    <div style={styles.transcriptBox}>
-                                        <label style={styles.label}>Your Audio Transcript</label>
-                                        <p style={styles.transcriptText}>"{transcriptText}"</p>
-                                    </div>
-                                )}
-
-                                <div style={{ marginTop: 16 }}>
-                                    <button onClick={handleReturnToSplash} style={styles.secondaryBtn}>
-                                        Close Screen
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        <div style={{ marginTop: 12 }}>
+                            <button onClick={handleReturnToSplash} style={styles.secondaryBtn}>
+                                Close Screen
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -617,7 +543,12 @@ export default function ProductFeedbackPage() {
                     </div>
                     <button
                         className="btn-close-action"
-                        style={styles.closeBtn}
+                        style={{
+                            ...styles.closeBtn,
+                            opacity: phase === "submitting" ? 0.5 : 1,
+                            cursor: phase === "submitting" ? "not-allowed" : "pointer",
+                        }}
+                        disabled={phase === "submitting"}
                         onClick={handleReturnToSplash}
                     >
                         Close
@@ -633,7 +564,7 @@ export default function ProductFeedbackPage() {
                             <p style={styles.consentText}>
                                 By proceeding, you consent to recording your voice to give product feedback:
                             </p>
-                            <ul style={{ ...styles.consentText, paddingLeft: 16, margin: "8px 0 0" }}>
+                            <ul style={{ ...styles.consentText, paddingLeft: 14, margin: "6px 0 0" }}>
                                 <li>Processed for quality control and feedback analysis</li>
                                 <li>Stored securely and handled confidentially</li>
                             </ul>
@@ -648,7 +579,7 @@ export default function ProductFeedbackPage() {
                                 }}>
                                     {consentGiven && <CheckIcon />}
                                 </div>
-                                <span style={{ fontSize: "0.8rem", color: "#385445", lineHeight: 1.5 }}>
+                                <span style={{ fontSize: "0.78rem", color: "#385445", lineHeight: 1.4 }}>
                                     I consent to voice recording for product evaluation.
                                 </span>
                             </label>
@@ -670,27 +601,32 @@ export default function ProductFeedbackPage() {
 
                 {phase !== "privacy" && (
                     <>
+                        {/* Compact Batch ID Section */}
                         <div style={{
-                            marginBottom: "1.25rem",
+                            marginBottom: "0.5rem",
                             background: "#F2F7F4",
-                            padding: "14px 16px",
-                            borderRadius: 10,
+                            padding: "4px 8px",
+                            borderRadius: 6,
                             border: "1px solid #D1E0D7",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "6px"
                         }}>
-                            <label style={{ ...styles.label, marginBottom: 6 }}>
-                                Batch ID
+                            <label style={{ ...styles.label, marginBottom: 0, minWidth: "fit-content" }}>
+                                Batch ID:
                             </label>
                             <div style={styles.batchDisplay}>
-                                {batchId ? batchId : <span style={{ color: "#C93B3B", fontWeight: 400 }}>No Batch ID Provided in URL</span>}
+                                {batchId ? batchId : <span style={{ color: "#C93B3B", fontWeight: 400 }}>No Batch ID Provided</span>}
                             </div>
                         </div>
 
                         {phase === "form" && (
-                            <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
-                                <label style={{ ...styles.label, textAlign: "center", marginBottom: 6 }}>
+                            <div style={{ textAlign: "center", marginBottom: "0.85rem" }}>
+                                <label style={{ ...styles.label, textAlign: "center", marginBottom: 4 }}>
                                     Record Voice Feedback
                                 </label>
-                                <p style={{ color: "#527060", fontSize: "0.8rem", marginBottom: 14 }}>
+                                <p style={{ color: "#527060", fontSize: "0.78rem", marginBottom: 10 }}>
                                     Tap the mic to record your experience with this batch
                                 </p>
                                 <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
@@ -702,11 +638,11 @@ export default function ProductFeedbackPage() {
                         )}
 
                         {phase === "recording" && (
-                            <div style={{ textAlign: "center", padding: "0.5rem 0", marginBottom: "1.25rem" }}>
-                                <p style={{ color: "#C93B3B", fontSize: "0.85rem", marginBottom: 14, fontWeight: 600 }}>
+                            <div style={{ textAlign: "center", padding: "0.25rem 0", marginBottom: "0.85rem" }}>
+                                <p style={{ color: "#C93B3B", fontSize: "0.8rem", marginBottom: 10, fontWeight: 600 }}>
                                     🔴 Recording...
                                 </p>
-                                <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                                <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
                                     <div style={styles.pulseRing} />
                                     <button onClick={stopRecording} style={styles.micBtn(true)}>
                                         <StopIcon />
@@ -719,9 +655,9 @@ export default function ProductFeedbackPage() {
                         )}
 
                         {phase === "recorded" && audioUrl && (
-                            <div style={{ marginBottom: "1.25rem", textAlign: "center" }}>
-                                <label style={{ ...styles.label, marginBottom: 8 }}>Listen Back To Recording</label>
-                                <audio src={audioUrl} controls style={{ width: "100%", borderRadius: 8, marginBottom: 10 }} />
+                            <div style={{ marginBottom: "0.85rem", textAlign: "center" }}>
+                                <label style={{ ...styles.label, marginBottom: 6 }}>Listen Back To Recording</label>
+                                <audio src={audioUrl} controls style={{ width: "100%", borderRadius: 6, marginBottom: 8, height: "36px" }} />
                                 <button onClick={handleReRecord} style={styles.secondaryBtn}>
                                     <RefreshIcon /> Re-record Audio
                                 </button>
@@ -729,7 +665,7 @@ export default function ProductFeedbackPage() {
                         )}
 
                         {/* Additional Notes */}
-                        <div style={{ marginBottom: "1.25rem" }}>
+                        <div style={{ marginBottom: "0.85rem" }}>
                             <label style={styles.label}>
                                 Additional Notes <span style={{ color: "#527060", fontWeight: 400 }}>(optional)</span>
                             </label>
@@ -744,7 +680,7 @@ export default function ProductFeedbackPage() {
 
                         {/* 5-Star Rating Section */}
                         <div style={styles.ratingContainer}>
-                            <label style={{ ...styles.label, marginBottom: 4 }}>
+                            <label style={{ ...styles.label, marginBottom: 2 }}>
                                 Rate Product Experience
                             </label>
                             <div style={styles.starsWrapper}>
@@ -758,7 +694,7 @@ export default function ProductFeedbackPage() {
                                     />
                                 ))}
                             </div>
-                            <span style={{ fontSize: "0.8rem", color: "#527060", marginTop: 6, fontWeight: 600 }}>
+                            <span style={{ fontSize: "0.75rem", color: "#527060", marginTop: 4, fontWeight: 600 }}>
                                 {hoverRating || rating ? `${hoverRating || rating} out of 5 Stars` : "Tap stars to rate"}
                             </span>
                         </div>
@@ -772,12 +708,12 @@ export default function ProductFeedbackPage() {
                 )}
 
                 {phase === "submitting" && (
-                    <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
-                        <p style={{ color: "#527060", fontSize: "0.88rem" }}>Submitting feedback...</p>
+                    <div style={{ textAlign: "center", padding: "1rem 0" }}>
+                        <p style={{ color: "#527060", fontSize: "0.85rem" }}>Submitting feedback...</p>
                     </div>
                 )}
 
-                <p style={{ textAlign: "center", color: "#527060", fontSize: "0.72rem", marginTop: "1.25rem", marginBottom: 0 }}>
+                <p style={{ textAlign: "center", color: "#527060", fontSize: "0.7rem", marginTop: "0.85rem", marginBottom: 0 }}>
                     Your privacy is protected · Data processed securely
                 </p>
 

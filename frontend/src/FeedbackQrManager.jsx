@@ -67,7 +67,7 @@ export default function FeedbackQrManager() {
   const fetchClients = async (selectClientName = null) => {
     setLoadingClients(true);
     try {
-      const res = await axios.get('/api/feedback-qr/clients');
+      const res = await axios.get('/feedback-qr/clients');
       const list = res.data.clients || [];
       setClients(list);
 

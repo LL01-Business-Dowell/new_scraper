@@ -12,8 +12,8 @@ try:
 except (ImportError, AttributeError):
     pass
 
-from fastapi import FastAPI, File, UploadFile, Form
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, File, UploadFile, Form, Request
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 import pandas as pd
 import time
 import threading
@@ -35,21 +35,14 @@ import os
 import requests
 import json
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 import traceback
 import logging
 import datetime
 import random
-import requests
 from .utils import calculate_boundary_points
 import csv
 import uuid
-import logging
-from threading import Thread
-from fastapi import Form
-from fastapi.responses import FileResponse
 import io
-
 
 from .gemini_routes import router as gemini_router
 from .raw_gemini_routes import router as raw_gemini_router
@@ -78,7 +71,7 @@ def log_message(message: str) -> None:
     """Timestamped log — writes to both stdout and the module logger."""
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
     entry = f"[{timestamp}] {message}"
-    print(entry)
+    print(entry, flush=True)
     logger.info(entry)
 
 
@@ -91,11 +84,25 @@ app.add_middleware(
     allow_origins=[
         "https://reviewanalysis.uxlivinglab.org",
         "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ─── Request Logging Middleware ──────────────────────────────────────────────
+@app.middleware("http")
+async def log_incoming_requests(request: Request, call_next):
+    print(f"========== [FASTAPI INCOMING] {request.method} {request.url.path} ==========", flush=True)
+    response = await call_next(request)
+    print(f"========== [FASTAPI OUTGOING] {request.url.path} | Status: {response.status_code} ==========", flush=True)
+    return response
+
+
+# ─── Router Registrations ───────────────────────────────────────────────────
+
 app.include_router(gemini_router)
 app.include_router(raw_gemini_router)
 app.include_router(search_router)
@@ -107,8 +114,13 @@ app.include_router(review_analysis_router, prefix="/api/review-analysis")
 app.include_router(hotel_sentiment_router)
 app.include_router(feedback_router, prefix="/api/feedback")
 app.include_router(qr_router)
-# app.include_router(scan_router)
-app.include_router(scan_router, prefix="/api")
+
+# Mount scan_router with prefix="/api". 
+# Note: Since scan_routes.py defines router = APIRouter(prefix="/scans"), 
+# the resulting endpoint path is /api/scans/last24hours
+# app.include_router(scan_router, prefix="/api")
+app.include_router(scan_router)
+
 app.include_router(product_feedback_router, prefix="/api/product-feedback", tags=["Product Feedback"])
 
 tasks = {}
@@ -155,7 +167,7 @@ def _post_to_crud(path: str, document: dict) -> bool:
 def save_coordinates_to_crud(
     task_id, keyword, mode, centers, bounds, tiles, target_coords, email, radius_km
 ):
-    now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z"
     document = {
         "sessionId": task_id,
         "createdAt": now_iso,
@@ -184,7 +196,7 @@ def save_coordinates_to_crud(
 
 
 def save_results_to_crud(task_id, keyword, results, task_snapshot):
-    now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z"
     urls = [r.get("URL") for r in results if r.get("URL")]
     metadata = {
         "mode": "location" if task_snapshot.get("center") else "csv",
@@ -321,7 +333,7 @@ def build_target_coordinates(centers: list, relative_tiles: list) -> list:
     ]
 
 
-# ─── HTTP endpoints (non-CSV-processing) ─────────────────────────────────────
+# ─── HTTP endpoints ──────────────────────────────────────────────────────────
 
 
 @app.get("/countries")
