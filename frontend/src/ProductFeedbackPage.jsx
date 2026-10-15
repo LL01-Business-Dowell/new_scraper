@@ -6,7 +6,7 @@ const BASE = (API_BASE_URL || "").replace(/\/+$/, "");
 
 const MicIcon = () => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 6 0V4a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
         <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
         <line x1="12" y1="19" x2="12" y2="23" />
         <line x1="8" y1="23" x2="16" y2="23" />
@@ -59,7 +59,7 @@ const styles = {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "flex-start",
-        padding: "1.5rem 1rem",
+        padding: "1rem 0.75rem",
         fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
     },
     card: {
@@ -67,7 +67,7 @@ const styles = {
         backdropFilter: "blur(12px)",
         border: "1px solid #D1E0D7",
         borderRadius: 16,
-        padding: "1.25rem 1.5rem 1.5rem",
+        padding: "1rem 1.25rem 1.25rem",
         width: "100%",
         maxWidth: 440,
         boxShadow: "0 12px 32px rgba(27, 59, 43, 0.06)",
@@ -77,67 +77,79 @@ const styles = {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: "1rem",
-        paddingBottom: "0.75rem",
+        marginBottom: "0.75rem",
+        paddingBottom: "0.5rem",
         borderBottom: "1px solid #D1E0D7",
     },
     closeBtn: {
         backgroundColor: "#10b981",
         color: "#ffffff",
         border: "none",
-        padding: "0.4rem 0.9rem",
+        padding: "0.35rem 0.8rem",
         fontWeight: "700",
         borderRadius: "8px",
         cursor: "pointer",
-        fontSize: "0.82rem",
+        fontSize: "0.8rem",
         transition: "background-color 0.2s, transform 0.1s, opacity 0.2s",
         display: "inline-flex",
         alignItems: "center",
         gap: "4px",
     },
     title: {
-        fontSize: "1.35rem",
+        fontSize: "1.25rem",
         fontWeight: 700,
         color: "#1B3B2B",
         margin: 0,
         letterSpacing: "-0.01em",
     },
     subtitle: {
-        fontSize: "0.78rem",
+        fontSize: "0.75rem",
         color: "#527060",
         margin: 0,
     },
     label: {
         display: "block",
-        fontSize: "0.72rem",
+        fontSize: "0.68rem",
         fontWeight: 700,
         color: "#2E5A44",
         textTransform: "uppercase",
-        letterSpacing: "0.06em",
-        marginBottom: 4,
+        letterSpacing: "0.05em",
+        marginBottom: 3,
     },
     batchDisplay: {
-        fontSize: "0.78rem",
+        fontSize: "0.75rem",
         fontWeight: 600,
         color: "#1B3B2B",
         background: "#EAF2EC",
-        padding: "3px 8px",
+        padding: "2px 6px",
         borderRadius: 4,
         border: "1px solid #C2D6CA",
         wordBreak: "break-all",
     },
-    textarea: {
+    inputCompact: {
         width: "100%",
-        padding: "8px 10px",
+        padding: "4px 8px",
         borderRadius: 6,
         background: "#FAFCFA",
         border: "1px solid #C2D6CA",
         color: "#1B3B2B",
-        fontSize: "0.85rem",
+        fontSize: "0.78rem",
+        outline: "none",
+        boxSizing: "border-box",
+        height: "30px",
+    },
+    textarea: {
+        width: "100%",
+        padding: "6px 8px",
+        borderRadius: 6,
+        background: "#FAFCFA",
+        border: "1px solid #C2D6CA",
+        color: "#1B3B2B",
+        fontSize: "0.8rem",
         outline: "none",
         boxSizing: "border-box",
         resize: "vertical",
-        minHeight: 60,
+        minHeight: 48,
     },
     ratingContainer: {
         display: "flex",
@@ -147,8 +159,8 @@ const styles = {
         background: "#F2F7F4",
         border: "1px solid #D1E0D7",
         borderRadius: 8,
-        padding: "10px",
-        marginBottom: "1rem",
+        padding: "8px",
+        marginBottom: "0.75rem",
     },
     starsWrapper: {
         display: "flex",
@@ -159,28 +171,28 @@ const styles = {
         background: "#F2F7F4",
         border: "1px solid #D1E0D7",
         borderRadius: 12,
-        padding: "14px",
-        marginBottom: "1rem",
+        padding: "12px",
+        marginBottom: "0.85rem",
     },
     consentTitle: {
-        fontSize: "0.78rem",
+        fontSize: "0.75rem",
         fontWeight: 700,
         color: "#2E5A44",
         textTransform: "uppercase",
-        letterSpacing: "0.06em",
-        marginBottom: 6,
+        letterSpacing: "0.05em",
+        marginBottom: 4,
     },
     consentText: {
-        fontSize: "0.8rem",
+        fontSize: "0.78rem",
         color: "#385445",
-        lineHeight: 1.5,
+        lineHeight: 1.4,
         margin: 0,
     },
     consentCheck: {
         display: "flex",
         alignItems: "flex-start",
-        gap: 10,
-        marginTop: 10,
+        gap: 8,
+        marginTop: 8,
         cursor: "pointer",
     },
     checkbox: {
@@ -195,8 +207,8 @@ const styles = {
         justifyContent: "center",
     },
     micBtn: (recording) => ({
-        width: 64,
-        height: 64,
+        width: 56,
+        height: 56,
         borderRadius: "50%",
         border: "none",
         background: recording
@@ -215,27 +227,27 @@ const styles = {
     }),
     pulseRing: {
         position: "absolute",
-        width: 64,
-        height: 64,
+        width: 56,
+        height: 56,
         borderRadius: "50%",
         border: "2px solid rgba(201, 59, 59, 0.4)",
         animation: "pulse 1.5s ease-out infinite",
     },
     timer: {
-        fontSize: "0.8rem",
+        fontSize: "0.78rem",
         color: "#C93B3B",
         fontWeight: 700,
-        marginTop: 6,
+        marginTop: 4,
         fontVariantNumeric: "tabular-nums",
     },
     primaryBtn: {
         width: "100%",
-        padding: "12px",
+        padding: "10px",
         borderRadius: 8,
         border: "none",
         background: "linear-gradient(135deg, #2E5A44 0%, #1B3B2B 100%)",
         color: "#FFFFFF",
-        fontSize: "0.88rem",
+        fontSize: "0.85rem",
         fontWeight: 600,
         letterSpacing: "0.02em",
         cursor: "pointer",
@@ -244,12 +256,12 @@ const styles = {
     },
     secondaryBtn: {
         width: "100%",
-        padding: "10px",
+        padding: "8px",
         borderRadius: 8,
         border: "1px solid #A8C4B4",
         background: "transparent",
         color: "#2E5A44",
-        fontSize: "0.82rem",
+        fontSize: "0.8rem",
         fontWeight: 600,
         cursor: "pointer",
         display: "flex",
@@ -259,29 +271,29 @@ const styles = {
     },
     success: {
         textAlign: "center",
-        padding: "0.5rem 0 0",
+        padding: "0.25rem 0 0",
     },
     successIcon: {
-        width: 48,
-        height: 48,
+        width: 44,
+        height: 44,
         borderRadius: "50%",
         background: "linear-gradient(135deg, #2E5A44, #1B3B2B)",
         color: "#FFF",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        margin: "0 auto 10px",
-        fontSize: 20,
+        margin: "0 auto 8px",
+        fontSize: 18,
         boxShadow: "0 4px 14px rgba(27, 59, 43, 0.2)",
     },
     errorBox: {
         background: "rgba(201, 59, 59, 0.08)",
         border: "1px solid rgba(201, 59, 59, 0.2)",
         borderRadius: 8,
-        padding: "8px 12px",
-        marginBottom: 10,
+        padding: "6px 10px",
+        marginBottom: 8,
         color: "#C93B3B",
-        fontSize: "0.8rem",
+        fontSize: "0.78rem",
     },
 };
 
@@ -334,6 +346,8 @@ export default function ProductFeedbackPage() {
     const [location, setLocation] = useState({ latitude: null, longitude: null });
 
     const [batchId, setBatchId] = useState("");
+    const [email, setEmail] = useState("");
+    const [phone, setPhone] = useState("");
     const [description, setDescription] = useState("");
     const [rating, setRating] = useState(0);
     const [hoverRating, setHoverRating] = useState(0);
@@ -392,8 +406,6 @@ export default function ProductFeedbackPage() {
 
     const handleReturnToSplash = () => {
         if (phase === "submitting") return;
-        
-        // Dynamic link target with URL query ID
         const redirectUrl = `https://location-map-1.onrender.com/puretrace.html?id=${encodeURIComponent(qrId)}`;
         window.location.href = redirectUrl;
     };
@@ -446,6 +458,8 @@ export default function ProductFeedbackPage() {
             const form = new FormData();
             form.append("audio", audioBlob, "recording.webm");
             form.append("batch_id", batchId);
+            form.append("email", email);
+            form.append("phone", phone);
             form.append("description", description);
             form.append("rating", rating);
             form.append("client", clientName);
@@ -479,7 +493,7 @@ export default function ProductFeedbackPage() {
             <div style={styles.page}>
                 <PulseStyle />
                 <div style={styles.card}>
-                    {/* Header Top Bar with Close Button */}
+                    {/* Header Top Bar */}
                     <div style={styles.topBar}>
                         <div>
                             <h1 style={styles.title}>Product Feedback</h1>
@@ -496,8 +510,8 @@ export default function ProductFeedbackPage() {
 
                     <div style={styles.success}>
                         <div style={styles.successIcon}>✓</div>
-                        <h2 style={{ ...styles.title, textAlign: "center", marginBottom: 6 }}>Thank You</h2>
-                        <p style={{ color: "#527060", fontSize: "0.85rem", lineHeight: 1.5, marginBottom: 14, textAlign: "center" }}>
+                        <h2 style={{ ...styles.title, textAlign: "center", marginBottom: 4 }}>Thank You</h2>
+                        <p style={{ color: "#527060", fontSize: "0.8rem", lineHeight: 1.4, marginBottom: 12, textAlign: "center" }}>
                             Your feedback and rating have been submitted successfully.
                         </p>
 
@@ -505,21 +519,23 @@ export default function ProductFeedbackPage() {
                             background: "#F2F7F4",
                             border: "1px solid #D1E0D7",
                             borderRadius: 8,
-                            padding: "10px 12px",
+                            padding: "8px 10px",
                             textAlign: "center",
-                            marginBottom: 16,
+                            marginBottom: 12,
                         }}>
-                            <div style={{ fontSize: "0.82rem", color: "#1B3B2B", display: "flex", flexDirection: "column", gap: 4 }}>
+                            <div style={{ fontSize: "0.78rem", color: "#1B3B2B", display: "flex", flexDirection: "column", gap: 3 }}>
                                 <div><strong>Batch ID:</strong> {batchId || "N/A"}</div>
+                                {email && <div><strong>Email:</strong> {email}</div>}
+                                {phone && <div><strong>Phone:</strong> {phone}</div>}
                                 {rating > 0 && <div><strong>Rating Given:</strong> {rating} / 5 Stars</div>}
                                 {clientName && <div><strong>Brand:</strong> {clientName}</div>}
-                                <div style={{ fontSize: "0.75rem", color: "#527060", marginTop: 2 }}>
+                                <div style={{ fontSize: "0.72rem", color: "#527060", marginTop: 2 }}>
                                     <span>{new Date().toLocaleDateString("en-US", { dateStyle: "long" })}</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div style={{ marginTop: 12 }}>
+                        <div style={{ marginTop: 8 }}>
                             <button onClick={handleReturnToSplash} style={styles.secondaryBtn}>
                                 Close Screen
                             </button>
@@ -535,7 +551,7 @@ export default function ProductFeedbackPage() {
             <PulseStyle />
 
             <div style={styles.card}>
-                {/* Header Top Bar with Close Button */}
+                {/* Header Top Bar */}
                 <div style={styles.topBar}>
                     <div>
                         <h1 style={styles.title}>Product Feedback</h1>
@@ -564,7 +580,7 @@ export default function ProductFeedbackPage() {
                             <p style={styles.consentText}>
                                 By proceeding, you consent to recording your voice to give product feedback:
                             </p>
-                            <ul style={{ ...styles.consentText, paddingLeft: 14, margin: "6px 0 0" }}>
+                            <ul style={{ ...styles.consentText, paddingLeft: 14, margin: "4px 0 0" }}>
                                 <li>Processed for quality control and feedback analysis</li>
                                 <li>Stored securely and handled confidentially</li>
                             </ul>
@@ -579,7 +595,7 @@ export default function ProductFeedbackPage() {
                                 }}>
                                     {consentGiven && <CheckIcon />}
                                 </div>
-                                <span style={{ fontSize: "0.78rem", color: "#385445", lineHeight: 1.4 }}>
+                                <span style={{ fontSize: "0.75rem", color: "#385445", lineHeight: 1.3 }}>
                                     I consent to voice recording for product evaluation.
                                 </span>
                             </label>
@@ -601,9 +617,9 @@ export default function ProductFeedbackPage() {
 
                 {phase !== "privacy" && (
                     <>
-                        {/* Compact Batch ID Section */}
+                        {/* Compact Batch ID Display */}
                         <div style={{
-                            marginBottom: "0.5rem",
+                            marginBottom: "0.4rem",
                             background: "#F2F7F4",
                             padding: "4px 8px",
                             borderRadius: 6,
@@ -621,12 +637,47 @@ export default function ProductFeedbackPage() {
                             </div>
                         </div>
 
+                        {/* Ultra-Compact Optional Email & Phone Row */}
+                        <div style={{
+                            display: "flex",
+                            gap: "8px",
+                            marginBottom: "0.5rem"
+                        }}>
+                            <div style={{ flex: 1 }}>
+                                <label style={styles.label}>
+                                    Email <span style={{ color: "#527060", fontWeight: 400 }}>(optional)</span>
+                                </label>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    placeholder="you@example.com"
+                                    disabled={recording || phase === "submitting"}
+                                    style={styles.inputCompact}
+                                />
+                            </div>
+
+                            <div style={{ flex: 1 }}>
+                                <label style={styles.label}>
+                                    Phone <span style={{ color: "#527060", fontWeight: 400 }}>(optional)</span>
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={phone}
+                                    onChange={e => setPhone(e.target.value)}
+                                    placeholder="+1 234 567 890"
+                                    disabled={recording || phase === "submitting"}
+                                    style={styles.inputCompact}
+                                />
+                            </div>
+                        </div>
+
                         {phase === "form" && (
-                            <div style={{ textAlign: "center", marginBottom: "0.85rem" }}>
-                                <label style={{ ...styles.label, textAlign: "center", marginBottom: 4 }}>
+                            <div style={{ textAlign: "center", marginBottom: "0.6rem" }}>
+                                <label style={{ ...styles.label, textAlign: "center", marginBottom: 2 }}>
                                     Record Voice Feedback
                                 </label>
-                                <p style={{ color: "#527060", fontSize: "0.78rem", marginBottom: 10 }}>
+                                <p style={{ color: "#527060", fontSize: "0.75rem", marginBottom: 8 }}>
                                     Tap the mic to record your experience with this batch
                                 </p>
                                 <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
@@ -638,11 +689,11 @@ export default function ProductFeedbackPage() {
                         )}
 
                         {phase === "recording" && (
-                            <div style={{ textAlign: "center", padding: "0.25rem 0", marginBottom: "0.85rem" }}>
-                                <p style={{ color: "#C93B3B", fontSize: "0.8rem", marginBottom: 10, fontWeight: 600 }}>
+                            <div style={{ textAlign: "center", padding: "0.2rem 0", marginBottom: "0.6rem" }}>
+                                <p style={{ color: "#C93B3B", fontSize: "0.78rem", marginBottom: 8, fontWeight: 600 }}>
                                     🔴 Recording...
                                 </p>
-                                <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                                <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
                                     <div style={styles.pulseRing} />
                                     <button onClick={stopRecording} style={styles.micBtn(true)}>
                                         <StopIcon />
@@ -655,9 +706,9 @@ export default function ProductFeedbackPage() {
                         )}
 
                         {phase === "recorded" && audioUrl && (
-                            <div style={{ marginBottom: "0.85rem", textAlign: "center" }}>
-                                <label style={{ ...styles.label, marginBottom: 6 }}>Listen Back To Recording</label>
-                                <audio src={audioUrl} controls style={{ width: "100%", borderRadius: 6, marginBottom: 8, height: "36px" }} />
+                            <div style={{ marginBottom: "0.6rem", textAlign: "center" }}>
+                                <label style={{ ...styles.label, marginBottom: 4 }}>Listen Back To Recording</label>
+                                <audio src={audioUrl} controls style={{ width: "100%", borderRadius: 6, marginBottom: 6, height: "32px" }} />
                                 <button onClick={handleReRecord} style={styles.secondaryBtn}>
                                     <RefreshIcon /> Re-record Audio
                                 </button>
@@ -665,7 +716,7 @@ export default function ProductFeedbackPage() {
                         )}
 
                         {/* Additional Notes */}
-                        <div style={{ marginBottom: "0.85rem" }}>
+                        <div style={{ marginBottom: "0.6rem" }}>
                             <label style={styles.label}>
                                 Additional Notes <span style={{ color: "#527060", fontWeight: 400 }}>(optional)</span>
                             </label>
@@ -694,7 +745,7 @@ export default function ProductFeedbackPage() {
                                     />
                                 ))}
                             </div>
-                            <span style={{ fontSize: "0.75rem", color: "#527060", marginTop: 4, fontWeight: 600 }}>
+                            <span style={{ fontSize: "0.72rem", color: "#527060", marginTop: 2, fontWeight: 600 }}>
                                 {hoverRating || rating ? `${hoverRating || rating} out of 5 Stars` : "Tap stars to rate"}
                             </span>
                         </div>
@@ -708,12 +759,12 @@ export default function ProductFeedbackPage() {
                 )}
 
                 {phase === "submitting" && (
-                    <div style={{ textAlign: "center", padding: "1rem 0" }}>
-                        <p style={{ color: "#527060", fontSize: "0.85rem" }}>Submitting feedback...</p>
+                    <div style={{ textAlign: "center", padding: "0.75rem 0" }}>
+                        <p style={{ color: "#527060", fontSize: "0.8rem" }}>Submitting feedback...</p>
                     </div>
                 )}
 
-                <p style={{ textAlign: "center", color: "#527060", fontSize: "0.7rem", marginTop: "0.85rem", marginBottom: 0 }}>
+                <p style={{ textAlign: "center", color: "#527060", fontSize: "0.68rem", marginTop: "0.6rem", marginBottom: 0 }}>
                     Your privacy is protected · Data processed securely
                 </p>
 

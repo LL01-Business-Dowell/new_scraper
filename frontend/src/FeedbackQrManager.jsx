@@ -87,7 +87,7 @@ export default function FeedbackQrManager() {
     setLoadingQrs(true);
     setErrorMsg('');
     try {
-      const res = await axios.get(`/api/feedback-qr/qrs/${clientName}`);
+      const res = await axios.get(`/feedback-qr/qrs/${clientName}`);
       const rawQrs = res.data.qr_codes || [];
 
       // Generate high-res QR Code image data URLs for display & export
@@ -118,7 +118,7 @@ export default function FeedbackQrManager() {
 
     setAddingClient(true);
     try {
-      const res = await axios.post('/api/feedback-qr/add-client', {
+      const res = await axios.post('/feedback-qr/add-client', {
         client_name: newClientName
       });
 
@@ -159,7 +159,7 @@ export default function FeedbackQrManager() {
         user_id: formData.user_id
       };
 
-      const res = await axios.post('/api/feedback-qr/create', payload);
+      const res = await axios.post('/feedback-qr/create', payload);
       const newRecord = res.data.record;
 
       const qrDataUrl = await QRCode.toDataURL(newRecord.target_url, { width: 300, margin: 1 });

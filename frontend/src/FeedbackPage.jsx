@@ -441,7 +441,7 @@ export default function FeedbackPage() {
                 form.append("longitude", location.longitude);
             }
 
-            const resp = await axios.post(`${BASE}/api/feedback/submit${window.location.search}`, form, {
+            const resp = await axios.post(`${BASE}/feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
                 timeout: 120000,
             });
@@ -467,7 +467,7 @@ export default function FeedbackPage() {
             form.append("file_id", fileId || "");
             form.append("description", description);
 
-            const resp = await axios.post(`${BASE}/api/feedback/transcribe-lazy${window.location.search}`, form, {
+            const resp = await axios.post(`${BASE}/feedback/transcribe-lazy${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
                 timeout: 180000,
             });
