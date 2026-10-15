@@ -68,9 +68,9 @@ async def get_recent_scans(
     }
 
     # Log outbound request payload details
-    logger.info(f"Outbound Request URL: {DATACUBE_URL}")
-    logger.info(f"Outbound Query Params: {json.dumps(params, indent=2)}")
-    logger.info(f"Outbound Headers: {{'Authorization': 'Api-Key [REDACTED]'}}")
+    # logger.info(f"Outbound Request URL: {DATACUBE_URL}")
+    # logger.info(f"Outbound Query Params: {json.dumps(params, indent=2)}")
+    # logger.info(f"Outbound Headers: {{'Authorization': 'Api-Key [REDACTED]'}}")
 
     docs = []
     try:
@@ -89,17 +89,17 @@ async def get_recent_scans(
             # Log DataCube response structure and raw item count
             if isinstance(json_data, dict):
                 docs = json_data.get("data", [])
-                logger.info(f"DataCube Response JSON (dict keys): {list(json_data.keys())}")
-                logger.info(f"DataCube returned {len(docs)} documents in 'data' field.")
+                # logger.info(f"DataCube Response JSON (dict keys): {list(json_data.keys())}")
+                # logger.info(f"DataCube returned {len(docs)} documents in 'data' field.")
             elif isinstance(json_data, list):
                 docs = json_data
-                logger.info(f"DataCube returned {len(docs)} documents as a direct list.")
+                # logger.info(f"DataCube returned {len(docs)} documents as a direct list.")
             else:
                 logger.warning(f"Unexpected DataCube response structure: {type(json_data)}")
 
             # Log sample raw document if available
-            if docs:
-                logger.info(f"Sample raw document from DataCube: {json.dumps(docs[0], indent=2)}")
+            # if docs:
+            #     logger.info(f"Sample raw document from DataCube: {json.dumps(docs[0], indent=2)}")
 
     except httpx.ReadTimeout:
         logger.error("DataCube request timed out after 30 seconds.")

@@ -233,22 +233,6 @@ const styles = {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         transition: "background 0.2s, color 0.2s",
     },
-    transcriptBox: {
-        background: "#FAF6F0",
-        border: "1px solid #E8DCBE",
-        borderRadius: 8, 
-        padding: "14px 16px", 
-        marginTop: 12, 
-        textAlign: "left",
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
-    },
-    transcriptText: {
-        fontSize: "0.9rem", 
-        color: "#2C2420", 
-        lineHeight: 1.7, 
-        margin: 0,
-        fontStyle: "italic",
-    },
     success: {
         textAlign: "center", 
         padding: "1rem 0",
@@ -327,6 +311,7 @@ export default function FeedbackPage() {
     const [clientName, setClientName] = useState("");
     const [qrId, setQrId] = useState("");
     const [qrName, setQrName] = useState("");
+    const [location, setLocation] = useState({ latitude: null, longitude: null });
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
@@ -344,7 +329,7 @@ export default function FeedbackPage() {
             setClientName(idParam.split("-")[0]);
         }
 
-        // Fetch current location of user
+        // Fetch user location
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -370,12 +355,7 @@ export default function FeedbackPage() {
     const [audioBlob, setAudioBlob] = useState(null);
     const [audioUrl, setAudioUrl] = useState(null);
     const [errorMsg, setErrorMsg] = useState("");
-
-    const [loadingTranscript, setLoadingTranscript] = useState(false);
-    const [transcriptText, setTranscriptText] = useState("");
-    const [transcribeChoiceMade, setTranscribeChoiceMade] = useState(false);
     const [tabClosed, setTabClosed] = useState(false);
-
 
     const mediaRecorderRef = useRef(null);
     const chunksRef = useRef([]);
@@ -427,7 +407,6 @@ export default function FeedbackPage() {
 
         setPhase("submitting");
         setErrorMsg("");
-        setLoadingTranscript(true);
 
         try {
             const form = new FormData();
@@ -441,42 +420,17 @@ export default function FeedbackPage() {
                 form.append("longitude", location.longitude);
             }
 
-            const resp = await axios.post(`${BASE}/feedback/submit${window.location.search}`, form, {
+            await axios.post(`${BASE}/feedback/submit${window.location.search}`, form, {
                 headers: { "Content-Type": "multipart/form-data" },
                 timeout: 120000,
             });
 
-            const docId = resp.data?.doc_id;
-            const fileId = resp.data?.file_id;
-
+            // Transition to success screen immediately
             setPhase("done");
-            runBackgroundTranscription(docId, fileId);
 
         } catch (err) {
             setErrorMsg("Submission failed. Please try again.");
             setPhase("recorded");
-            setLoadingTranscript(false);
-        }
-    };
-
-    const runBackgroundTranscription = async (docId, fileId) => {
-        try {
-            const form = new FormData();
-            form.append("audio", audioBlob, "recording.webm");
-            form.append("doc_id", docId || "");
-            form.append("file_id", fileId || "");
-            form.append("description", description);
-
-            const resp = await axios.post(`${BASE}/feedback/transcribe-lazy${window.location.search}`, form, {
-                headers: { "Content-Type": "multipart/form-data" },
-                timeout: 180000,
-            });
-
-            setTranscriptText(resp.data?.transcript || "No readable audio transcript available.");
-        } catch (err) {
-            setErrorMsg("Could not fetch transcript at this time.");
-        } finally {
-            setLoadingTranscript(false);
         }
     };
 
@@ -485,10 +439,6 @@ export default function FeedbackPage() {
         setAudioUrl(null);
         setErrorMsg("");
         setPhase("form");
-    };
-
-    const handleRequestTranscript = () => {
-        setTranscribeChoiceMade(true);
     };
 
     const handleCloseTab = () => {
@@ -514,7 +464,7 @@ export default function FeedbackPage() {
                             borderRadius: 10, 
                             padding: "14px 16px", 
                             textAlign: "center", 
-                            marginBottom: 20,
+                            marginBottom: 24,
                             fontFamily: "'Segoe UI', system-ui, sans-serif"
                         }}>
                             <div style={{ fontSize: "0.85rem", color: "#1A1A1A", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -528,50 +478,9 @@ export default function FeedbackPage() {
                             </div>
                         </div>
 
-                        {!transcribeChoiceMade ? (
-                            <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #E8DCBE", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-                                <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "#1A1A1A", marginBottom: 14 }}>
-                                    Would you like to view the transcript of your voice feedback?
-                                </p>
-                                <div style={{ display: "flex", gap: 12 }}>
-                                    <button
-                                        onClick={handleRequestTranscript}
-                                        style={styles.primaryBtn}
-                                    >
-                                        Yes, View Transcript
-                                    </button>
-                                    <button
-                                        onClick={handleCloseTab}
-                                        style={styles.secondaryBtn}
-                                    >
-                                        No, Close
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div style={{ marginTop: 16 }}>
-                                {loadingTranscript && (
-                                    <p style={{ fontSize: "0.85rem", color: "#6B5E54", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-                                        Generating audio transcript...
-                                    </p>
-                                )}
-
-                                {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
-
-                                {!loadingTranscript && transcriptText && (
-                                    <div style={styles.transcriptBox}>
-                                        <label style={styles.label}>Your Audio Transcript</label>
-                                        <p style={styles.transcriptText}>"{transcriptText}"</p>
-                                    </div>
-                                )}
-
-                                <div style={{ marginTop: 16 }}>
-                                    <button onClick={handleCloseTab} style={styles.secondaryBtn}>
-                                        Close Page
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        <button onClick={handleCloseTab} style={styles.primaryBtn}>
+                            Close Page
+                        </button>
 
                         {tabClosed && (
                             <p style={{ fontSize: "0.8rem", color: "#A83232", marginTop: 12, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
