@@ -270,7 +270,7 @@ function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, g
 
     const downloadPdf = () => {
         const encodedTime = encodeURIComponent(generatedAt || "");
-        window.open(`${baseUrl}/api/hotel-sentiment/report/pdf/${taskId}?client_time=${encodedTime}`, "_blank");
+        window.open(`${baseUrl}/hotel-sentiment/report/pdf/${taskId}?client_time=${encodedTime}`, "_blank");
     };
 
     const modelEngine = combined?.model_engine || "Hugging Face Transformer";
@@ -597,7 +597,7 @@ export default function SentimentAnalysis({ baseUrl, onBack, city, country, esta
 
     const startSearch = async () => {
         try {
-            const resp = await axios.post(`${BASE}/api/hotel-sentiment/search`, {
+            const resp = await axios.post(`${BASE}/hotel-sentiment/search`, {
                 city, country, establishment_name: establishmentName,
                 radius_km: radiusKm, limit: 100,
                 origin_lat: originLat, origin_lng: originLng,
@@ -614,7 +614,7 @@ export default function SentimentAnalysis({ baseUrl, onBack, city, country, esta
 
         const poll = async () => {
             try {
-                const resp = await axios.get(`${BASE}/api/hotel-sentiment/progress/${taskId}`);
+                const resp = await axios.get(`${BASE}/hotel-sentiment/progress/${taskId}`);
                 const data = resp.data;
                 setProgress(data.progress || 0);
                 setStatusMessage(data.status_message || "");
@@ -661,7 +661,7 @@ export default function SentimentAnalysis({ baseUrl, onBack, city, country, esta
         setStatusMessage("Initializing Neural Transformer Pipeline...");
 
         try {
-            const resp = await axios.post(`${BASE}/api/hotel-sentiment/analyse`, {
+            const resp = await axios.post(`${BASE}/hotel-sentiment/analyse`, {
                 task_id: taskId, approved_places: approved,
                 establishment_name: establishmentName, days_back: daysBack,
             });
@@ -669,7 +669,7 @@ export default function SentimentAnalysis({ baseUrl, onBack, city, country, esta
             clearInterval(pollRef.current);
             pollRef.current = setInterval(async () => {
                 try {
-                    const poll = await axios.get(`${BASE}/api/hotel-sentiment/progress/${resp.data.task_id}`);
+                    const poll = await axios.get(`${BASE}/hotel-sentiment/progress/${resp.data.task_id}`);
                     const data = poll.data;
                     setProgress(data.progress || 0);
                     setStatusMessage(data.status_message || "");

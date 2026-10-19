@@ -478,9 +478,9 @@ export default function FeedbackPage() {
                             </div>
                         </div>
 
-                        <button onClick={handleCloseTab} style={styles.primaryBtn}>
+                        {/* <button onClick={handleCloseTab} style={styles.primaryBtn}>
                             Close Page
-                        </button>
+                        </button> */}
 
                         {tabClosed && (
                             <p style={{ fontSize: "0.8rem", color: "#A83232", marginTop: 12, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>

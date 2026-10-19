@@ -109,12 +109,12 @@ const styles = {
     },
     label: {
         display: "block",
-        fontSize: "0.68rem",
+        fontSize: "0.72rem",
         fontWeight: 700,
         color: "#2E5A44",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
-        marginBottom: 3,
+        marginBottom: 4,
     },
     batchDisplay: {
         fontSize: "0.75rem",
@@ -126,30 +126,30 @@ const styles = {
         border: "1px solid #C2D6CA",
         wordBreak: "break-all",
     },
-    inputCompact: {
+    inputComfortable: {
         width: "100%",
-        padding: "4px 8px",
-        borderRadius: 6,
+        padding: "8px 12px",
+        borderRadius: 8,
         background: "#FAFCFA",
         border: "1px solid #C2D6CA",
         color: "#1B3B2B",
-        fontSize: "0.78rem",
+        fontSize: "0.9rem",
         outline: "none",
         boxSizing: "border-box",
-        height: "30px",
+        height: "42px",
     },
     textarea: {
         width: "100%",
-        padding: "6px 8px",
-        borderRadius: 6,
+        padding: "8px 12px",
+        borderRadius: 8,
         background: "#FAFCFA",
         border: "1px solid #C2D6CA",
         color: "#1B3B2B",
-        fontSize: "0.8rem",
+        fontSize: "0.88rem",
         outline: "none",
         boxSizing: "border-box",
         resize: "vertical",
-        minHeight: 48,
+        minHeight: 52,
     },
     ratingContainer: {
         display: "flex",
@@ -619,9 +619,9 @@ export default function ProductFeedbackPage() {
                     <>
                         {/* Compact Batch ID Display */}
                         <div style={{
-                            marginBottom: "0.4rem",
+                            marginBottom: "0.6rem",
                             background: "#F2F7F4",
-                            padding: "4px 8px",
+                            padding: "6px 10px",
                             borderRadius: 6,
                             border: "1px solid #D1E0D7",
                             display: "flex",
@@ -637,39 +637,33 @@ export default function ProductFeedbackPage() {
                             </div>
                         </div>
 
-                        {/* Ultra-Compact Optional Email & Phone Row */}
-                        <div style={{
-                            display: "flex",
-                            gap: "8px",
-                            marginBottom: "0.5rem"
-                        }}>
-                            <div style={{ flex: 1 }}>
-                                <label style={styles.label}>
-                                    Email <span style={{ color: "#527060", fontWeight: 400 }}>(optional)</span>
-                                </label>
-                                <input
-                                    type="email"
-                                    value={email}
-                                    onChange={e => setEmail(e.target.value)}
-                                    placeholder="you@example.com"
-                                    disabled={recording || phase === "submitting"}
-                                    style={styles.inputCompact}
-                                />
-                            </div>
+                        {/* Stacked Email & Phone Inputs */}
+                        <div style={{ marginBottom: "0.6rem" }}>
+                            <label style={styles.label}>
+                                Email <span style={{ color: "#527060", fontWeight: 400 }}>(optional)</span>
+                            </label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                placeholder="you@example.com"
+                                disabled={recording || phase === "submitting"}
+                                style={styles.inputComfortable}
+                            />
+                        </div>
 
-                            <div style={{ flex: 1 }}>
-                                <label style={styles.label}>
-                                    Phone <span style={{ color: "#527060", fontWeight: 400 }}>(optional)</span>
-                                </label>
-                                <input
-                                    type="tel"
-                                    value={phone}
-                                    onChange={e => setPhone(e.target.value)}
-                                    placeholder="+1 234 567 890"
-                                    disabled={recording || phase === "submitting"}
-                                    style={styles.inputCompact}
-                                />
-                            </div>
+                        <div style={{ marginBottom: "0.6rem" }}>
+                            <label style={styles.label}>
+                                Phone <span style={{ color: "#527060", fontWeight: 400 }}>(optional)</span>
+                            </label>
+                            <input
+                                type="tel"
+                                value={phone}
+                                onChange={e => setPhone(e.target.value)}
+                                placeholder="+1 234 567 890"
+                                disabled={recording || phase === "submitting"}
+                                style={styles.inputComfortable}
+                            />
                         </div>
 
                         {phase === "form" && (
