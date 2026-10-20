@@ -119,7 +119,7 @@ app.include_router(qr_router)
 # Note: Since scan_routes.py defines router = APIRouter(prefix="/scans"), 
 # the resulting endpoint path is /api/scans/last24hours
 # app.include_router(scan_router, prefix="/api")
-app.include_router(scan_router)
+app.include_router(scan_router, prefix="/api")
 
 app.include_router(product_feedback_router, prefix="/api/product-feedback", tags=["Product Feedback"])
 
