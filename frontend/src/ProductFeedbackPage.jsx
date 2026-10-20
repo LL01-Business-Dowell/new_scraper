@@ -295,6 +295,13 @@ const styles = {
         color: "#C93B3B",
         fontSize: "0.78rem",
     },
+    closeMessageText: {
+        fontSize: "0.82rem",
+        color: "#527060",
+        fontWeight: 600,
+        textAlign: "center",
+        marginTop: 12,
+    },
 };
 
 const PulseStyle = () => (
@@ -535,11 +542,9 @@ export default function ProductFeedbackPage() {
                             </div>
                         </div>
 
-                        <div style={{ marginTop: 8 }}>
-                            <button onClick={handleReturnToSplash} style={styles.secondaryBtn}>
-                                Close Screen
-                            </button>
-                        </div>
+                        <p style={styles.closeMessageText}>
+                            You can close the tab
+                        </p>
                     </div>
                 </div>
             </div>
