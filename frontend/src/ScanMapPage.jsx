@@ -129,6 +129,7 @@ export default function ScanMapPage() {
 
   const getInitialTime = () => {
     if (timeParam === "7" || timeParam === "7d") return "168";
+    if (timeParam === "15" || timeParam === "15d") return "360";
     if (timeParam === "30" || timeParam === "30d") return "720";
     return "24";
   };
@@ -141,6 +142,7 @@ export default function ScanMapPage() {
 
     let timeUrlValue = "24";
     if (selectedHours === "168") timeUrlValue = "7";
+    if (selectedHours === "360") timeUrlValue = "15";
     if (selectedHours === "720") timeUrlValue = "30";
 
     const newSearchParams = new URLSearchParams(window.location.search);
@@ -155,6 +157,7 @@ export default function ScanMapPage() {
   const timeLabelMap = {
     "24": "LAST 24 HOURS",
     "168": "LAST 7 DAYS",
+    "360": "LAST 15 DAYS",
     "720": "LAST 30 DAYS",
   };
 
@@ -184,7 +187,6 @@ export default function ScanMapPage() {
         const response = await fetch(endpoint);
         const rawText = await response.text();
 
-        // Silently handle non-200 responses if scans already exist
         if (!response.ok) {
           console.warn(`[Background Refresh Warning] Server returned HTTP ${response.status}`);
           if (isInitialLoad) {
@@ -209,7 +211,6 @@ export default function ScanMapPage() {
         if (result.success) {
           const rawScans = Array.isArray(result.data) ? result.data : [];
 
-          // Sort scans reverse-chronologically (newest scan at index 0)
           const sortedScans = [...rawScans].sort((a, b) => {
             const timeA = new Date(a.scanned_at || 0).getTime();
             const timeB = new Date(b.scanned_at || 0).getTime();
@@ -220,7 +221,6 @@ export default function ScanMapPage() {
             sortedScans.map((s) => `${s.qr_id}-${s.scanned_at}`)
           );
 
-          // Detect new scans coming in during polling refreshes
           if (previousScanKeysRef.current.size > 0) {
             const newlyAddedKeys = new Set();
             currentKeys.forEach((key) => {
@@ -232,12 +232,10 @@ export default function ScanMapPage() {
             if (newlyAddedKeys.size > 0) {
               setHighlightedScanKeys(newlyAddedKeys);
               
-              // Automatically select and focus the newest scan on arrival
               if (sortedScans.length > 0) {
                 setSelectedScan(sortedScans[0]);
               }
 
-              // Clear highlight after 2 seconds
               setTimeout(() => {
                 setHighlightedScanKeys(new Set());
               }, 2000);
@@ -248,7 +246,6 @@ export default function ScanMapPage() {
           setScans(sortedScans);
           setError(null);
 
-          // Topmost/newest pin highlighted and focused by default on initial load
           if (isInitialLoad && sortedScans.length > 0) {
             setSelectedScan(sortedScans[0]);
           }
@@ -320,7 +317,6 @@ export default function ScanMapPage() {
           display: flex !important;
         }
 
-        /* Pulse Highlight animation for 2s */
         @keyframes highlightPulse {
           0% { background-color: #f59e0b; }
           100% { background-color: transparent; }
@@ -330,7 +326,7 @@ export default function ScanMapPage() {
           animation: highlightPulse 2s ease-out;
         }
 
-        /* Desktop Sidebar Overlay Styling */
+        /* Desktop View Styling */
         @media (min-width: 769px) {
           .scan-map-sidebar {
             position: absolute !important;
@@ -341,9 +337,15 @@ export default function ScanMapPage() {
             z-index: 2000 !important;
             box-shadow: 4px 0 20px rgba(0,0,0,0.4);
           }
+          .scan-list-container {
+            display: ${isDesktopCollapsed ? "none" : "block"} !important;
+          }
+          .drawer-title-text {
+            display: ${isDesktopCollapsed ? "none" : "inline"} !important;
+          }
         }
 
-        /* Mobile Sidebar Styling */
+        /* Mobile View Styling */
         @media (max-width: 768px) {
           .mobile-toggle-btn {
             display: flex !important;
@@ -362,6 +364,12 @@ export default function ScanMapPage() {
             border-right: none !important;
             border-top: 2px solid #334155 !important;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+          }
+          .scan-list-container {
+            display: ${isMobileCollapsed ? "none" : "block"} !important;
+          }
+          .drawer-title-text {
+            display: inline !important;
           }
         }
       `}</style>
@@ -399,6 +407,7 @@ export default function ScanMapPage() {
           >
             <option value="24">24 Hours</option>
             <option value="168">7 Days</option>
+            <option value="360">15 Days</option>
             <option value="720">30 Days</option>
           </select>
 
@@ -422,7 +431,7 @@ export default function ScanMapPage() {
         className="scan-map-content"
         style={{ display: "flex", flex: 1, minHeight: 0, position: "relative" }}
       >
-        {/* Collapsed Sidebar / Drawer */}
+        {/* Sidebar / Mobile Bottom Drawer */}
         <aside
           className="scan-map-sidebar"
           style={{
@@ -438,7 +447,13 @@ export default function ScanMapPage() {
         >
           <div
             className="scan-drawer-header"
-            onClick={toggleDesktopDrawer}
+            onClick={(e) => {
+              if (window.innerWidth <= 768) {
+                toggleMobileDrawer();
+              } else {
+                toggleDesktopDrawer(e);
+              }
+            }}
             style={{
               padding: "12px 16px",
               background: "#0f172a",
@@ -455,7 +470,7 @@ export default function ScanMapPage() {
               flexShrink: 0,
             }}
           >
-            {!isDesktopCollapsed && <span>Scanned Locations</span>}
+            <span className="drawer-title-text">Scanned Locations</span>
 
             <button
               className="desktop-toggle-btn"
@@ -505,7 +520,6 @@ export default function ScanMapPage() {
             style={{
               flex: 1,
               overflowY: "auto",
-              display: isDesktopCollapsed ? "none" : "block",
             }}
           >
             {scans.length === 0 && !loading && (
