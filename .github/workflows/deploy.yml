@@ -90,16 +90,16 @@ jobs:
             export COMPOSE_DOCKER_CLI_BUILD=1
             export BUILDKIT_PARALLEL_LIMIT=1
 
-            echo "=== Building Heavy Audio Analysis Service ==="
-            docker compose build --progress=plain audio-analysis
-            docker builder prune -af || true  # Free build cache before next heavy image
-
             echo "=== Building Backend Service ==="
-            docker compose build --progress=plain backend
-            docker builder prune -af || true  # Free build cache before remaining images
+            docker compose build --no-cache --progress=plain backend
+            docker builder prune -af || true  # Reclaim temporary space before next image
+
+            echo "=== Building Heavy Audio Analysis Service ==="
+            docker compose build --no-cache --progress=plain audio-analysis
+            docker builder prune -af || true  # Reclaim temporary space
 
             echo "=== Building Remaining Services ==="
-            docker compose build --progress=plain inscriber frontend nginx
+            docker compose build --progress=plain inscriber text-analysis frontend nginx
 
             echo "=== Restarting containers ==="
             docker compose up -d
