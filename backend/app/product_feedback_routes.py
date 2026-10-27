@@ -21,6 +21,10 @@ MASTER_DATABASE_ID = "695ce92eff84eaf663c457c2"
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
+TEXT_ANALYSIS_METADATA_API_URL = os.getenv(
+    "TEXT_ANALYSIS_METADATA_API_URL",
+    "http://text-analysis:8004/text-analysis/feedback-metadata/"
+)
 
 def _resolve_collection_by_qr_id(qr_id: str, default_client: str = "") -> str:
     """
@@ -128,6 +132,7 @@ def _save_to_datacube(
     file_id: str,
     gridfs_file_id: str = "",
     client_name: str = "",
+    room: str = "",
     location: dict = None,
     emotion_metrics: dict = None,
     raw_emotion_distribution: dict = None,
@@ -150,6 +155,7 @@ def _save_to_datacube(
             "client_name": client_name,
             "product_name": product_name,
             "batch_id": batch_id,
+            "room": room,
             "rating": rating,
             "description": description,
             "location": location or {},
@@ -252,16 +258,51 @@ def _update_datacube_transcription(
         return False
 
 
+def _call_feedback_metadata_api(
+    qr_id: str,
+    client: str,
+    feedback_id: str,
+    room: str,
+    urgency_status: str,
+):
+    """
+    Hits the text-analysis feedback-metadata endpoint after feedback is saved.
+    """
+    payload = {
+        "qrId": qr_id,
+        "client": client,
+        "feedback_id": feedback_id,
+        "room": room,
+        "urgency_status": urgency_status,
+        "is_resolved": False,
+    }
+
+    try:
+        resp = http_requests.post(
+            TEXT_ANALYSIS_METADATA_API_URL,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=15,
+        )
+        if resp.status_code in (200, 201):
+            logger.info(f"[PRODUCT_FEEDBACK] Feedback metadata recorded successfully for feedback_id: {feedback_id}")
+        else:
+            logger.warning(f"[PRODUCT_FEEDBACK] Metadata API failed {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.error(f"[PRODUCT_FEEDBACK] Metadata API error: {e}")
+
+
 def _process_audio_pipeline_async(
     doc_id: str,
     id_param: str,
     client_name: str,
+    room: str,
     final_file_id: str,
     wav_bytes: bytes,
 ):
     """
     Background worker that runs emotion analysis, S3 upload, transcription,
-    and Gemini sentiment analysis, then updates the Datacube document.
+    Gemini sentiment analysis, updates Datacube, and hits the metadata API.
     """
     logger.info(f"[PRODUCT_FEEDBACK] Background task started for doc_id: {doc_id}")
 
@@ -311,7 +352,7 @@ def _process_audio_pipeline_async(
     # 4. Gemini Sentiment Analysis
     transcript_analysis = {}
     if transcript:
-        gemini_api_key = os.getenv("GEMINI_KEY_2") or os.getenv("GEMINI_KEY_1")
+        gemini_api_key = os.getenv("DOWELL_GEMINI_KEY") or os.getenv("GEMINI_KEY_2") or os.getenv("GEMINI_KEY_1")
         transcript_analysis = analyze_sentiment(gemini_api_key, transcript)
 
     # 5. Metric Fusion
@@ -336,6 +377,17 @@ def _process_audio_pipeline_async(
             emotion_metrics=emotion_data,
             raw_emotion_distribution=raw_emotions,
         )
+
+        # 7. Post Metadata Record to Text Analysis service
+        urgency_status = fused_metrics.get("urgency_status", "Low")
+        _call_feedback_metadata_api(
+            qr_id=id_param,
+            client=client_name,
+            feedback_id=doc_id,
+            room=room,
+            urgency_status=urgency_status,
+        )
+
         logger.info(f"[PRODUCT_FEEDBACK] Async processing complete for doc_id: {doc_id}")
 
 
@@ -347,6 +399,7 @@ async def submit_product_feedback(
     batch_id: str = Form(default=""),
     product_name: str = Form(default=""),
     description: str = Form(default=""),
+    room: str = Form(default=""),
     rating: int = Form(default=0),
     client_name: str = Form(default=""),
     file_id: str = Form(default=""),
@@ -387,6 +440,7 @@ async def submit_product_feedback(
             batch_id=batch_id,
             product_name=product_name,
             description=description,
+            room=room,
             rating=rating,
             client_name=client_name,
             location=user_location,
@@ -394,12 +448,13 @@ async def submit_product_feedback(
             gridfs_file_id=gridfs_file_id,
         )
 
-        # 3. Queue Background Processing (Audio Analysis, S3 Upload, Transcription, Gemini Sentiment)
+        # 3. Queue Background Processing (Audio Analysis, S3 Upload, Transcription, Gemini Sentiment, Metadata API)
         background_tasks.add_task(
             _process_audio_pipeline_async,
             doc_id=doc_id,
             id_param=id_param,
             client_name=client_name,
+            room=room,
             final_file_id=final_file_id,
             wav_bytes=wav_bytes,
         )
