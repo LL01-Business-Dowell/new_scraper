@@ -34,7 +34,7 @@ def get_zoho_access_token() -> str:
         raise RuntimeError("Missing Zoho OAuth credentials in environment variables.")
 
     response = http_requests.post(
-        "https://accounts.zoho.com/oauth/v2/token",
+        "https://accounts.zoho.in/oauth/v2/token",
         params={
             "refresh_token": ZOHO_REFRESH_TOKEN,
             "client_id": ZOHO_CLIENT_ID,
