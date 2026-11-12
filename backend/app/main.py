@@ -59,6 +59,7 @@ from .feedback_routes import router as feedback_router
 from .qr_datacube_routes import router as qr_router
 from .scan_routes import router as scan_router
 from .product_feedback_routes import router as product_feedback_router
+from .zoho_integration import router as zoho_router
 
 
 # ─── Logging ────────────────────────────────────────────────────────────────
@@ -122,6 +123,7 @@ app.include_router(qr_router)
 app.include_router(scan_router, prefix="/api") #production_setting
 
 app.include_router(product_feedback_router, prefix="/api/product-feedback", tags=["Product Feedback"])
+app.include_router(zoho_router)
 
 tasks = {}
 csv_tasks: dict[str, dict] = {}

@@ -293,20 +293,41 @@ def _call_feedback_metadata_api(
 
 
 def _process_audio_pipeline_async(
-    doc_id: str,
     id_param: str,
     client_name: str,
+    batch_id: str,
+    product_name: str,
+    description: str,
     room: str,
+    rating: int,
+    user_location: dict,
     final_file_id: str,
     wav_bytes: bytes,
 ):
     """
-    Background worker that runs emotion analysis, S3 upload, transcription,
-    Gemini sentiment analysis, updates Datacube, and hits the metadata API.
+    Background worker that handles GridFS upload, initial Datacube save, emotion analysis,
+    S3 upload, transcription, Gemini sentiment analysis, updates Datacube, and hits the metadata API.
     """
-    logger.info(f"[PRODUCT_FEEDBACK] Background task started for doc_id: {doc_id}")
+    logger.info(f"[PRODUCT_FEEDBACK] Background task started for file_id: {final_file_id}")
 
-    # 1. Audio Emotion Analysis
+    # 1. Upload Audio Binary directly to DataCube GridFS (Async Background)
+    gridfs_file_id = _upload_file_to_gridfs(wav_bytes, final_file_id)
+
+    # 2. Save Initial Record into DataCube (Async Background)
+    doc_id = _save_to_datacube(
+        id_param=id_param,
+        batch_id=batch_id,
+        product_name=product_name,
+        description=description,
+        room=room,
+        rating=rating,
+        client_name=client_name,
+        location=user_location,
+        file_id=final_file_id,
+        gridfs_file_id=gridfs_file_id,
+    )
+
+    # 3. Audio Emotion Analysis
     emotion_data = None
     raw_emotions = None
     try:
@@ -323,7 +344,7 @@ def _process_audio_pipeline_async(
     except Exception as e:
         logger.warning(f"[PRODUCT_FEEDBACK] Async Audio analysis error: {e}")
 
-    # 2. Upload Audio to S3
+    # 4. Upload Audio to S3
     try:
         upload_resp = http_requests.post(
             S3_UPLOAD_API,
@@ -336,7 +357,7 @@ def _process_audio_pipeline_async(
     except Exception as e:
         logger.warning(f"[PRODUCT_FEEDBACK] Async S3 upload error: {e}")
 
-    # 3. Audio Transcription
+    # 5. Audio Transcription
     transcript = ""
     try:
         trans_resp = http_requests.post(
@@ -349,13 +370,13 @@ def _process_audio_pipeline_async(
     except Exception as e:
         logger.warning(f"[PRODUCT_FEEDBACK] Async Transcription error: {e}")
 
-    # 4. Gemini Sentiment Analysis
+    # 6. Gemini Sentiment Analysis
     transcript_analysis = {}
     if transcript:
         gemini_api_key = os.getenv("DOWELL_GEMINI_KEY") or os.getenv("GEMINI_KEY_2") or os.getenv("GEMINI_KEY_1")
         transcript_analysis = analyze_sentiment(gemini_api_key, transcript)
 
-    # 5. Metric Fusion
+    # 7. Metric Fusion
     fused_metrics = calculate_fused_metrics(
         text_sentiment=transcript_analysis.get("label", "NEUTRAL"),
         text_score=transcript_analysis.get("confidence_score", 0.0),
@@ -365,7 +386,7 @@ def _process_audio_pipeline_async(
         audio_score=emotion_data.get("audio_score", 0.0) if emotion_data else 0.0,
     )
 
-    # 6. Update Datacube record with analysis results
+    # 8. Update Datacube record with analysis results
     if doc_id:
         _update_datacube_transcription(
             id_param=id_param,
@@ -378,7 +399,7 @@ def _process_audio_pipeline_async(
             raw_emotion_distribution=raw_emotions,
         )
 
-        # 7. Post Metadata Record to Text Analysis service
+        # 9. Post Metadata Record to Text Analysis service
         urgency_status = fused_metrics.get("urgency_status", "Low")
         _call_feedback_metadata_api(
             qr_id=id_param,
@@ -431,42 +452,27 @@ async def submit_product_feedback(
             except ValueError:
                 logger.warning("[PRODUCT_FEEDBACK] Invalid location received")
 
-        # 1. Store Audio Binary directly to DataCube GridFS
-        gridfs_file_id = _upload_file_to_gridfs(wav_bytes, final_file_id)
-
-        # 2. Save Initial Record into DataCube (Immediate)
-        doc_id = _save_to_datacube(
+        # Queue ALL database insertions, GridFS uploads, and analytics as background tasks
+        background_tasks.add_task(
+            _process_audio_pipeline_async,
             id_param=id_param,
+            client_name=client_name,
             batch_id=batch_id,
             product_name=product_name,
             description=description,
             room=room,
             rating=rating,
-            client_name=client_name,
-            location=user_location,
-            file_id=final_file_id,
-            gridfs_file_id=gridfs_file_id,
-        )
-
-        # 3. Queue Background Processing (Audio Analysis, S3 Upload, Transcription, Gemini Sentiment, Metadata API)
-        background_tasks.add_task(
-            _process_audio_pipeline_async,
-            doc_id=doc_id,
-            id_param=id_param,
-            client_name=client_name,
-            room=room,
+            user_location=user_location,
             final_file_id=final_file_id,
             wav_bytes=wav_bytes,
         )
 
-        # 4. Immediate response to user
+        # Immediate response to user (< 0.2s)
         return JSONResponse(
             {
                 "success": True,
                 "message": "Product feedback received successfully.",
                 "file_id": final_file_id,
-                "gridfs_file_id": gridfs_file_id,
-                "doc_id": doc_id,
                 "rating": rating,
             }
         )
