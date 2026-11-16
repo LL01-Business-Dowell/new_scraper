@@ -19,11 +19,7 @@ ZOHO_ORGANIZATION_ID = os.getenv("ZOHO_ORGANIZATION_ID", "")
 
 # DataCube / PureTrace Configuration (aligned with server.js)
 DATACUBE_BASE = os.getenv("CRUD_BASE_URL", "https://datacube.uxlivinglab.online/api/v2").rstrip("/")
-DATACUBE_API_KEY = (
-    os.getenv("DATACUBE_API_KEY")
-    or os.getenv("FEEDBACK_CRUD_API_KEY")
-    or os.getenv("CRUD_API_KEY", "")
-)
+DATACUBE_API_KEY = os.getenv("PURETRACE_API_KEY", "")
 PURETRACE_DB_ID = "69985c0844ca8a1af7fd639e"
 COLLECTION_NAME = "medsign_links"
 
@@ -330,7 +326,7 @@ def _push_puretrace_batch_to_zoho(link_id: str, product_details: Dict[str, Any])
             "Content-Type": "application/json",
         }
         params = {"organization_id": ZOHO_ORGANIZATION_ID}
-        base_api = "https://www.zohoapis.in/inventory/v1"
+        base_api = "https://www.zohoapis.in/books/v3"
 
         _recently_pushed_skus[str(link_id)] = time.time() + 15
 

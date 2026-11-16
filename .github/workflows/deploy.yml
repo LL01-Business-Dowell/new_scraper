@@ -56,6 +56,7 @@ jobs:
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST "cat > /home/SamantaScraper/.env" << EOF
           CRUD_API_KEY=${{ secrets.CRUD_API_KEY }}
+          PURETRACE_API_KEY=${{ secrets.PURETRACE_API_KEY }}
           FEEDBACK_CRUD_API_KEY=${{ secrets.FEEDBACK_CRUD_API_KEY }}
           FEEDBACK_QR_API_KEY=${{ secrets.FEEDBACK_QR_API_KEY }}
           DATABASE_ID=${{ secrets.DATABASE_ID }}
