@@ -318,7 +318,7 @@ def _process_zoho_batch_sync(payload: Dict[str, Any]) -> None:
 
 
 def _push_puretrace_batch_to_zoho(link_id: str, product_details: Dict[str, Any]) -> None:
-    """Background Task 2: PureTrace -> Zoho Inventory (.in) sync using link_id as SKU."""
+    """Background Task 2: PureTrace -> Zoho Books (.in) sync using link_id as SKU."""
     try:
         token = get_zoho_access_token()
         headers = {
@@ -350,40 +350,33 @@ def _push_puretrace_batch_to_zoho(link_id: str, product_details: Dict[str, Any])
             qty = 0.0
 
         batch_number = str(product_details.get("batch_id") or f"BATCH-{link_id}")
+        qty_unit = product_details.get("quantity_unit") or "pcs"
+
         mfg_date = str(product_details.get("mfg_date") or "")
         if len(mfg_date) == 7:
             mfg_date = f"{mfg_date}-01"
 
         expiry_date = str(product_details.get("expiry_date") or "")
 
-        batch_payload = {
-            "batch_number": batch_number,
-            "in_quantity": qty,
-        }
-        if len(mfg_date) == 10:
-            batch_payload["manufactured_date"] = mfg_date
-        if len(expiry_date) == 10:
-            batch_payload["expiry_date"] = expiry_date
+        batch_summary = f"Batch: {batch_number} | Qty: {qty} {qty_unit}"
+        if mfg_date:
+            batch_summary += f" | Mfg: {mfg_date}"
+        if expiry_date:
+            batch_summary += f" | Exp: {expiry_date}"
+
+        base_desc = (product_details.get("description") or "").strip()
+        full_description = f"{base_desc}\n{batch_summary}".strip()
 
         item_payload: Dict[str, Any] = {
             "name": product_details.get("product_name") or f"PureTrace Product {link_id}",
             "sku": str(link_id),
-            "description": product_details.get("description") or "",
+            "description": full_description,
             "rate": rate,
-            "unit": product_details.get("quantity_unit") or "pcs",
-            "manufacturer": product_details.get("manufactured_by") or "",
-            "brand": product_details.get("marketed_by") or "",
-            "track_batch_number": True,
+            "unit": qty_unit,
         }
 
         if existing_item:
             item_id = existing_item["item_id"]
-            full_item = fetch_full_zoho_item(str(item_id)) or existing_item
-            existing_batches = full_item.get("batches") or []
-
-            if not any(str(b.get("batch_number")) == batch_number for b in existing_batches):
-                item_payload["batches"] = [*existing_batches, batch_payload]
-
             resp = http_requests.put(
                 f"{base_api}/items/{item_id}",
                 headers=headers,
@@ -393,10 +386,6 @@ def _push_puretrace_batch_to_zoho(link_id: str, product_details: Dict[str, Any])
             )
             action = "Updated"
         else:
-            item_payload["initial_stock"] = qty
-            item_payload["initial_stock_rate"] = rate
-            item_payload["batches"] = [batch_payload]
-
             resp = http_requests.post(
                 f"{base_api}/items",
                 headers=headers,
@@ -438,7 +427,7 @@ async def handle_zoho_webhook(request: Request, background_tasks: BackgroundTask
 
 @router.post("/sync-from-puretrace")
 async def sync_from_puretrace(request: Request, background_tasks: BackgroundTasks):
-    """Receives submitted form data from puretrace.html and syncs it to Zoho Inventory."""
+    """Receives submitted form data from puretrace.html and syncs it to Zoho Books."""
     body = await request.json()
     link_id = str(body.get("link_id") or "").strip()
     product_details = body.get("product_details") or {}
