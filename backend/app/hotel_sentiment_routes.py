@@ -32,6 +32,7 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 
 from PIL import Image as PILImage, ImageDraw, ImageFont
+from .hotel_apify_scraper import report_period_label
 
 import sys
 
@@ -398,6 +399,22 @@ def _generate_offline_map_diagram(
     except Exception as e:
         logger.error(f"[PDF MAP] Offline PIL map fallback error: {e}")
         return None
+
+
+def _build_map_png(results: list) -> Optional[bytes]:
+    """Returns map PNG bytes (Google Static Map, falling back to offline plot)."""
+    buf = None
+    if os.getenv("GOOGLE_MAPS_API_KEY"):
+        buf = _fetch_static_map_image(results)
+    if not buf:
+        coords = [
+            {"lat": r["lat"], "lng": r["lng"], "is_user": r.get("is_user_establishment", False)}
+            for r in results
+            if r.get("lat") is not None and r.get("lng") is not None
+        ]
+        if coords:
+            buf = _generate_offline_map_diagram(coords)
+    return buf.getvalue() if buf else None
 
 
 # In-memory task store with basic TTL cleanup
@@ -889,8 +906,8 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
                 or place.get("reviews", review_count),
                 "scraped_review_count": review_count,
                 "url": url,
-                "lat": place.get("lat"),
-                "lng": place.get("lng"),
+                "lat": place.get("lat") or biz_details.get("lat"),
+                "lng": place.get("lng") or biz_details.get("lng"),
                 "is_user_establishment": place.get("is_user_establishment", False),
                 "distance_km": place.get("distance_km", 0.0),
                 "sentiment": sentiment,
@@ -901,9 +918,11 @@ def _hotel_sentiment_worker(task_id: str, places: List[dict], days_back: int):
         )
 
     combined_report = _build_combined_sentiment_report(results)
+    map_png = _build_map_png(results)
 
     hotel_sentiment_tasks[task_id].update(
         {
+            "map_png": map_png,
             "status": "completed",
             "progress": 100,
             "status_message": f"Sentiment analysis completed successfully ({mode} mode).",
@@ -1368,6 +1387,7 @@ async def hotel_analyse(
     task["progress"] = 0
     task["status_message"] = "Starting sentiment analysis..."
     task["days_back"] = request.days_back
+    task["report_period"] = report_period_label()
 
     background_tasks.add_task(
         _hotel_sentiment_worker,
@@ -1441,6 +1461,7 @@ def _generate_sentiment_pdf(
     results = task.get("results", [])
     combined = task.get("combined_report", {})
     days_back = task.get("days_back", 30)
+    report_period = task.get("report_period") or report_period_label()
 
     hilton_stats = combined.get(
         "hilton_stats",
@@ -1704,9 +1725,13 @@ def _generate_sentiment_pdf(
             Paragraph(escape(str(report_date)), style_small),
         ],
         [
+            Paragraph("<b>Report Period:</b>", style_small),
+            Paragraph(escape(report_period), style_small),
+        ],
+        [
             Paragraph("<b>Sample Footprint:</b>", style_small),
             Paragraph(
-                f"{len(results)} properties | {combined.get('total_reviews_analyzed', 0):,} reviews | {days_back} days",
+                f"{len(results)} properties | {combined.get('total_reviews_analyzed', 0):,} reviews | {escape(report_period)}",
                 style_small,
             ),
         ],
@@ -1741,7 +1766,14 @@ def _generate_sentiment_pdf(
     story.append(HRFlowable(width=W, thickness=1, color=PURPLE_LITE))
     story.append(Spacer(1, 0.15 * cm))
 
-    map_buffer = kwargs.get("map_buffer") or combined.get("map_buffer")
+    map_png = task.get("map_png")
+    if not map_png:
+        legacy = kwargs.get("map_buffer") or combined.get("map_buffer")
+        map_png = legacy.getvalue() if isinstance(legacy, io.BytesIO) else None
+    if not map_png and results:
+        map_png = _build_map_png(results)
+        task["map_png"] = map_png
+    map_buffer = io.BytesIO(map_png) if map_png else None
     if map_buffer:
         try:
             # Map height fixed to 3.8 cm so Page 1 never overflows

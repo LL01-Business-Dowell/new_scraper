@@ -12,14 +12,25 @@ APIFY_TOKEN = os.getenv("APIFY_API_TOKEN", "")
 ACTOR_ID = "Xb8osYTtOjlsgI6k9"  # compass/google-maps-reviews-scraper
 BASE_URL = "https://api.apify.com/v2"
 
-DAYS_BACK = 30  # strict cutoff — 30 days from today
+DAYS_BACK = 30
 MASTER_FILE = "all_hotels_reviews.json"
 
 
+def report_period(today: Optional[datetime.date] = None) -> tuple:
+    """Returns (start, end) dates of the previous calendar month."""
+    today = today or datetime.date.today()
+    end = today.replace(day=1) - datetime.timedelta(days=1)
+    return end.replace(day=1), end
+
+
+def report_period_label(today: Optional[datetime.date] = None) -> str:
+    start, end = report_period(today)
+    return f"{start.strftime('%B')} {start.day}-{end.day}, {end.year}"
+
+
 def _cutoff_date() -> str:
-    """Returns ISO date string 30 days ago."""
-    d = datetime.date.today() - datetime.timedelta(days=DAYS_BACK)
-    return d.isoformat()
+    """Returns ISO start date of the previous calendar month."""
+    return report_period()[0].isoformat()
 
 
 def _start_run(
@@ -189,8 +200,14 @@ def _parse_reviews(
     """Parse Apify dataset items into standard review format."""
 
     reviews = []
+    start, end = report_period()
+    start_iso, end_iso = start.isoformat(), end.isoformat()
 
     for item in items:
+
+        iso_date = str(item.get("publishedAtDate") or "")[:10]
+        if iso_date and not (start_iso <= iso_date <= end_iso):
+            continue
 
         text = (
             item.get("text")

@@ -263,6 +263,13 @@ function ApprovingPhase({ places, checkedPlaces, togglePlace, selectedCount, est
 }
 
 // ── Results ───────────────────────────────────────────────────────────────────
+function reportPeriodLabel() {
+    const now = new Date();
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    const month = end.toLocaleString("en-US", { month: "long" });
+    return `${month} 1-${end.getDate()}, ${end.getFullYear()}`;
+}
+
 function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, generatedAt }) {
     const [activeTab, setActiveTab] = useState("combined");
     const [expandedIdx, setExpandedIdx] = useState(null);
@@ -303,7 +310,7 @@ function Results({ results, combined, city, daysBack, onBack, taskId, baseUrl, g
             {/* Dynamic Metadata Section */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 0 20px" }}>
                 <p style={{ margin: 0, color: "#6b7280", fontSize: "0.82rem" }}>
-                    {results.length} hotels analysed · Last {daysBack} days
+                    {results.length} hotels analysed · {reportPeriodLabel()}
                 </p>
 
                 {/* AI Engine Badge
