@@ -98,6 +98,7 @@ def _save_to_datacube(
             "audio_analysis": emotion_metrics or {},
             "raw_emotion_distribution": raw_emotion_distribution or {},
             "dashboard_metrics": fused_metrics,
+            "is_resolved": False,
             "submitted_at": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
         }
 

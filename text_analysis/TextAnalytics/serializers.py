@@ -6,8 +6,9 @@ class TextSerializer(serializers.Serializer):
 
 class MetaDataSerializer(serializers.Serializer):
     qrId = serializers.CharField(required=True)
+    client = serializers.CharField(required=True)
     feedback_id = serializers.CharField(required=True)
-    room = serializers.CharField(required=True)
+    room_number = serializers.CharField(required=True)
     urgency_status = serializers.ChoiceField(choices=["high", "medium", "low"], required=True)
     is_resolved = serializers.BooleanField(required=True)
-    last_updated = serializers.CharField(required=True)
+    last_updated = serializers.CharField(required=False, allow_blank=True, default="")

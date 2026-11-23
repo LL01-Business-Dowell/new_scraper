@@ -99,7 +99,7 @@ class DataCubeService:
             "filters": filters,
             "update_data": update_data,
             "update_all_fields": True,
-            "update_many": True,
+            "update_many": False,
             "upsert": False
         }
 

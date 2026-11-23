@@ -110,17 +110,19 @@ class FeedbackMetaDataView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         qrId = serializer.validated_data.get("qrId")
+        client = serializer.validated_data.get("client")
         feedback_id = serializer.validated_data.get("feedback_id")
-        room = serializer.validated_data.get("room")        
-        urgency_status = serializer.validated_data.get("urgency_status")        
-        is_resolved = serializer.validated_data.get("is_resolved")        
-        last_updated = serializer.validated_data.get("last_updated")        
+        room_number = serializer.validated_data.get("room_number")
+        urgency_status = serializer.validated_data.get("urgency_status")
+        is_resolved = serializer.validated_data.get("is_resolved")
+        last_updated = serializer.validated_data.get("last_updated")
         created_at = datetime.datetime.now().isoformat()
 
         metadata = {
             "qrId": qrId,
+            "client": client,
             "feedback_id": feedback_id,
-            "room": room,
+            "room_number": room_number,
             "urgency_status": urgency_status,
             "is_resolved": is_resolved,
             "last_updated": last_updated,
@@ -128,7 +130,7 @@ class FeedbackMetaDataView(APIView):
         }
         
         try:
-            response = datacube.insert_document(
+            datacube.insert_document(
                 database_id=feedback_metadata_db,
                 collection_name=feedback_metadata_coll,
                 data=metadata
@@ -153,6 +155,8 @@ class FeedbackMetaDataView(APIView):
 
     def get(self, request):
         qrId = request.GET.get("qrId")
+        # client = request.GET.get("client")
+        feedback_id = request.GET.get("feedback_id")
 
         if not qrId:
             return Response(
@@ -162,9 +166,12 @@ class FeedbackMetaDataView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
         try:
             filters = {
-                "qrId": qrId
+                "qrId": qrId,
+                # "client": client,
+                "feedback_id": feedback_id
             }
 
             response = datacube.fetch_document(
@@ -193,22 +200,22 @@ class FeedbackMetaDataView(APIView):
             )
 
     def put(self, request):
-        qrId = request.data.get("qrId")
-        room = request.data.get("room")
+        feedback_id = request.data.get("feedback_id")
+        # client = request.data.get("client")
         is_resolved = request.data.get("is_resolved")
         urgency_status = request.data.get("urgency_status")
         last_updated = request.data.get("last_updated")
-
-        if not qrId:
+        print("Received data for update:", request.data)
+        if not feedback_id:
             return Response(
                 {
                     "success": False,
-                    "error": "Required qr code ID"
+                    "error": "Required feedback ID"
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
         try:
-            filters = { "qrId": qrId, "room": room }
+            filters = { "_id": feedback_id }
             update_data = {
                 "is_resolved": is_resolved,
                 "urgency_status": urgency_status,
@@ -216,7 +223,7 @@ class FeedbackMetaDataView(APIView):
             }
 
             response = datacube.update_document(database_id=feedback_metadata_db, collection_name=feedback_metadata_coll, filters=filters, update_data=update_data)
-
+            print("Update response:", response)
             return Response(
                 response,
                 status=status.HTTP_200_OK
