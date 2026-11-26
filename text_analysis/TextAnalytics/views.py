@@ -300,7 +300,7 @@ class AudioTranscribeAPIView(APIView):
             transcription_config["mode"] = {"type": "smart"}
 
         client = genai.Client(
-            api_key=getattr(settings, "GEMINI_API_KEY", None),
+            api_key=os.environ.get("DOWELL_GEMINI_KEY"),
             http_options={"api_version": "v1beta"},
         )
 

@@ -44,7 +44,7 @@ class AudioTranscriptionRequestSerializer(serializers.Serializer):
     mode = serializers.ChoiceField(
         choices=["verbatim", "smart"],
         required=False,
-        default="verbatim",
+        default="smart",
     )
     diarization = serializers.BooleanField(required=False, default=False)
 
