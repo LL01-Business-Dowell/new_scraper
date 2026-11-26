@@ -56,6 +56,7 @@ jobs:
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST "cat > /home/SamantaScraper/.env" << EOF
           CRUD_API_KEY=${{ secrets.CRUD_API_KEY }}
+          PURETRACE_API_KEY=${{ secrets.PURETRACE_API_KEY }}
           FEEDBACK_CRUD_API_KEY=${{ secrets.FEEDBACK_CRUD_API_KEY }}
           FEEDBACK_QR_API_KEY=${{ secrets.FEEDBACK_QR_API_KEY }}
           DATABASE_ID=${{ secrets.DATABASE_ID }}
@@ -70,6 +71,10 @@ jobs:
           VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           TEXT_ANALYSIS_API_URL=${{ secrets.TEXT_ANALYSIS_API_URL }}
           TEXT_ANALYSIS_METADATA_API_URL=${{ secrets.TEXT_ANALYSIS_METADATA_API_URL }}
+          ZOHO_CLIENT_ID=${{ secrets.ZOHO_CLIENT_ID }}
+          ZOHO_CLIENT_SECRET=${{ secrets.ZOHO_CLIENT_SECRET }}
+          ZOHO_REFRESH_TOKEN=${{ secrets.ZOHO_REFRESH_TOKEN }}
+          ZOHO_ORGANIZATION_ID=${{ secrets.ZOHO_ORGANIZATION_ID }}
           EOF
 
       - name: Docker login on server
@@ -83,36 +88,41 @@ jobs:
             set -e
             cd /home/SamantaScraper
 
-            echo "=== Deep cleaning VPS disk before build ==="
-            docker system prune -af --volumes || true
-            docker builder prune -af || true
+            # 1. Remove dangling images and cap build cache to 2GB instead of deleting everything
+            docker image prune -f || true
+            docker builder prune -f --keep-storage=2GB || true
             truncate -s 0 /var/lib/docker/containers/*/*-json.log 2>/dev/null || true
 
-            echo "=== Setting BuildKit Limits ==="
             export DOCKER_BUILDKIT=1
             export COMPOSE_DOCKER_CLI_BUILD=1
             export BUILDKIT_PARALLEL_LIMIT=1
 
-            echo "=== Building Backend Service ==="
-            docker compose build --no-cache --progress=plain backend
-            docker builder prune -af || true  # Reclaim temporary space before next image
+            # 2. Detect which service folders changed since last deploy
+            CHANGED_FILES=$(git diff --name-only HEAD@{1} HEAD 2>/dev/null || echo "ALL")
+            echo "Changed files: $CHANGED_FILES"
 
-            echo "=== Building Heavy Audio Analysis Service ==="
-            docker compose build --no-cache --progress=plain audio-analysis
-            docker builder prune -af || true  # Reclaim temporary space
+            if echo "$CHANGED_FILES" | grep -qE "^(backend/|ALL)"; then
+              echo "=== Building Backend (changes detected) ==="
+              docker compose build --progress=plain backend
+            fi
 
-            echo "=== Building Remaining Services ==="
-            docker compose build --progress=plain inscriber text-analysis frontend nginx
+            if echo "$CHANGED_FILES" | grep -qE "^(audio-analysis/|ALL)"; then
+              echo "=== Building Audio Analysis (changes detected) ==="
+              docker compose build --progress=plain audio-analysis
+            fi
 
-            echo "=== Restarting containers ==="
-            docker compose up -d
+            if echo "$CHANGED_FILES" | grep -qE "^(frontend/|inscriber/|text-analysis/|nginx/|ALL)"; then
+              echo "=== Building Remaining Changed Services ==="
+              docker compose build --progress=plain inscriber text-analysis frontend nginx
+            fi
 
-            echo "=== Post-build cleanup ==="
-            docker system prune -f || true
+            echo "=== Restarting updated containers ==="
+            docker compose up -d --remove-orphans
 
-            echo "=== Running containers ==="
+            echo "=== Reclaiming unused images & capping cache ==="
+            docker image prune -f || true
+            docker builder prune -f --keep-storage=2GB || true
             docker compose ps
-            echo "=== Deployment complete ==="
           ENDSSH
 
       - name: Verify deployment

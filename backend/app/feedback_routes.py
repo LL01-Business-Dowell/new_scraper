@@ -23,6 +23,26 @@ QR_DATABASE_ID = "6a69cbefff5146ff3f2b568a"  # Collection mapping database
 S3_UPLOAD_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/upload-to-s3"
 TRANSCRIPTION_API = "https://medsignqr.uxlivinglab.org/api/v1/transcription/transcribe"
 AUDIO_ANALYSIS_API_URL = "http://audio-analysis:8003/api/analyze-audio/"
+TEXT_ANALYSIS_METADATA_API_URL = os.getenv(
+    "TEXT_ANALYSIS_METADATA_API_URL",
+    "http://text-analysis:8004/text-analysis/feedback-metadata/"
+)
+
+
+def _resolve_collection_by_qr_id(qr_id: str, default_client: str = "") -> str:
+    """
+    Extracts the first 4 characters/digits from the QR ID to serve as the collection name.
+    """
+    if qr_id and len(qr_id.strip()) >= 4:
+        return qr_id.strip()[:4]
+
+    if qr_id and qr_id.strip():
+        return qr_id.strip()
+
+    if default_client and default_client.strip():
+        return default_client.lower().strip().replace(" ", "_")
+
+    return "0000"
 
 
 def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
@@ -65,11 +85,43 @@ def _convert_webm_to_wav(webm_bytes: bytes) -> tuple[bytes, str]:
                 pass
 
 
+def _upload_file_to_gridfs(wav_bytes: bytes, filename: str) -> str:
+    """Uploads audio binary directly to DataCube GridFS storage via POST /api/v2/files/"""
+    if not CRUD_API_KEY:
+        logger.warning("[FEEDBACK] API Key missing, skipping GridFS upload")
+        return ""
+
+    files_url = f"{CRUD_BASE_URL.rstrip('/')}/files/"
+    headers = {"Authorization": f"Api-Key {CRUD_API_KEY}"}
+
+    try:
+        resp = http_requests.post(
+            files_url,
+            headers=headers,
+            files={"file": (f"{filename}.wav", wav_bytes, "audio/wav")},
+            timeout=30,
+        )
+        if resp.status_code in (200, 201):
+            res_data = resp.json()
+            if res_data.get("success"):
+                gridfs_id = res_data.get("file_id", "")
+                logger.info(f"[FEEDBACK] Uploaded audio to GridFS: {gridfs_id}")
+                return gridfs_id
+        logger.warning(
+            f"[FEEDBACK] GridFS upload failed {resp.status_code}: {resp.text[:200]}"
+        )
+    except Exception as e:
+        logger.error(f"[FEEDBACK] GridFS upload error: {e}")
+
+    return ""
+
+
 def _save_to_datacube(
     id_param: str,
     room_number: str,
     description: str,
     file_id: str,
+    gridfs_file_id: str = "",
     client_name: str = "",
     location: dict = None,
     emotion_metrics: dict = None,
@@ -82,7 +134,9 @@ def _save_to_datacube(
         logger.warning("[FEEDBACK] Datacube credentials missing, skipping save")
         return ""
 
-    collection_name = id_param[:4] if id_param and len(id_param) >= 4 else (id_param or "0000")
+    collection_name = _resolve_collection_by_qr_id(
+        qr_id=id_param, default_client=client_name
+    )
 
     try:
         doc_data = {
@@ -90,11 +144,13 @@ def _save_to_datacube(
             "qr_id": id_param,
             "client_name": client_name,
             "room_number": room_number,
+            "room": room_number,
             "description": description,
             "location": location or {},
             "transcript": transcript,
             "transcript_analysis": transcript_analysis or {},
             "audio_file": f"{file_id}.wav",
+            "gridfs_file_id": gridfs_file_id,
             "audio_analysis": emotion_metrics or {},
             "raw_emotion_distribution": raw_emotion_distribution or {},
             "dashboard_metrics": fused_metrics,
@@ -136,26 +192,37 @@ def _update_datacube_transcription(
     transcript: str,
     transcript_analysis: dict,
     client_name: str = "",
-    fused_metrics: dict = None
+    fused_metrics: dict = None,
+    emotion_metrics: dict = None,
+    raw_emotion_distribution: dict = None,
 ) -> bool:
     if not CRUD_API_KEY or not MASTER_DATABASE_ID or not doc_id:
         logger.warning("[FEEDBACK] Missing parameters for Datacube update")
         return False
 
-    collection_name = id_param[:4] if id_param and len(id_param) >= 4 else (id_param or "0000")
+    collection_name = _resolve_collection_by_qr_id(
+        qr_id=id_param, default_client=client_name
+    )
 
     try:
         target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
+
+        update_fields = {
+            "transcript": transcript,
+            "transcript_analysis": transcript_analysis,
+        }
+        if fused_metrics:
+            update_fields["dashboard_metrics"] = fused_metrics
+        if emotion_metrics:
+            update_fields["audio_analysis"] = emotion_metrics
+        if raw_emotion_distribution:
+            update_fields["raw_emotion_distribution"] = raw_emotion_distribution
 
         payload = {
             "database_id": MASTER_DATABASE_ID,
             "collection_name": collection_name,
             "filters": {"_id": doc_id},
-            "update_data": {
-                "transcript": transcript,
-                "transcript_analysis": transcript_analysis,
-                "dashboard_metrics": fused_metrics
-            },
+            "update_data": update_fields,
             "update_all_fields": False,
             "update_many": False,
             "upsert": False
@@ -178,112 +245,157 @@ def _update_datacube_transcription(
         return False
 
 
-def _get_datacube_doc(id_param: str, doc_id: str, client_name: str = "") -> dict:
-    if not CRUD_API_KEY or not MASTER_DATABASE_ID or not doc_id:
-        return {}
-    collection_name = id_param[:4] if id_param and len(id_param) >= 4 else (id_param or "0000")
+def _call_feedback_metadata_api(
+    qr_id: str,
+    client: str,
+    feedback_id: str,
+    room: str,
+    urgency_status: str,
+):
+    payload = {
+        "qrId": qr_id,
+        "client": client,
+        "feedback_id": feedback_id,
+        "room": room,
+        "urgency_status": urgency_status,
+        "is_resolved": False,
+    }
+
     try:
-        target_url = f"{CRUD_BASE_URL.rstrip('/')}/crud/"
-        payload = {
-            "database_id": MASTER_DATABASE_ID,
-            "collection_name": collection_name,
-            "filters": {"_id": doc_id}
-        }
         resp = http_requests.post(
-            target_url,
+            TEXT_ANALYSIS_METADATA_API_URL,
             json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Api-Key {CRUD_API_KEY}",
-            },
-            timeout=10
+            headers={"Content-Type": "application/json"},
+            timeout=15,
         )
         if resp.status_code in (200, 201):
-            docs = resp.json().get("documents", [])
-            return docs[0] if docs else {}
+            logger.info(f"[FEEDBACK] Feedback metadata recorded successfully for feedback_id: {feedback_id}")
+        else:
+            logger.warning(f"[FEEDBACK] Metadata API failed {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
-        logger.error(f"[FEEDBACK] Error fetching Datacube doc: {e}")
-    return {}
+        logger.error(f"[FEEDBACK] Metadata API error: {e}")
 
 
-def _process_background_transcription(
+def _process_audio_pipeline_async(
     id_param: str,
-    doc_id: str,
+    client_name: str,
+    room_number: str,
+    description: str,
+    user_location: dict,
     final_file_id: str,
     wav_bytes: bytes,
-    client_name: str
 ):
-    """Executes S3 upload, Transcription API, Gemini Sentiment, and updates Datacube asynchronously."""
+    """
+    Background worker that runs GridFS upload, initial Datacube save, emotion analysis,
+    S3 upload, transcription, Gemini sentiment analysis, updates Datacube, and hits metadata API.
+    """
+    logger.info(f"[FEEDBACK] Async background task started for file_id: {final_file_id}")
+
+    # 1. GridFS Upload (Background)
+    gridfs_file_id = _upload_file_to_gridfs(wav_bytes, final_file_id)
+
+    # 2. Initial Datacube Document Save (Background)
+    doc_id = _save_to_datacube(
+        id_param=id_param,
+        room_number=room_number,
+        description=description,
+        client_name=client_name,
+        location=user_location,
+        file_id=final_file_id,
+        gridfs_file_id=gridfs_file_id,
+    )
+
+    # 3. Audio Emotion Analysis
+    emotion_data = None
+    raw_emotions = None
     try:
-        logger.info(f"[BG-TASK] Starting background transcription for file_id: {final_file_id}, doc_id: {doc_id}")
-        
-        # 1. S3 Upload
+        feedback_resp = http_requests.post(
+            AUDIO_ANALYSIS_API_URL,
+            files={"audio_file": (f"{final_file_id}.wav", wav_bytes, "audio/wav")},
+            timeout=120,
+        )
+        if feedback_resp.status_code == 200:
+            res_json = feedback_resp.json()
+            if res_json.get("status") == "success":
+                emotion_data = res_json.get("dashboard_metrics")
+                raw_emotions = res_json.get("raw_emotion_distribution")
+    except Exception as e:
+        logger.warning(f"[FEEDBACK] Async Audio analysis error: {e}")
+
+    # 4. Upload Audio to S3
+    try:
+        upload_resp = http_requests.post(
+            S3_UPLOAD_API,
+            files={"file": (f"{final_file_id}.wav", wav_bytes, "audio/wav")},
+            data={"fileName": final_file_id},
+            timeout=60,
+        )
+        if not (upload_resp.status_code == 200 and upload_resp.json().get("success")):
+            logger.warning("[FEEDBACK] Async S3 upload failed")
+    except Exception as e:
+        logger.warning(f"[FEEDBACK] Async S3 upload error: {e}")
+
+    # 5. Audio Transcription
+    transcript = ""
+    try:
+        trans_resp = http_requests.post(
+            TRANSCRIPTION_API,
+            json={"fileName": final_file_id, "format": "wav"},
+            timeout=120,
+        )
+        if trans_resp.status_code == 200 and trans_resp.json().get("success"):
+            transcript = trans_resp.json().get("data", {}).get("transcript", "")
+    except Exception as e:
+        logger.warning(f"[FEEDBACK] Async Transcription error: {e}")
+
+    # 6. Gemini Sentiment Analysis (Wrapped safely with error handling)
+    transcript_analysis = {}
+    if transcript:
         try:
-            http_requests.post(
-                S3_UPLOAD_API,
-                files={"file": (f"{final_file_id}.wav", wav_bytes, "audio/wav")},
-                data={"fileName": final_file_id},
-                params={"fileName": final_file_id},
-                timeout=60,
-            )
+            gemini_api_key = os.getenv("DOWELL_GEMINI_KEY") or os.getenv("GEMINI_KEY_3") or os.getenv("GEMINI_KEY_1")
+            transcript_analysis = analyze_sentiment(gemini_api_key, transcript)
         except Exception as e:
-            logger.warning(f"[BG-TASK] S3 upload warning: {e}")
+            logger.error(f"[FEEDBACK] Gemini sentiment analysis error: {e}")
+            transcript_analysis = {
+                "label": "NEUTRAL",
+                "confidence_score": 0.5,
+                "error": str(e)
+            }
 
-        # 2. Transcription API
-        transcript = ""
-        try:
-            trans_resp = http_requests.post(
-                TRANSCRIPTION_API,
-                json={"fileName": final_file_id, "format": "wav"},
-                timeout=120,
-            )
-            if trans_resp.status_code == 200 and trans_resp.json().get("success"):
-                transcript = trans_resp.json().get("data", {}).get("transcript", "")
-            else:
-                fallback_resp = http_requests.post(
-                    TRANSCRIPTION_API,
-                    files={"file": (f"{final_file_id}.wav", wav_bytes, "audio/wav")},
-                    data={"fileName": final_file_id, "format": "wav"},
-                    timeout=120,
-                )
-                if fallback_resp.status_code == 200 and fallback_resp.json().get("success"):
-                    transcript = fallback_resp.json().get("data", {}).get("transcript", "")
-        except Exception as e:
-            logger.error(f"[BG-TASK] Transcription call failed: {e}")
+    # 7. Metric Fusion
+    fused_metrics = hotel_fused_metrics(
+        text_sentiment=transcript_analysis.get("label", "NEUTRAL"),
+        text_score=transcript_analysis.get("confidence_score", 0.0),
+        audio_emotion=(
+            emotion_data.get("dominant_emotion", "calm") if emotion_data else "calm"
+        ),
+        audio_score=emotion_data.get("audio_score", 0.0) if emotion_data else 0.0,
+    )
 
-        # 3. Sentiment Analysis
-        transcript_analysis = {}
-        if transcript:
-            try:
-                gemini_key = os.getenv("GEMINI_KEY_3") or os.getenv("GEMINI_API_KEY", "")
-                transcript_analysis = analyze_sentiment(gemini_key, transcript)
-            except Exception as e:
-                logger.error(f"[BG-TASK] Sentiment analysis failed: {e}")
-
-        # 4. Fused Metrics & Datacube Update
-        doc_data = _get_datacube_doc(id_param, doc_id, client_name=client_name) if doc_id else {}
-        audio_analysis = doc_data.get("audio_analysis", {})
-
-        fused_metrics = hotel_fused_metrics(
-            text_sentiment=transcript_analysis.get("label", "neutral"),
-            text_score=transcript_analysis.get("confidence_score", 0.0),
-            audio_emotion=audio_analysis.get("dominant_emotion", "calm"),
-            audio_score=audio_analysis.get("audio_score", 0.0)
+    # 8. Update Datacube record with analysis results
+    if doc_id:
+        _update_datacube_transcription(
+            id_param=id_param,
+            doc_id=doc_id,
+            transcript=transcript,
+            transcript_analysis=transcript_analysis,
+            client_name=client_name,
+            fused_metrics=fused_metrics,
+            emotion_metrics=emotion_data,
+            raw_emotion_distribution=raw_emotions,
         )
 
-        if doc_id:
-            _update_datacube_transcription(
-                id_param=id_param,
-                doc_id=doc_id,
-                transcript=transcript,
-                transcript_analysis=transcript_analysis,
-                client_name=client_name,
-                fused_metrics=fused_metrics
-            )
-            logger.info(f"[BG-TASK] Successfully updated Datacube document {doc_id} with transcript.")
+        # 9. Post Metadata Record to Text Analysis service
+        urgency_status = fused_metrics.get("urgency_status", "Low")
+        _call_feedback_metadata_api(
+            qr_id=id_param,
+            client=client_name,
+            feedback_id=doc_id,
+            room=room_number,
+            urgency_status=urgency_status,
+        )
 
-    except Exception as e:
-        logger.error(f"[BG-TASK] Unexpected error during background transcription: {e}")
+        logger.info(f"[FEEDBACK] Async processing complete for doc_id: {doc_id}")
 
 
 @router.post("/submit")
@@ -311,9 +423,6 @@ async def submit_feedback(
         wav_bytes, new_file_id = _convert_webm_to_wav(webm_bytes)
         final_file_id = file_id or new_file_id
 
-        emotion_data = None
-        raw_emotions = None
-
         user_location = None
         if latitude and longitude:
             try:
@@ -324,59 +433,23 @@ async def submit_feedback(
             except ValueError:
                 logger.warning("[FEEDBACK] Invalid latitude/longitude values received")
 
-        try:
-            feedback_resp = http_requests.post(
-                AUDIO_ANALYSIS_API_URL,
-                files={"audio_file": (f"{final_file_id}.wav", wav_bytes, "audio/wav")},
-                timeout=120,
-            )
-            if feedback_resp.status_code == 200:
-                res_json = feedback_resp.json()
-                if res_json.get("status") == "success":
-                    emotion_data = res_json.get("dashboard_metrics")
-                    raw_emotions = res_json.get("raw_emotion_distribution")
-        except Exception as e:
-            logger.warning(f"[FEEDBACK] Audio analysis error: {e}")
-
-        fused_metrics = None
-        if emotion_data:
-            fused_metrics = hotel_fused_metrics(
-                text_sentiment="NEUTRAL",
-                text_score=0.0,
-                audio_emotion=emotion_data.get("dominant_emotion", "calm"),
-                audio_score=emotion_data.get("audio_score", 0.0)
-            )
-
-        # Initial save to database
-        doc_id = _save_to_datacube(
+        # Queue EVERYTHING to background tasks
+        background_tasks.add_task(
+            _process_audio_pipeline_async,
             id_param=id_param,
+            client_name=client_name,
             room_number=room_number,
             description=description,
-            client_name=client_name,
-            location=user_location,
-            file_id=final_file_id,
-            emotion_metrics=emotion_data,
-            raw_emotion_distribution=raw_emotions,
-            fused_metrics=fused_metrics,
-            transcript="",
-            transcript_analysis={}
-        )
-
-        # Trigger background transcription after returning response
-        background_tasks.add_task(
-            _process_background_transcription,
-            id_param=id_param,
-            doc_id=doc_id,
+            user_location=user_location,
             final_file_id=final_file_id,
             wav_bytes=wav_bytes,
-            client_name=client_name
         )
 
+        # Return response instantly (< 0.2s)
         return JSONResponse({
             "success": True,
             "message": "Thank you for your feedback.",
-            "file_id": final_file_id,
-            "doc_id": doc_id
+            "file_id": final_file_id
         })
 
     except HTTPException:

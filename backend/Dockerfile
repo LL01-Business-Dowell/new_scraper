@@ -3,9 +3,8 @@ FROM python:3.11-slim
 
 WORKDIR /usr/src/app
 
-# Install Chromium + chromedriver for Selenium scraping
-# plus curl/ca-certificates for outbound HTTP (Gemini API, Datacube) and ffmpeg for audio analysis
-RUN apt-get update && apt-get install -y \
+# 1. Install Chromium + chromedriver without bloated recommended packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     chromium-driver \
     curl \
@@ -32,13 +31,17 @@ RUN apt-get update && apt-get install -y \
 ENV GOOGLE_CHROME_BIN=/usr/bin/chromium
 ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
-# Copy and install Python dependencies
-COPY requirements.txt .
+# 2. Install CPU-only PyTorch FIRST in its own cached layer so it never re-downloads
+#    when you add small packages (like httpx) to requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt \
- && python -m nltk.downloader vader_lexicon
+ && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Copy application code
+# 3. Copy and install remaining Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+ && python -m nltk.downloader -d /usr/local/share/nltk_data vader_lexicon
+
+# 4. Copy application code
 COPY . .
 
 EXPOSE 8000

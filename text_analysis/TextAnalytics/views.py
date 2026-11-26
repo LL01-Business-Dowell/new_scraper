@@ -6,8 +6,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 import json
 from .schema import TranslationSchema, SentimentAnalysisSchema, DataCubeService
-from .serializers import TextSerializer, MetaDataSerializer
+from .serializers import TextSerializer, MetaDataSerializer, AudioTranscriptionRequestSerializer
 import datetime
+import tempfile
+from django.conf import settings
+from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
+
 
 class TextTranslationView(APIView):
     def post(self, request, *args, **kwargs):
@@ -239,3 +244,116 @@ class FeedbackMetaDataView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
+
+def _extract_speaker_turns(interaction_response) -> list[dict]:
+    words = []
+    for step in getattr(interaction_response, "steps", []) or []:
+        for content in getattr(step, "content", []) or []:
+            for annotation in getattr(content, "annotations", []) or []:
+                if getattr(annotation, "type", None) == "word_info":
+                    words.append(annotation)
+
+    turns = []
+    current_speaker = None
+    current_words = []
+
+    for word in words:
+        speaker = getattr(word, "speaker", "unknown")
+        text = getattr(word, "text", "")
+        if speaker != current_speaker:
+            if current_words:
+                turns.append({"speaker": current_speaker, "text": " ".join(current_words)})
+            current_speaker = speaker
+            current_words = [text]
+        else:
+            current_words.append(text)
+
+    if current_words:
+        turns.append({"speaker": current_speaker, "text": " ".join(current_words)})
+
+    return turns
+
+
+class AudioTranscribeAPIView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        serializer = AudioTranscriptionRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        uploaded_file = data["audio"]
+        suffix = os.path.splitext(uploaded_file.name or "")[1] or ".wav"
+
+        transcription_config = {}
+        if data["language_codes"]:
+            transcription_config["language_codes"] = data["language_codes"]
+        if data["custom_vocabulary"]:
+            transcription_config["custom_vocabulary"] = data["custom_vocabulary"]
+
+        if data["diarization"]:
+            transcription_config["mode"] = {
+                "type": "verbatim",
+                "diarization_mode": "speaker",
+            }
+        elif data["mode"] == "smart":
+            transcription_config["mode"] = {"type": "smart"}
+
+        client = genai.Client(
+            api_key=getattr(settings, "GEMINI_API_KEY", None),
+            http_options={"api_version": "v1beta"},
+        )
+
+        tmp_path = None
+        remote_file = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                for chunk in uploaded_file.chunks():
+                    tmp.write(chunk)
+                tmp_path = tmp.name
+
+            remote_file = client.files.upload(file=tmp_path)
+
+            request_kwargs = {
+                "model": "gemini-3.5-transcribe",
+                "input": [
+                    {
+                        "type": "audio",
+                        "uri": remote_file.uri,
+                        "mime_type": remote_file.mime_type,
+                    }
+                ],
+            }
+            if transcription_config:
+                request_kwargs["generation_config"] = {
+                    "transcription_config": transcription_config
+                }
+
+            interaction = client.interactions.create(**request_kwargs)
+
+            payload = {
+                "transcript": interaction.output_text,
+                "mode": data["mode"],
+                "language_codes": data["language_codes"],
+            }
+            if data["diarization"]:
+                payload["turns"] = _extract_speaker_turns(interaction)
+
+            return Response(payload, status=status.HTTP_200_OK)
+
+        except Exception as exc:
+            return Response(
+                {"detail": f"Transcription failed: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        finally:
+            if remote_file is not None:
+                try:
+                    client.files.delete(name=remote_file.name)
+                except Exception:
+                    pass
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
